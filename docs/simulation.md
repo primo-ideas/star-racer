@@ -45,8 +45,11 @@ The one structural choice is that **velocity and heading are separate**. Every t
    the rate set by `grip`.
 4. **Walls** push the car back and absorb the speed going into them.
 
-Because the sideways part decays instead of vanishing, the car already slides a little in turns
-and loses some speed doing so. **Drift** builds on that slide.
+Because the sideways part decays instead of vanishing, the car slides a little in turns, though
+since v0.1.44 the grip is high enough that the travel stays close to where the car points. What
+the player sees of a hard turn is the nose unscrewing, the body (`Car::body`) swung off the
+travel and drawn, which moves the car nowhere; **drift** builds on that unscrewing (see
+[Unscrewing, not carried out](#unscrewing-not-carried-out)).
 
 ### Weight
 
@@ -64,7 +67,8 @@ weight that shows. The first three are the simulation's, and every one of them i
   and 26 before. Full lock does, 12 and 25 against 30 and 51, and a slalom does, the rotation
   taking about 0.6 s to swing from one side to the other. `steering_rate`, the wheel itself, stays
   at the 14 the user had settled on: lowered to 10 or 8 as well, it made the car one the autopilot
-  could no longer drift cleanly from information six ticks old.
+  could no longer drift cleanly from information six ticks old. Since v0.1.44 it is 200 (see
+  [Unscrewing, not carried out](#unscrewing-not-carried-out)).
 - **Weight in the turns.** `grip` is down from 10 to 6, so the travel trails the nose by a sixth
   of a second rather than a tenth: the car is carried further to the outside before it follows its
   nose, half lock puts the nose 6 degrees off the travel instead of 3, and a turn let go of carries
@@ -72,10 +76,12 @@ weight that shows. The first three are the simulation's, and every one of them i
   the user wanted it in v0.1.13. Breaking away by turning hard moved with the grip, from 5 degrees
   to 9, so full lock at speed still breaks away and half lock still does not. Since v0.1.32
   the grip is 9 and the angle 7: the user found the car carried out too far and too fast (see
-  [Less carried out](#less-carried-out)).
+  [Less carried out](#less-carried-out)), and since v0.1.44 the grip is 30, the car going where it
+  points, and a drift starts from the nose unscrewing past 11 degrees rather than from the slide.
 
 - **Momentum.** The car takes its time getting up to speed, `acceleration` down from 22 to 16:
-  0 to 30 m/s in 3.5 s instead of 2.5, and to 95% of top speed in 7.5 s instead of 5.4. Above top
+  0 to 30 m/s in 3.5 s instead of 2.5, and to 95% of top speed in 7.5 s instead of 5.4 (the same
+  7.5 s since, `acceleration` following `top_speed` up to 23.2 for 58 m/s). Above top
   speed it keeps its momentum, and a wall costs more (see [Accelerating](#accelerating-no-brake)
   and [Walls](#walls)).
 
@@ -98,12 +104,15 @@ corner by as far as its travel lags its nose; this one does not.
   A press is a press: a button held down since before starts nothing. It is remembered for
   `drift_press_buffer`, 0.25 s since v0.1.35 (0.15 before): a thumb often lands on the button a
   moment before the stick has left the center, or before the car is fast enough, and that press
-  used to start nothing, with nothing to say why. Turning hard enough starts
-  one too, without the button: while the car grips, `Car::slip` is the real angle between its nose
-  and its travel, and its reaching `drift_entry_angle` breaks the car away toward the side it came
-  round. With the shipped tuning, the entry sits at 5 degrees: at top speed full lock breaks away
-  after 0.32 s and three quarters lock after 0.35 s, six tenths never does (see
-  [Into a slide more easily](#faster-and-into-a-slide-more-easily)).
+  used to start nothing, with nothing to say why. A drift thrown that way turns in with a kick
+  and pivots the body round at once (see [Thrown into a drift](#thrown-into-a-drift-with-a-kick)
+  and [A pivot](#a-pivot-not-a-sharper-turn)). Turning hard enough starts one too, without the
+  button: while the car grips, its nose unscrews into the turn (`grip_swing_angle`), and the body
+  going past `drift_entry_angle` while still asked beyond it breaks the car away toward the side
+  it came round. With the shipped tuning, 11 degrees: at top speed full lock and three quarters
+  lock break away after 0.37 s, six tenths holds at 9 degrees and half lock at 8 (see
+  [Unscrewing, not carried out](#unscrewing-not-carried-out); until v0.1.44 it was the real slide,
+  `Car::slip`, that had to pass the angle).
 - **The angle.** The body swings toward `drift_angle` times `1 - (1 - s)²`, where `s` is how far
   the steering points into the drift: most of the angle with the first half of the steering, all
   of it at full lock, none with the steering centered or against the drift. The curve eases in
@@ -112,12 +121,15 @@ corner by as far as its travel lags its nose; this one does not.
   `drift_swing_rate`, and slows down the same way to stop on its angle, so it comes off the travel
   on the very tick the drift starts, slowly, then faster and faster, and never lunges, whether the
   drift starts, the stick eases or the drift ends. It brakes on a curve that allows for the tick,
-  so it lands on its angle instead of hunting around it. With the shipped 36 degrees, 150 degrees
-  per second per second and 45 per second (since v0.1.35; 42, 260 and 75 in v0.1.32 and v0.1.33,
-  55, 450 and 110 before), a tap at full lock has the body 6 degrees across after a quarter of a
-  second, 17 after half a second, 28 after three quarters and all 36 at 1 s. From v0.1.37 to v0.1.56 the
-  swing had a **knee** (see [Faster still](#faster-still-and-a-knee)), gone since it stopped
-  changing anything (see [Fewer drift numbers](#fewer-drift-numbers)). When a drift
+  so it lands on its angle instead of hunting around it. With the shipped 55 degrees, 400 degrees
+  per second per second and 140 per second (since v0.1.55, see [A pivot](#a-pivot-not-a-sharper-turn)),
+  a drift broken into at full lock without the button has the body 37 degrees across a quarter of
+  a second after it breaks away and all 55 at half a second; a drift thrown with the button starts
+  its swing at `drift_kick_swing` instead, 25 degrees at 0.15 s, 44 at 0.3 s and 55 at 0.5 s. With
+  36, 150 and 45 (v0.1.35 and v0.1.36), a tap at full lock had the body 6 degrees across after a
+  quarter of a second, 17 after half a second, 28 after three quarters and all 36 at 1 s. From
+  v0.1.37 to v0.1.56 the swing had a **knee** (see [Faster still](#faster-still-and-a-knee)), gone
+  since it stopped changing anything (see [Fewer drift numbers](#fewer-drift-numbers)). When a drift
   starts, the body takes over whatever slide the car had and the heading becomes the travel, so
   nothing on screen jumps.
 - **Turning.** The stick sets a **signed curvature**: fully to one side turns on
@@ -145,13 +157,14 @@ corner by as far as its travel lags its nose; this one does not.
   drift charges at the slow end, never backwards.
 - **Ending.** The body back within 8 degrees (`DRIFT_EXIT_ANGLE`) of the travel, with the stick keeping it
   there, centered or against the drift, ends the drift and pays out, unless the button is held.
-  With the shipped tuning, a drift ends 0.8 s after the stick straightens (0.6 s before v0.1.35,
-  the body now swinging back as slowly as it swings out), as the steering unwinds and the body
-  swings back into line. Falling
+  With the shipped tuning, a drift ends 0.47 s after the stick straightens, as the steering
+  unwinds and the body swings back into line (0.6 s before v0.1.35, then 0.8 s while the body
+  swung back slowly, until the faster swing of v0.1.55). Falling
   below `DRIFT_MIN_SPEED` ends it and pays out too.
 - **Boost.** Ending the drift converts the charge beyond `drift_min_charge` into
   `drift_boost_rate` seconds of boost per second, up to `drift_max_boost`: with the shipped tuning,
-  the full 1.2 s of boost takes two to three and a half seconds of drift. A boost raises the top
+  the full 1.2 s of boost takes 2.7 s of charge: 1.8 s of drift at full lock, up to 5.4 s with
+  the stick barely into it. A boost raises the top
   speed to `boost_top_speed` and pushes at `boost_acceleration`, in full up to `top_speed` and
   fading out above it, even without the accelerator. After it, the car keeps its momentum: what
   is left above `top_speed` fades at `overspeed_drag` (see
@@ -166,8 +179,9 @@ corner by as far as its travel lags its nose; this one does not.
 - **Losing it.** A drift that hits a wall ends at once and pays nothing. The body settles back
   into line on its own, and the button, still held, starts nothing until it is pressed again. A
   graze is forgiven: meeting the wall at less than 3 m/s into it (`DRIFT_WALL_TOLERANCE`), keeps
-  the drift, though it charges nothing on the ticks it touches. The tail of a car swung 36 degrees (55 then)
-  across the road brushes a wall often, and losing two seconds of charge to it was a punishment
+  the drift, though it charges nothing on the ticks it touches. The tail of a car swung 55 degrees
+  (36 from v0.1.35 to v0.1.54) across the road brushes a wall often, and losing two seconds of
+  charge to it was a punishment
   out of proportion.
 
 The car state carries all of it (`slip`, `body`, `drift`, `drift_charge`, `drift_held`,
@@ -278,7 +292,8 @@ for a tenth of a second:
 | Boost | to 52 m/s, 30% over | to 48 m/s, 20% over | to 48 m/s, 20% over | 21% over |
 
 Since v0.1.32 the angle is 42 degrees and slower to come: 9 at 0.25 s, 27 at 0.5 s, 41 at 0.75 s
-(see [Less carried out](#less-carried-out)).
+(see [Less carried out](#less-carried-out)), and since v0.1.55 it is 55 again, swung much faster (see
+[Drift](#drift)).
 
 #### Less carried out
 
@@ -522,12 +537,12 @@ can be moved apart from the other. The thrust alone on the road does nothing.
 the top of the hop with the shipped car: the car pops 0.9 m up, hangs there for an instant, then
 the thruster lights with a **kick**, its climb brought up to `thrust_kick` (7 m/s) on that tick,
 once a flight (`Car::ignited`), so it is felt as a second push rather than the hop going on. It
-then climbs at 7.5 m/s and settles at about 5.3 m, `thrust_damping` (4 per second) holding back
+then climbs at 7 m/s, rises to 5.4 m and settles at 5 m, `thrust_damping` (4 per second) holding back
 its climb so it does not bob round its hover; the same damping catches a car that lights its
 thruster while falling. Unlike before, a thrust let go and pressed again in the air lights the
 thruster again while the tank lasts. The tank holds `thrust_seconds` 3.5 s (1.5 before), filled
-on the road at `thrust_recharge` 1.4 s a second: a full flight is about 3.8 s in the air and
-220 m at top speed (110 before). `thrust_acceleration` is 100 m/s² and `thrust_ceiling` 10 m.
+on the road at `thrust_recharge` 1.4 s a second: a full flight, the thrust held from the press,
+is 4.2 s in the air and about 240 m at top speed (110 before). `thrust_acceleration` is 100 m/s² and `thrust_ceiling` 10 m.
 On the client the hop pops, the ignition thumps and roars, the burn has a roar of its own in the
 drone, landing knocks, and a gamepad rumbles at each.
 
@@ -572,7 +587,9 @@ the kick fades out at `drift_kick_fade` (320). Traced at full lock from top spee
 at 90 degrees per second after 50 ms (10 without the kick), 118 at 0.1 s, back to the drift's own
 by 0.5 s; the travel has turned 25 degrees at 0.4 s instead of 7. After it the drift is as slow
 as ever, and the stick tightens or opens it. A drift the car breaks into by turning hard has no
-kick. The autopilot holds the button while the kick lasts: catching it with the stick otherwise
+kick. In v0.1.55 `drift_kick` went down to 25, the throw being mostly the body's (see
+[A pivot](#a-pivot-not-a-sharper-turn)), and in v0.1.57 the three numbers became `drift_kick_time`
+(see [Fewer drift numbers](#fewer-drift-numbers)). The autopilot holds the button while the kick lasts: catching it with the stick otherwise
 ended the drift it began, and it threw some seventy drifts a lap instead of fifteen.
 
 ### A pivot, not a sharper turn
@@ -591,8 +608,10 @@ pivot. Now the turning is the body's and the path stays calm:
 - the throw: a drift started by a press with the stick turned throws the body round on its own
   axis at `drift_kick_swing` (200 degrees per second at full lock and top speed) on the very tick,
   braking onto its angle: 25 degrees at 0.15 s, 44 at 0.3 s, 55 at 0.5 s, where it was 6 degrees
-  at 0.25 s. A drift broken into by turning hard still unscrews slowly, as the tests of the
-  swing's gathering check;
+  at 0.25 s. A drift broken into by turning hard has no throw: its swing still gathers at
+  `drift_swing_acceleration` from where the nose had unscrewed to, as the tests of the swing's
+  gathering check, though at 400 that takes it to 37 degrees a quarter of a second after it breaks
+  away and 55 at half a second;
 - out of it, `drift_exit_share` 0.3 instead of 0.5, the bigger angle closing faster.
 
 Traced at full lock from top speed: the path turns 2, 5, 8, 12, 16, 20 degrees at 0.05 to 0.3 s,
@@ -639,12 +658,14 @@ on the shipped `car.ron`, the other tests running on an older car of their own
 
 Until v0.1.53, a drift whose stick came back to the center ran on straight while its body alone
 swung back into line over most of a second: a car sliding sideways down a straight line. Now, as
-the body swings back, the travel turns to meet it by `drift_exit_share` (0.5) of the way the body
+the body swings back, the travel turns to meet it by `drift_exit_share` (0.3 since v0.1.55, 0.5
+before) of the way the body
 closes, the nose drawn where it would have been, and when the drift ends that share of what is
 left becomes a slide the grip takes up: the car comes out of its slide on a curve, as a real one
 does. It also comes back into line sooner, the gap closing from both ends. `0` is the old way.
 The value was chosen by the autopilot: at 0.3 and 0.35 a client six ticks late grazed a wall
-once a lap gripping, at 0.4 it fell once drifting; at 0.5 it laps clean.
+once a lap gripping, at 0.4 it fell once drifting; at 0.5 it lapped clean. v0.1.55 brought it
+down to 0.3, the bigger drift angle closing faster.
 
 ### Snappier
 
@@ -671,10 +692,10 @@ car that drives through a [breach](tracks.md#breaches), where a wall is missing,
 
 **Where there is no road there is nothing to come down onto.** `air_gravity` pulls the car down,
 past the level of the road if nothing stops it, and once it has sunk past `LIP` (0.6 m) under a
-road it can no longer land on it. Over the road a car in the air rides the relief, its altitude
-measured from the road under it; beside the road it keeps its own height: its altitude is still
-written from the nearest road's edge, and is corrected by however much that reference moves, so
-the car's real height never jumps when another part of the lap becomes the nearest. The thruster
+road it can no longer land on it. A car in the air keeps its own height, over the road as beside
+it (since v0.1.53, see [Natural flight](#natural-flight)): its altitude is written from the
+nearest road, and is corrected by however much that reference moves, so the car's real height
+never jumps when the road under it rises or falls, or another part of the lap becomes the nearest. The thruster
 still works out there, pushing toward its ceiling over whichever road is nearest, so a car can
 climb toward a road that stands higher; only between the walls, under the road or in a gap, is a
 sunk car beyond its help. The car lands on any road it is over and no higher than, whatever its
@@ -711,17 +732,17 @@ smoothly instead of hitting a ceiling. Letting go of the button coasts to a stop
 
 Above `top_speed`, the car keeps its **momentum**: whatever put it there, a boost or a dive, the
 excess fades by `overspeed_drag`, a share of itself every second, a lot of it quickly and the last
-of it slowly, as air would hold back a heavy car. With the shipped 0.5 and a top speed of 45 m/s, a
-boost that took the car to 58 m/s leaves it at about 53 a second after it ends and 48 three seconds
-after, where before the car had weight it was back at top speed within two seconds. Coasting still applies on top of it when the accelerator is let go.
+of it slowly, as air would hold back a heavy car. With the shipped 0.35 and a top speed of 58 m/s,
+a boost that took the car to 75 m/s leaves it at about 70 a second after it ends and 64 three
+seconds after, where before the car had weight it was back at top speed within two seconds. Coasting still applies on top of it when the accelerator is let go.
 
 Pressing the accelerator right at the start of a race gives up to `start_boost` seconds of boost,
 graded from S to E (see [Lobbies](lobbies.md#the-start)).
 
 ### Inputs
 
-Inputs are quantized (booleans to accelerate, to drift, to fire the turbo and to jump, an `i8` for
-steering) before they reach the simulation. They are a few bytes on the wire, and both sides simulate from the same integers
+Inputs are quantized (booleans to accelerate, to drift, to fire the turbo, to jump and to thrust,
+an `i8` for steering) before they reach the simulation. They are a few bytes on the wire, and both sides simulate from the same integers
 instead of floats that could differ in their last bits.
 
 ### Steering from each device
@@ -743,16 +764,17 @@ v0.1.21), so the car underneath is the same for everyone and only what the hands
   pressed steers, as on a touchscreen, rather than the two cancelling out.
 - **Thumbs on a screen** say how hard by where they rest (see [Interface](ui.md#the-controls-over-the-race)).
 
-Every action has a second key, and by default the arrow keys and Space work as W, A, D and Shift
-do, for whoever's hand falls there. The devices still add up: whichever is used drives. Which
+Every action has a second key, and by default the arrow keys and the right Shift work as W, A, D
+and Shift do, for whoever's hand falls there. The devices still add up: whichever is used drives. Which
 key and which button does what is the player's to change ([Interface](ui.md#settings)); what
 follows names the defaults.
 
 The turbo is E or the down arrow on a keyboard, never Control, which with W held closes a
 browser's tab, and which a page does not let a player bind either; Y, the top face button, on a
-gamepad; and the left branch of the cross on a touchscreen. The drift is Shift or Space, and the
-right trigger on a gamepad (the user's choice of 2026-11-11; it was X, with the turbo on A or the
-left bumper). A trigger counts as held from a third of its travel, well before Bevy calls it
+gamepad; and the left branch of the cross on a touchscreen. The drift is Shift or the right
+Shift (Space until v0.1.48, when the jump took it), and the right trigger on a gamepad (the user's
+choice of 2026-11-11; it was X, with the turbo on A or the left bumper). The jump and the thrust
+share Space, Q and A / cross. A trigger counts as held from a third of its travel, well before Bevy calls it
 pressed at three quarters: a drift is tapped into, and nobody taps a trigger to its stop.
 
 Each device also says what happened, for eyes that are on the road: a gamepad rumbles on a wall hit,
@@ -778,13 +800,14 @@ purely visual.
 
 Along the road the same pull slows a car climbing and speeds one diving. Flat out, a climb costs
 speed where the engine's push, which fades to nothing at top speed, meets the pull: on a 15% climb
-the shipped car settles at 36 m/s instead of 40. A dive carries it past top speed, to where the
-pull meets the momentum fading: `top_speed` plus the pull over `overspeed_drag`, nearly 5 m/s over
-on a 25% grade with the shipped tuning. On the skyway the gripping autopilot reaches 42 m/s at the
-foot of the dive, where it never went past 40 before the car had weight.
+the shipped car settles at about 54 m/s instead of 58. A dive carries it past top speed, to where
+the pull meets the momentum fading: `top_speed` plus the pull over `overspeed_drag`, nearly 7 m/s
+over on a 25% grade with the shipped tuning. On the skyway, at 40 m/s, the gripping autopilot
+reached 42 m/s at the foot of the dive, where it never went past 40 before the car had weight.
 
-Only the planar motion is simulated, and that pull is all the slopes do: cars never leave the road,
-and a crest taken flat out does not throw them into the air.
+Only the planar motion is simulated, and that pull is all the slopes do on the road: a crest taken
+flat out does not throw a car into the air. A car leaves the road only by jumping or off a lip,
+and then carries the road's own climb with it (see [Natural flight](#natural-flight)).
 
 ### Walls
 
@@ -812,9 +835,10 @@ alone after a hit at 7 degrees and 35 m/s, the test car was down to 15 m/s two s
 and is now at 30. A shallow hit cost more than a square one. The picture does not jump with the
 car: the body (`Car::body`) is left pointing where it did and swings back into line in its own
 time, the way it takes over the slide when a drift starts. Only the way the car was already going: one
-that hits head on, or stands against the wall, is left to turn away by itself. A hit hard enough
-to break the car into a drift, from about 9 degrees at speed, already followed the wall, a
-drift's heading being its travel; this is for the shallow hits and the slow ones.
+that hits head on, or stands against the wall, is left to turn away by itself. Until v0.1.44 a
+hit hard enough to break the car into a drift, from about 9 degrees at speed, already followed
+the wall, a drift's heading being its travel; since then a body left across by a wall starts no
+drift, so the deflection is what turns every gripping car that hits.
 
 Cars do not collide with each other yet.
 
@@ -840,8 +864,8 @@ touching a wall — and so the client can drive itself for unattended checks.
 
 It drives in one of two styles, and they differ only in the button: `Style::Grip` never touches
 it, `Style::Drift` taps it into the turns. Gripping can still drift, since turning hard enough
-breaks the car away without the button, though on the skyway it never turns that hard; so the two
-laps measure what the button is worth.
+breaks the car away without the button, which on the skyway it did once a lap from v0.1.35 and
+seven times from v0.1.44; so the two laps measure what the button is worth.
 
 Both decide from the road ahead rather than from their own steering: the drifting style taps the
 button, with the stick into the turn, when the road turns by more than 0.25 rad over the next
