@@ -25,7 +25,7 @@ use crate::world;
 
 /// How high the walls stand over the road edge, and how thick they are, in meters. The scenery
 /// stands beyond them.
-pub const WALL_HEIGHT: f32 = 1.0;
+pub use star_racer_sim::car::WALL_HEIGHT;
 pub const WALL_THICKNESS: f32 = 0.6;
 /// How thick the road is under its surface, in meters: it floats in the dark as a slab, its walls
 /// running down past its edges to the underside, however high the relief carries it.
@@ -298,6 +298,10 @@ fn underside(geometry: &mut Geometry, track: &Track) {
 fn walls(lit: &mut Geometry, neon: &mut Geometry, track: &Track) {
     for side in [1.0, -1.0] {
         for_each_segment(track, |a, b, distance| {
+            // A breach: the wall is missing, and nothing holds a car in.
+            if track.breached(distance + track.spacing() / 2.0, side) {
+                return;
+            }
             let (geometry, color) = if (distance / WALL_STRIPE) as usize % 2 == 0 {
                 (&mut *lit, WALL_DARK)
             } else {

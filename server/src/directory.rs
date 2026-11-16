@@ -34,8 +34,9 @@ const COMMAND_BUFFER: usize = 256;
 /// How often the matchmaker looks at the queue.
 const MATCHMAKING_PERIOD: Duration = Duration::from_millis(250);
 
-/// Laps of a ranked race, and of the lobbies quick play opens.
-const LAPS: u8 = 3;
+/// Laps of a ranked race, and of the lobbies quick play opens: two of the Odyssey's 5 km, a
+/// little under three minutes. Three until v0.1.49, when a lap took half a minute.
+const LAPS: u8 = 2;
 /// How many players a lobby quick play opens wants, and holds.
 const QUICK_PLAY_MIN_PLAYERS: u8 = 2;
 const QUICK_PLAY_MAX_PLAYERS: u8 = 8;

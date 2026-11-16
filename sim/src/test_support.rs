@@ -53,6 +53,7 @@ fn oval_of_width(
         pads: Vec::new(),
             gaps: Vec::new(),
             checkpoints: Vec::new(),
+            breaches: Vec::new(),
     }
 }
 
@@ -98,10 +99,10 @@ pub fn tuning() -> CarTuning {
         turbo_seconds: 2.0,
         turbo_top_speed: 56.0,
         turbo_acceleration: 45.0,
-        jump_speed: 6.0,
-        air_gravity: 25.0,
-        thrust_delay: 0.15,
-        thrust_acceleration: 42.0,
+        jump_speed: 10.0,
+        air_gravity: 50.0,
+        thrust_delay: 0.1,
+        thrust_acceleration: 95.0,
         thrust_ceiling: 8.0,
         thrust_seconds: 1.5,
         thrust_recharge: 1.0,

@@ -924,7 +924,7 @@ impl Lobby {
             if member.car.respawns != respawns {
                 info!(
                     lobby = %self.id, nickname = %member.player.nickname,
-                    checkpoint = member.car.checkpoint, "fell through a gap"
+                    checkpoint = member.car.checkpoint, "brought back to a checkpoint"
                 );
             }
             member.progress.update(track, &member.car);
@@ -1096,18 +1096,18 @@ mod tests {
     use crate::content;
     use crate::session::PlayerId;
 
-    fn skyway() -> (Arc<LoadedTrack>, CarTuning) {
+    fn odyssey() -> (Arc<LoadedTrack>, CarTuning) {
         let data_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("data");
         let tracks = content::load_tracks(&data_dir).unwrap();
         let tuning =
             content::load_car_tuning(&data_dir.join(content::CAR_TUNING_FILE), &tracks).unwrap();
-        (Arc::clone(&tracks["skyway"]), tuning)
+        (Arc::clone(&tracks["odyssey"]), tuning)
     }
 
     fn settings(laps: u8, min_players: u8, max_players: u8) -> LobbySettings {
         LobbySettings {
             name: "Test".into(),
-            track: "skyway".into(),
+            track: "odyssey".into(),
             laps,
             min_players,
             max_players,
@@ -1126,7 +1126,7 @@ mod tests {
     }
 
     fn new_lobby(settings: LobbySettings, timings: Timings) -> Lobby {
-        let (track, tuning) = skyway();
+        let (track, tuning) = odyssey();
         Lobby::new(
             LobbyId(0),
             settings,
@@ -1609,7 +1609,7 @@ mod tests {
     }
 
     fn quick_lobby() -> Lobby {
-        let (track, tuning) = skyway();
+        let (track, tuning) = odyssey();
         Lobby::new(
             LobbyId(0),
             settings(1, 2, 8),

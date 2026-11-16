@@ -97,7 +97,7 @@ impl ScriptedLogin {
 #[derive(Clone)]
 pub struct ScriptedLobby {
     pub name: String,
-    /// Used if the lobby has to be created. No track picks the skyway.
+    /// Used if the lobby has to be created. No track picks the default one.
     pub track: Option<String>,
     pub laps: u8,
     pub min_players: u8,
@@ -266,16 +266,17 @@ pub fn read() -> Settings {
         #[arg(long, requires = "who")]
         lobby: Option<String>,
 
-        /// Track of the lobby created by --lobby, by its key (the file name without .ron).
-        #[arg(long, requires = "lobby")]
+        /// Track of the lobby created by --lobby, by its key (the file name without .ron). Without
+        /// --lobby, the lobby is named after the track.
+        #[arg(long, requires = "who")]
         track: Option<String>,
 
         /// Laps of the lobby created by --lobby.
-        #[arg(long, default_value_t = DEFAULT_LAPS, requires = "lobby")]
+        #[arg(long, default_value_t = DEFAULT_LAPS, requires = "who")]
         laps: u8,
 
         /// Players needed to start a race in the lobby created by --lobby.
-        #[arg(long, default_value_t = DEFAULT_MIN_PLAYERS, requires = "lobby")]
+        #[arg(long, default_value_t = DEFAULT_MIN_PLAYERS, requires = "who")]
         min_players: u8,
 
         /// With --guest or --account, open the lobby creation dialog once connected.
@@ -367,7 +368,7 @@ pub fn read() -> Settings {
         volume: args.volume.clamp(0.0, 1.0),
         script: Script {
             login: ScriptedLogin::of(args.guest, args.account, args.password, args.create),
-            lobby: args.lobby.map(|name| ScriptedLobby {
+            lobby: args.lobby.or_else(|| args.track.clone()).map(|name| ScriptedLobby {
                 name,
                 track: args.track,
                 laps: args.laps,
@@ -431,7 +432,7 @@ pub fn read() -> Settings {
         volume: number(get("volume"), DEFAULT_VOLUME).clamp(0.0, 1.0),
         script: Script {
             login: ScriptedLogin::of(has("guest"), get("account"), get("password"), has("create")),
-            lobby: get("lobby").map(|name| ScriptedLobby {
+            lobby: get("lobby").or_else(|| get("track")).map(|name| ScriptedLobby {
                 name,
                 track: get("track"),
                 laps: number(get("laps"), DEFAULT_LAPS),

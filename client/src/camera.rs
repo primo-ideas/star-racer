@@ -283,10 +283,17 @@ fn follow_car(
     };
     // In the air the camera rises after the car, though not quite as high, so a jump is seen as
     // the car lifting off the road rather than the road dropping away.
-    let car_position = world::position(
-        car.position,
-        view.followed_height + car.altitude.max(-FALL_FOLLOWED) * FOLLOW_ALTITUDE,
-    );
+    // Beside the road there is no road to see the car leave: the camera goes with it all the
+    // way, up or down, to wherever it lands or is lost.
+    let off_road = track
+        .as_deref()
+        .is_some_and(|track| !track.within_walls(&track.project(car.position)));
+    let followed = if off_road {
+        car.altitude
+    } else {
+        car.altitude.max(-FALL_FOLLOWED) * FOLLOW_ALTITUDE
+    };
+    let car_position = world::position(car.position, view.followed_height + followed);
     let slope = view.followed_gradient;
     let fov = if finished {
         show_finish(
@@ -641,6 +648,7 @@ mod tests {
             pads: Vec::new(),
             gaps: Vec::new(),
             checkpoints: Vec::new(),
+            breaches: Vec::new(),
         })
         .unwrap()
     }

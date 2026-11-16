@@ -568,6 +568,7 @@ mod tests {
             pads: Vec::new(),
             gaps: Vec::new(),
             checkpoints: Vec::new(),
+            breaches: Vec::new(),
         })
         .unwrap()
     }

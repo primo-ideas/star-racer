@@ -104,12 +104,15 @@ counts against it and crossing the line back and forth gains nothing. Cars on th
 meters below zero.
 
 It cannot be cheated (since v0.1.49, the user's word "Ajoute des checkpoints pour eviter les
-exploits"). It grows by no more than `car::MAX_STEP` (10 m) a tick, which no car can drive, so a
-car that gets from one part of the road to another without driving the road in between gains
-nothing from it. And it does not cross the start line until the car has passed every
-[checkpoint](tracks.md#checkpoints) of the lap in order: a car that skipped one is held just short
-of the line, however far it drives, until it has driven a whole lap through all of them. A car that
-falls through a gap and is brought back to its last checkpoint goes back to the progress it had
+exploits"), and since v0.1.50 a [shortcut](tracks.md#shortcuts) counts in full: a car that flies
+from one part of the road to another between the same two gates has got there, and its progress
+takes the whole step. What stops a cut across the lap is the car's course
+([Simulation](simulation.md#off-the-road)): past the next [checkpoint](tracks.md#checkpoints) it
+has yet to pass, a car is off its course, and nothing counts while it is, on the road or off it;
+it is brought back before it can go on. Until v0.1.49 progress grew by no more than 10 m a tick
+instead, which made every flight from one part of the road to another worth nothing. And progress
+does not cross the start line until the car has passed every checkpoint of the lap in order. A
+car brought back to its last checkpoint goes back to the progress it had
 there.
 
 A car has finished once its progress reaches `laps × length`. Its time is counted from the start

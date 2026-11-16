@@ -339,15 +339,21 @@ pub(super) fn wall_light(glow: &mut Geometry, track: &Track) {
     let spacing = track.spacing();
     for side in [1.0_f32, -1.0] {
         for_each_road_segment(track, |a, b, distance| {
-            if !neon(distance) {
+            // Where the wall is missing there is no neon to light the road: the open edge glows
+            // amber instead, the color of what is worth a look.
+            let open = track.breached(distance + spacing / 2.0, side);
+            if !neon(distance) && !open {
                 return;
             }
             let [near, far] = [distance, distance + spacing].map(|at| {
+                if open {
+                    return PAD_GLOW.with_alpha(PAD_POOL_ALPHA);
+                }
                 // Past the end of the stripe, the next one starts dark.
                 let share = if neon(at) { along(at) } else { 0.0 };
                 NEON_BLUE.with_alpha(POOL_ALPHA * share)
             });
-            let dark = NEON_BLUE.with_alpha(0.0);
+            let dark = near.with_alpha(0.0);
             glow.quad_shaded(
                 [
                     on_road(track, a, side * a.half_width, POOL_HEIGHT),
@@ -392,6 +398,7 @@ mod tests {
             pads: Vec::new(),
             gaps: Vec::new(),
             checkpoints: Vec::new(),
+            breaches: Vec::new(),
         })
         .unwrap()
     }
@@ -429,6 +436,7 @@ mod tests {
             pads: Vec::new(),
             gaps: Vec::new(),
             checkpoints: vec![150.0],
+            breaches: Vec::new(),
         };
         description.gaps = vec![Gap {
             at: 60.0,

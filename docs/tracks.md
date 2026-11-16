@@ -5,13 +5,87 @@ turtle drawing the road. The format is defined by `TrackDescription` in
 `sim/src/track.rs`, and files are written in [RON](https://github.com/ron-rs/ron).
 
 Track files live in `server/data/tracks/`, one per track, named by its key: the server loads them
-all, and the player who creates a lobby picks one; quick play and ranked take them in turn. The
-game ships two circuits: the skyway, and since v0.1.49 the rift (see [The rift](#the-rift)), drawn
-for the jump. Clients receive every track when they connect (see [Protocol](protocol.md#tracks)). Every
-shipped track is tested: it must load, and the autopilot must lap it drifting without touching a
-wall, faster than gripping (see [Simulation](simulation.md#autopilot)).
+all, and the player who creates a lobby picks one; quick play and ranked take them in turn. Since
+v0.1.50 the game ships one circuit, [the Odyssey](#the-odyssey), which replaced the skyway and the
+rift at the user's word ("tu vas supprimer les niveaux déjà fait et en faire un long et riche, en
+pensant checkpoints ET shortcuts à découvrir"). Clients receive every track when they connect (see
+[Protocol](protocol.md#tracks)). Every shipped track is tested: it must load, and the autopilot
+must lap it drifting without touching a wall, faster than gripping (see
+[Simulation](simulation.md#autopilot)).
 
-`skyway.ron` is the one circuit the game ships: 34 m from wall to wall, 1.86 km a lap, and nothing
+## The Odyssey
+
+`odyssey.ron`: 30 m from wall to wall, **5.06 km a lap**, its relief from 8 to 60 m, its road
+missing in four places, eleven checkpoints, eight speed pads, and three shortcuts. The lap is one
+big turn to the left, a rounded rectangle about 1.2 km by 0.9, with three loops hanging off its
+outside: the road leaves its line to the right, winds round a tight banked loop and comes back to
+the line it left, a little further on. Between them it runs fast: slaloms of 70 to 120 m radii,
+a quarter turn of 140 m, straights with a gap to jump.
+
+- **The launch**: out of the line, over the hop, 14 m missing 150 m after it.
+- **The weave**: a long, fast slalom, dropping 12 m.
+- **The keyhole**: the first loop, 440 m of it, the lowest part of the lap.
+- **The long left**: a wide banked quarter turn, climbing.
+- **The leap**: 45 m missing on the way up, under an arch: the thruster's.
+- **The climb**: a slalom through a tunnel up to the top of the lap, 60 m up.
+- **The balcony**: the second loop, out over the void, winding down 26 m.
+- **The sky bowl**, a banked left, and **the gate**, the top straight pinched to 18 m.
+- **The dive**: down 30 m through a fast kink under a tunnel.
+- **The rift**: 55 m missing at the bottom of the dive, a monolith standing over the void on
+  either side.
+- **The scree**, a slalom, and **the step**, 16 m missing on the way out of it.
+- **The west corner**, climbing, and **the esses**, through a tunnel.
+- **The long way round**: the third loop, the widest.
+- **The last corner**, onto the run home.
+
+With the shipped car the autopilot laps it gripping in 80.4 s and drifting in 77.5 s with four
+charges of turbo fired, both without touching a wall or falling; six ticks late, 80.8 s clean
+and 79.4 s with 9 ticks against a wall; eight personalities from 73.4 to 82.1 s. It takes no
+shortcut. A race is two laps by default, since a lap is two and a half times what the skyway's
+was.
+
+It was designed with a scratch tool outside the repository that integrates the clothoids, solves
+two lengths so the loop closes, moves everything placed along the lap when the road before it
+changes length, draws the plan colored by height, drives the autopilot round, and flies a car
+straight on from any point of the road to see where it comes down.
+
+### Shortcuts
+
+**The walls are as high as they look** (1.4 m), and nothing stands on top of them (the user's
+word: "Il ne faut pas de mur invisible mais on doit détecter quand le joueur part trop en sucette
+pour le faire respawn après un petit compte à rebours"). A hop does not clear them; the thruster
+does, and a car that flies over one has left the road. It keeps its own height out there, the
+thruster still pushing while its tank lasts, and it is on the road again the moment it is over
+road no higher than it is, whichever part of the lap that road belongs to. Meanwhile it is
+counted out: 2.4 s off its course and it is brought back to its last checkpoint (see
+[Simulation](simulation.md#off-the-road)).
+
+That is all a shortcut needs, and the three loops are where they are. Each leaves the line the
+road was on and comes back to it, so a car that goes **straight on where the road turns away**
+crosses the void between the loop's two ends and lands on the road coming back, 300 to 340 m of
+loop skipped, about five seconds:
+
+| Loop | How | Measured |
+| --- | --- | --- |
+| The keyhole | Over the wall on the thruster, held all the way. At top speed it comes down in the last of the loop's exit, 30 to 40 degrees across the road; a little over top speed lands it in line. The pad before the loop, on the left, is the hint and the speed. | 1.6 s in the air, 0.5 to 1.0 s off the road |
+| The balcony | The wall is missing where the road turns away (a [breach](#breaches)), and the road coming back lies 26 m below: straight on, nothing pressed. | 1.5 s of falling |
+| The long way round | The longest flight, 1.7 s on the thruster: at top speed and on a pad's boost the car falls short; on a drift's boost held or the turbo it lands. | lost at 58 and 66 m/s, lands from 75 |
+
+Nothing announces them but a pad pointing the wrong way and a wall that is not there. A failed
+one costs the fall, the count and the way back from the checkpoint before the loop.
+
+**What keeps them honest is the checkpoints.** No gate stands inside a loop, so a car that cuts
+one lands between the same two gates it left, and its progress takes the cut in full. Anywhere
+else, a flight from one part of the road to another ends beyond a gate the car has not passed:
+there it is off its course, on the road or not, counted out and brought back (see
+[Checkpoints](#checkpoints)). `the_shortcuts_of_the_odyssey_are_there` (`server/src/content.rs`)
+flies all three with the shipped car, and fails if a change to the track or to the tuning closes
+one or opens the last to a car at top speed.
+
+## The circuits before it
+
+`skyway.ron` was the one circuit the game shipped until v0.1.48, and one of two until v0.1.49,
+with `rift.ron` (see [The rift](#the-rift)): 34 m from wall to wall, 1.86 km a lap, and nothing
 on it is straight or level for long. It is drawn after the circuits of Rocket Racing, whose roads
 turn, climb, dive and bank all at once: the relief runs from 3 m up to 47 m and back (see
 [Relief](#relief)), every one of its twenty turns is banked, the steepest stretch dives at 14
@@ -69,6 +143,10 @@ than one direction.
         (at: 90.0, length: 14.0),
     ],
     checkpoints: [40.0, 180.0],
+    // Optional: where a wall is missing (see Breaches).
+    breaches: [
+        (at: 60.0, length: 30.0, side: Left),
+    ],
 )
 ```
 
@@ -234,15 +312,14 @@ Since v0.1.49, a track may leave its road out in places, to be jumped (see
 [Simulation](simulation.md#the-jump)): `gaps: [(at: 80.0, length: 14.0)]`, each placed by where it
 begins along the lap and how long it is, from 4 to 90 m. The road, its underside and everything
 painted on it stop at a gap's edges, and the piers stand back from them; the walls carry on over
-it, the girders of a broken bridge, and still hold a car in, so a gap is jumped along the road and
-never cut across. Each edge is the cut face of the slab, a line of hot magenta neon across the road
+it, the girders of a broken bridge, and hold a car that is no higher than they are. Each edge is the cut face of the slab, a line of hot magenta neon across the road
 at its top and the light of it thrown back along the road (`track/markings.rs`), so a gap reads
 from far off as a bright line with nothing beyond it. A car's shadow and the light under it are
 not drawn over a gap, there being no road to throw them on.
 
 A car that reaches a gap on the road falls through it and comes back at its last checkpoint (see
-[Simulation](simulation.md#falling-and-coming-back)). With the shipped car a hop clears about 25 m
-at top speed, less from a slower start, and the thruster about 120 m: a gap of 14 m is a tap, one
+[Simulation](simulation.md#off-the-road)). With the shipped car a hop clears about 23 m
+at top speed, less from a slower start, and the thruster about 110 m: a gap of 14 m is a tap, one
 of 20 m a long hop or a touch of the thruster, and one of 55 m the thruster's. The relief carries
 on under a gap, so the far side can stand lower than the lip, and a jump off a crest flies further.
 
@@ -256,18 +333,35 @@ shipped-track test refuses a lap in which it falls.
 Since v0.1.49, the user's word "Ajoute des checkpoints pour eviter les exploits":
 `checkpoints: [600.0, 880.0]`, the meters along the lap of the gates a lap passes in order, the
 start line being the first gate without being listed. A lap counts only once a car has passed every
-one of them in order, and a car that falls through a gap comes back at the last one it passed; how
+one of them in order, and a car that is lost comes back at the last one it passed; how
 the progress is kept honest is in [Lobbies](lobbies.md#progress-laps-and-finishing). Each is drawn
 as a line of green neon across the road, its light on the road either side, with nothing standing
 in the way.
 
+A gate is a line across the road: it is passed by a car over the road, on it or flying, and not
+by one going by beside it. And a car has a **course**: the road from the last gate it passed to
+the next one, and 120 m behind (`Track::on_course`). Anywhere else on the road it has missed a
+gate, or gone back past one: it is counted out exactly as a car off the road is, the HUD saying
+MISSED CHECKPOINT, and brought back to its last gate after 2.4 s. That is what stops a flight
+from one side of the lap to another (see [Shortcuts](#shortcuts)).
+
 They must be in order along the lap, 40 m from each other and from the line, and none may lie in a
 gap or less than 40 m before one, so a car brought back to it has room to get going again
-(`TrackError::InvalidCheckpoint`). The skyway has three, the rift five, one before each of its gaps.
+(`TrackError::InvalidCheckpoint`). The Odyssey has eleven: one before and one after each loop,
+one before each gap, and the rest where the lap would otherwise go 600 m without one.
+
+## Breaches
+
+Since v0.1.50: `breaches: [(at: 1916.8, length: 45.0, side: Left)]`, a stretch where the wall on
+one side is missing, placed by where it begins along the lap, its length (4 m at least) and its
+side. Nothing holds a car in there: it drives off the edge of the road and falls, onto another
+part of the road if one lies below and ahead, or into the dark. The client leaves the wall out,
+and where its neon would have lit the road the open edge glows amber, the color of the pads
+(`track/markings.rs`). The Odyssey has one, on the balcony.
 
 ## The rift
 
-`rift.ron`, the second circuit (v0.1.49, the user's word "Prépare toi à faire un nouveau niveau
+Gone since v0.1.50, with the skyway. `rift.ron` was the second circuit (v0.1.49, the user's word "Prépare toi à faire un nouveau niveau
 après pour bien correspondre a notre nouvelle mania"), drawn for the heavy, fast car of v0.1.44 and
 for the jump: 30 m wide, 2.02 km a lap, its relief from 5 to 42 m, its road missing in four places.
 It runs fast where the car wants to run, a 200 m launch and a long slalom of 110 m radii, and folds
@@ -431,6 +525,7 @@ slabs out in the dark.
 - a narrows sits off the lap, is not a positive number of meters long, pinches the road below 8 m
   or wider than the track itself, has a negative blend, or is longer than the lap with both its
   blends. The message names it by its place in the list;
+- a breach sits off the lap, is shorter than 4 m or as long as the lap;
 - a prop of the scenery stands off the lap, over the road (a negative `offset`), has a size that
   is not a positive number of meters, or is a tunnel with its roof less than 7 m over the road. The
   message names the prop by its place in the list.

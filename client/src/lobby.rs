@@ -266,7 +266,7 @@ fn receive_lobby_events(
     }
 }
 
-const SCRIPT_TRACK: &str = "skyway";
+const SCRIPT_TRACK: &str = "odyssey";
 
 /// Enters the scripted lobby once connected and listed.
 fn follow_script(

@@ -376,14 +376,16 @@ scale factor and all, so the interface is laid out in exactly the size asked for
 cannot show is a thumb: the pads only light up under a real finger, and the gestures themselves
 are covered by the tests in `ui/touch.rs`.
 
-A lobby created by `--lobby` races on the skyway, or on the track `--track` names.
+A lobby created by `--lobby` races on the Odyssey, or on the track `--track` names; `--track`
+alone enters a lobby named after the track.
 
 The autopilot waits for the start on screen before pressing the accelerator, so its start is
 graded S, and a capture about 14 s after entering a lobby of one shows the grade over "GO!".
 
-With `--autopilot`, `--laps 1 --min-players 1` and a `--capture-delay` of about 33 s, the capture
-shows the results of a race. A checkpoint passed is announced where the start grade was, CHECKPOINT
-and the gate's number out of the lap's, in green for 1.4 s, and a car brought back after a fall,
-BACK ON TRACK in magenta. `--autopilot-drift` drives the same lap drifting through the turns, so
+With `--autopilot`, `--laps 1 --min-players 1` and a `--capture-delay` of about 95 s, the capture
+shows the results of a race (33 s on the skyway, whose lap was 30 s). A checkpoint passed is announced where the start grade was, CHECKPOINT
+and the gate's number out of the lap's, in green for 1.4 s, and a car brought back to one,
+BACK ON TRACK in magenta; while a car is off its course the same place counts it down, 3, 2, 1,
+over OFF TRACK or MISSED CHECKPOINT (see [Simulation](simulation.md#off-the-road)). `--autopilot-drift` drives the same lap drifting through the turns, so
 a capture mid-lap shows a car sliding with the DRIFT gauge filling. The game feel of the menus
 (animation, focus, gamepad) is left for a human to judge.

@@ -24,11 +24,11 @@ use crate::ui::touch::TouchOptions;
 /// Where the choices are stored, next to the identity key.
 const SLOT: &str = "preferences.ron";
 
-pub const DEFAULT_LAPS: u8 = 3;
+pub const DEFAULT_LAPS: u8 = 2;
 pub const DEFAULT_MIN_PLAYERS: u8 = 2;
 pub const DEFAULT_MAX_PLAYERS: u8 = 8;
 /// The track offered first, when the server has it.
-pub const DEFAULT_TRACK: &str = "skyway";
+pub const DEFAULT_TRACK: &str = "odyssey";
 
 pub struct PreferencesPlugin {
     pub store: IdentityStore,
@@ -235,7 +235,7 @@ mod tests {
             nickname: Some("Turbo Otter".into()),
             lobby: LobbyPreferences {
                 name: Some("Friday night".into()),
-                track: Some("skyway".into()),
+                track: Some("odyssey".into()),
                 laps: 5,
                 min_players: 3,
                 max_players: 4,
@@ -288,7 +288,7 @@ mod tests {
     fn only_a_lobby_name_the_player_typed_is_kept() {
         let settings = |name: &str| LobbySettings {
             name: name.into(),
-            track: "skyway".into(),
+            track: "odyssey".into(),
             laps: 3,
             min_players: 2,
             max_players: 8,
