@@ -562,6 +562,21 @@ path. A drift held through the air flies the same way. On landing the grip takes
 the nose. The autopilot's flights over gaps are straight, so it loses nothing; a car flown off a
 curve on the thruster now leaves the road where it used to follow it.
 
+### Thrown into a drift, with a kick
+
+Since v0.1.54, the user's word "Quand on fait direction + drift d'un coup, on doit avoir un joli
+coup de braquage avant que ce redevienne lent et accentuer ou pas par les directions du joystick":
+a drift started by a press of the button with the stick turned turns in with a kick. `Car::kick`
+adds `drift_kick` (80 degrees per second at full lock and top speed, as much less as the stick is
+less turned or the car slower) to the rotation the stick asks for; the rotation reaches it at
+`drift_kick_acceleration` (1600 degrees per second per second) on top of the car's weight, and
+the kick fades out at `drift_kick_fade` (320). Traced at full lock from top speed: the rotation is
+at 90 degrees per second after 50 ms (10 without the kick), 118 at 0.1 s, back to the drift's own
+by 0.5 s; the travel has turned 25 degrees at 0.4 s instead of 7. After it the drift is as slow
+as ever, and the stick tightens or opens it. A drift the car breaks into by turning hard has no
+kick. The autopilot holds the button while the kick lasts: catching it with the stick otherwise
+ended the drift it began, and it threw some seventy drifts a lap instead of fifteen.
+
 ### Out of a drift, on a curve
 
 Until v0.1.53, a drift whose stick came back to the center ran on straight while its body alone

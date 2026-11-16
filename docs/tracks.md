@@ -15,7 +15,7 @@ must lap it drifting without touching a wall, faster than gripping (see
 
 ## The Odyssey
 
-`odyssey.ron`: 30 m from wall to wall, **5.22 km a lap** (5.06 until v0.1.51), its relief from 6 to 60 m, its road
+`odyssey.ron`: 40 m from wall to wall (30 until v0.1.53), **5.28 km a lap** (5.06 until v0.1.51), its relief from 6 to 60 m, its road
 missing in four places, eleven checkpoints, eight speed pads, and three shortcuts. The lap is one
 big turn to the left, a rounded rectangle about 1.2 km by 0.9, with three loops hanging off its
 outside: the road leaves its line to the right, winds round a tight banked loop and comes back to
@@ -38,6 +38,10 @@ a quarter turn of 140 m, straights with a gap to jump.
 - **The long way round**: the third loop, the widest.
 - **The last corner**, onto the run home.
 
+Since v0.1.54 the road is 40 m wide instead of 30, at the user's word ("Elargis les routes du
+circuit"): the balcony's loop was redrawn so its two ends no longer meet on a wider road (turns of
+110 degrees instead of 120 on necks of 30 m, round a turn of 52 m), and the keyhole's first turn
+is banked 14 degrees instead of 22, a wider road raising its outer edge too high to fly over.
 Since v0.1.52 its leap and its rift are 110 and 170 m long (45 and 55 before), the straights
 under them stretched by 80 and 100 m, for a thruster that flies twice as far (the user's word:
 "Agrandis les précipices, car on doit pouvoir thrust bien davantage"). With the shipped car the
@@ -70,7 +74,7 @@ loop skipped, about five seconds:
 
 | Loop | How | Measured |
 | --- | --- | --- |
-| The keyhole | Over the wall on the thruster, at top speed, from the straight before the loop (615 to 635 m): later, the car flies into the banked road of the loop's first turn. The pad before the loop, on the left, is the hint. | 2.3 s in the air, 0.7 s off the road |
+| The keyhole | Over the wall on the thruster, at top speed, from the straight before the loop (615 to 630 m, since the road is 40 m wide): later, the car flies into the banked road of the loop's first turn. The pad before the loop, on the left, is the hint. | 2.3 s in the air, 0.7 s off the road |
 | The balcony | The wall is missing where the road turns away (a [breach](#breaches)), and the road coming back lies 26 m below: straight on, nothing pressed. | 1.5 s of falling |
 | The long way round | The longest flight, on the thruster from top speed (until v0.1.51, when the thruster was weaker, it took the turbo). | 2.1 s in the air, 1.25 s off the road |
 

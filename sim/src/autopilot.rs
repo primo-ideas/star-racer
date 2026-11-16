@@ -241,7 +241,9 @@ fn drift_through_turns(personality: &Personality, car: &Car, track: &Track) -> C
     if car.is_drifting() {
         let steer = pursue(personality, car, track, DRIFT_LOOK_AHEAD_TIME);
         // Into the drift is toward its side, which is the sign of `drift` for the stick.
-        let holding = steer * f32::from(car.drift) > 1.0;
+        // Held through the kick of a drift thrown into, too: the stick catching the kick would
+        // otherwise end the drift it began.
+        let holding = steer * f32::from(car.drift) > 1.0 || car.kick != 0.0;
         return CarInput::new(true, steer).with_drift(holding);
     }
     let input = drive_as(personality, car, track);

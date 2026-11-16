@@ -176,6 +176,16 @@
     // swings back into line: at 0.5 the travel and the nose meet halfway. 0 is the old way.
     drift_exit_share: 0.5,
 
+    // Into a drift thrown with the stick turned and the button pressed together (since v0.1.54,
+    // the user's word "on doit avoir un joli coup de braquage avant que ce redevienne lent"):
+    // drift_kick degrees per second of rotation on top of what the stick asks, at full lock and
+    // top speed, reached at drift_kick_acceleration (in about 0.05 s) and fading out at
+    // drift_kick_fade (in a quarter of a second): about 12 degrees of turn-in, after which the
+    // drift is as slow as ever and the stick tightens or opens it. 0 is no kick.
+    drift_kick: 80.0,
+    drift_kick_acceleration: 1600.0,
+    drift_kick_fade: 320.0,
+
     // Walls. The bounce is the share of the impact speed that comes back, from 0 to 1. The impact
     // friction is the speed along the wall a hit takes, per m/s it takes into it: a graze costs
     // little, a blow at an angle a lot. The friction slows a car scraping along a wall, per second.
