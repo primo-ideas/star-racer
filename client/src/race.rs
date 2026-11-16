@@ -515,6 +515,7 @@ const LIFT_FLAME_HALF: Vec2 = Vec2::new(0.55, 0.35);
 /// puts out the flame of its thruster.
 fn stay_on_the_road(
     view: Res<RaceView>,
+    track: Option<Res<CurrentTrack>>,
     time: Res<Time>,
     cars: Query<(&CarVisual, &Children)>,
     mut on_road: Query<&mut Transform, (With<OnTheRoad>, Without<LiftFlame>)>,
@@ -525,7 +526,15 @@ fn stay_on_the_road(
         let Some(state) = car(visual.0) else {
             continue;
         };
-        let scale = 1.0 / (1.0 + SHADOW_SHRINK * state.altitude);
+        // Over a gap, or falling through one, there is no road under the car to throw them on.
+        let over_gap = track
+            .as_ref()
+            .is_some_and(|track| track.0.in_gap(track.0.project(state.position).distance));
+        let scale = if state.altitude < 0.0 || over_gap {
+            0.0
+        } else {
+            1.0 / (1.0 + SHADOW_SHRINK * state.altitude)
+        };
         for child in children {
             if let Ok(mut transform) = on_road.get_mut(*child) {
                 transform.translation = Vec3::NEG_Y * state.altitude;

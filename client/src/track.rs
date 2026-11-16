@@ -237,6 +237,8 @@ fn track_meshes(track: &Track, props: &[Prop]) -> TrackMeshes {
     markings::edge_lines(&mut lit, track);
     markings::grid_boxes(&mut lit, track);
     markings::pads(&mut neon, &mut glow, track);
+    markings::gap_lips(&mut lit, &mut neon, &mut glow, track);
+    markings::checkpoints(&mut neon, &mut glow, track);
     markings::wall_light(&mut glow, track);
     let mut scenery = Geometry::default();
     piers::piers(&mut scenery, &mut neon, track);
@@ -255,7 +257,7 @@ fn track_meshes(track: &Track, props: &[Prop]) -> TrackMeshes {
 /// The road surface, in strips across it. Each strip is a share of the half width rather than a
 /// number of meters, so the surface follows the walls in and out through a bottleneck.
 fn road(geometry: &mut Geometry, track: &Track) {
-    for_each_segment(track, |a, b, _| {
+    for_each_road_segment(track, |a, b, _| {
         for index in 0..ROAD_STRIPS {
             let left = 1.0 - 2.0 * index as f32 / ROAD_STRIPS as f32;
             let right = left - 2.0 / ROAD_STRIPS as f32;
@@ -273,7 +275,7 @@ fn road(geometry: &mut Geometry, track: &Track) {
 /// The underside of the road, [`SLAB`] under its surface and reaching out under the walls: seen
 /// from lower down the relief, the road is a slab rather than a sheet that vanishes from below.
 fn underside(geometry: &mut Geometry, track: &Track) {
-    for_each_segment(track, |a, b, _| {
+    for_each_road_segment(track, |a, b, _| {
         let edge = |point: TrackPoint| point.half_width + WALL_THICKNESS;
         for index in 0..ROAD_STRIPS {
             let left = 1.0 - 2.0 * index as f32 / ROAD_STRIPS as f32;
@@ -349,6 +351,9 @@ fn center_dashes(geometry: &mut Geometry, track: &Track) {
     let half = DASH_WIDTH / 2.0;
     for dash in 0..(track.length() / period) as usize {
         let start = dash as f32 * period;
+        if track.in_gap(start) || track.in_gap(start + DASH_LENGTH) {
+            continue;
+        }
         for piece in 0..DASH_PIECES {
             let piece_length = DASH_LENGTH / DASH_PIECES as f32;
             let a = track.point_at(start + piece as f32 * piece_length);
@@ -424,6 +429,18 @@ fn for_each_segment(track: &Track, mut f: impl FnMut(TrackPoint, TrackPoint, f32
         let next = points[(index + 1) % points.len()];
         f(*point, next, index as f32 * track.spacing());
     }
+}
+
+/// [`for_each_segment`], leaving out the stretches where the road is missing (see
+/// `sim::track::Gap`): the road, its underside and what is painted on it stop at a gap's lip, and
+/// the walls carry on over it.
+fn for_each_road_segment(track: &Track, mut f: impl FnMut(TrackPoint, TrackPoint, f32)) {
+    let half = track.spacing() / 2.0;
+    for_each_segment(track, |a, b, distance| {
+        if !track.in_gap(distance + half) {
+            f(a, b, distance);
+        }
+    });
 }
 
 /// The point `lateral` meters beside a centerline point, positive on the left.

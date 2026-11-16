@@ -14,7 +14,7 @@ use std::f32::consts::TAU;
 use std::collections::VecDeque;
 
 use super::car::{Car, CarInput, CarTuning};
-use super::race::wrapped_delta;
+use super::race::Progress;
 use super::track::Track;
 use super::{TICK_RATE, TICK_SECONDS};
 
@@ -147,6 +147,32 @@ pub fn drive(car: &Car, track: &Track) -> CarInput {
 /// [`drive`], with a personality.
 pub fn drive_as(personality: &Personality, car: &Car, track: &Track) -> CarInput {
     CarInput::new(true, pursue(personality, car, track, LOOK_AHEAD_TIME))
+        .with_jump(jumps(car, track))
+}
+
+/// Seconds of travel before a gap's lip the autopilot presses the jump.
+const JUMP_LEAD: f32 = 0.1;
+
+/// The longest gap the autopilot hops rather than flies, in seconds of travel: a hop stays up a
+/// little over 0.4 s with the shipped car.
+const HOP_REACH: f32 = 0.3;
+
+/// Whether the autopilot holds the jump: pressed just before a gap's lip, and held across a gap
+/// too long to hop, so the thruster carries it over.
+fn jumps(car: &Car, track: &Track) -> bool {
+    let here = track.project(car.position).distance;
+    let speed = car.velocity.length().max(1.0);
+    let lead = speed * JUMP_LEAD + 1.0;
+    let length = track.length();
+    track.gaps().iter().any(|gap| {
+        let to_lip = (gap.at - here).rem_euclid(length);
+        let past_lip = (here - gap.at).rem_euclid(length);
+        if car.altitude == 0.0 {
+            to_lip < lead
+        } else {
+            gap.length > speed * HOP_REACH && (to_lip < lead || past_lip < gap.length + 2.0)
+        }
+    })
 }
 
 /// The stick that points the car at a spot of its line ahead, `look_ahead_time` seconds of travel
@@ -192,6 +218,7 @@ pub fn drive_in_style_as(
     }
     drift_through_turns(personality, car, track)
         .with_turbo(fires_turbo(personality, car, track))
+        .with_jump(jumps(car, track))
 }
 
 /// Whether to press the turbo button now: with a charge to spend, out of a drift, and with the
@@ -252,6 +279,8 @@ pub struct LapReport {
     /// Charges of turbo fired.
     pub turbos: u32,
     pub top_speed: f32,
+    /// Times the car fell through a gap and came back at a checkpoint.
+    pub falls: u32,
 }
 
 /// Lets the autopilot drive one lap from the first grid slot, in `style`.
@@ -286,8 +315,7 @@ pub fn drive_lap_as(
 ) -> LapReport {
     let mut car = Car::on_grid(track, 0);
     let mut seen = VecDeque::from(vec![car; delay_ticks + 1]);
-    let mut distance = track.project(car.position).distance;
-    let mut progress = 0.0;
+    let mut progress = Progress::of(track, &car);
     let mut report = LapReport {
         lap_time: None,
         wall_ticks: 0,
@@ -297,6 +325,7 @@ pub fn drive_lap_as(
         boost_ticks: 0,
         turbos: 0,
         top_speed: 0.0,
+        falls: 0,
     };
     let mut drift_start = None;
 
@@ -308,8 +337,8 @@ pub fn drive_lap_as(
         seen.pop_front();
         seen.push_back(car);
         let projection = track.project(car.position);
-        progress += wrapped_delta(projection.distance - distance, track.length());
-        distance = projection.distance;
+        report.falls = u32::from(car.respawns);
+        progress.update(track, &car);
 
         // The walls are where the road is narrowest around the car, so a bottleneck counts.
         let limit = track.half_width_at(projection.distance) - tuning.collision_radius;
@@ -331,7 +360,7 @@ pub fn drive_lap_as(
         }
         report.boost_ticks += u32::from(car.is_boosting());
         report.top_speed = report.top_speed.max(car.velocity.length());
-        if progress >= track.length() {
+        if progress.total() >= track.length() {
             report.lap_time = Some(tick as f32 * TICK_SECONDS);
             break;
         }

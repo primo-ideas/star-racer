@@ -558,7 +558,7 @@ impl Lobby {
             input_seq: 0,
             scheduled: VecDeque::new(),
             start: StartTiming::default(),
-            progress: Progress::new(&self.track.track, car.position),
+            progress: Progress::of(&self.track.track, &car),
             snapshots,
         });
         self.changed = true;
@@ -725,7 +725,7 @@ impl Lobby {
             member.status = PlayerStatus::Racing;
             member.start.reset();
             member.car = Car::on_grid(track, slot);
-            member.progress = Progress::new(track, member.car.position);
+            member.progress = Progress::of(track, &member.car);
         }
         info!(
             lobby = %self.id, players = self.members.len(), laps = self.settings.laps,
@@ -886,6 +886,7 @@ impl Lobby {
         let finish = f32::from(self.settings.laps) * track.length();
         for member in &mut self.members {
             let before = member.progress.total();
+            let respawns = member.car.respawns;
             match member.status {
                 // The rules both sides share, so the player's own client predicts exactly this:
                 // graded on the first tick the start can be, held on the grid until then, driven
@@ -920,7 +921,13 @@ impl Lobby {
             if self.tick <= race.start_tick {
                 continue;
             }
-            member.progress.update(track, member.car.position);
+            if member.car.respawns != respawns {
+                info!(
+                    lobby = %self.id, nickname = %member.player.nickname,
+                    checkpoint = member.car.checkpoint, "fell through a gap"
+                );
+            }
+            member.progress.update(track, &member.car);
             let after = member.progress.total();
 
             if member.status == PlayerStatus::Racing && after >= finish {

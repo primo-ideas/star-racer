@@ -51,6 +51,8 @@ fn oval_of_width(
         narrows: Vec::new(),
         scenery: Vec::new(),
         pads: Vec::new(),
+            gaps: Vec::new(),
+            checkpoints: Vec::new(),
     }
 }
 

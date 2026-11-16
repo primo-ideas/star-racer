@@ -46,6 +46,18 @@ const START_FLASH_SECONDS: f32 = 0.4;
 const LIGHT_SIZE: f32 = 54.0;
 /// How long the start grade stays after the start, in seconds.
 const START_GRADE_SECONDS: f64 = 3.0;
+
+/// Seconds a checkpoint passed, or a car brought back to one, is announced for.
+const GATE_FLASH_SECONDS: f32 = 1.4;
+
+/// What the player's own car last told about the gates: the last one it passed, how many times it
+/// was brought back, and when either last changed, so the HUD can announce it.
+#[derive(Default)]
+struct GateFlash {
+    seen: Option<(u8, u16)>,
+    /// When it changed, in seconds of the app's clock, and whether the car was brought back.
+    since: Option<(f32, bool)>,
+}
 /// Names are shown above cars closer than this, in meters.
 const NAMEPLATE_DISTANCE: f32 = 120.0;
 const NAMEPLATE_WIDTH: f32 = 220.0;
@@ -810,12 +822,51 @@ fn update_hud(
     mut rings: Query<(&mut UiTransform, &mut BorderColor), (With<StartRing>, Without<StartLight>)>,
     mut blocks: Query<(&Block, &mut Node)>,
     mut fills: Query<(&Fill, &mut Node, &mut BackgroundColor), Without<Block>>,
+    (time, mut flash): (Res<Time>, Local<GateFlash>),
 ) {
     let Some(membership) = &current.0 else {
         return;
     };
     let track_length = track.as_ref().map_or(1.0, |track| track.0.length());
     let mut model = build_model(membership, &view, &tracks, track_length, *touchscreen);
+    // A checkpoint passed, or the car brought back to one after a fall, is announced where the
+    // start grade is, once that is gone.
+    if let (Some(car), Some(track)) = (view.own_car, track.as_ref()) {
+        let now = time.elapsed_secs();
+        let state = (car.checkpoint, car.respawns);
+        match flash.seen {
+            Some((_, respawns)) if respawns != car.respawns => {
+                flash.since = Some((now, true));
+            }
+            Some((checkpoint, _)) if checkpoint != car.checkpoint && car.checkpoint != 0 => {
+                flash.since = Some((now, false));
+            }
+            _ => {}
+        }
+        flash.seen = Some(state);
+        let checkpoints = track.0.gates().len().saturating_sub(1);
+        if let Some((since, fell)) = flash.since
+            && now - since < GATE_FLASH_SECONDS
+            && checkpoints > 0
+            && !model.shown.contains(&Block::StartGrade)
+        {
+            model.shown.insert(Block::StartGrade);
+            // The gate the car passed last, or came back to: the line is the start.
+            let gate = match car.checkpoint {
+                0 => "START".to_owned(),
+                checkpoint => format!("{checkpoint}/{checkpoints}"),
+            };
+            let (label, color) = if fell {
+                ("BACK ON TRACK", theme::MAGENTA)
+            } else {
+                ("CHECKPOINT", theme::GREEN)
+            };
+            model.text(Slot::StartGrade, gate, color);
+            model.text(Slot::StartLabel, label, color);
+        }
+    } else {
+        *flash = GateFlash::default();
+    }
     if let Some(fps) = diagnostics
         .get(&FrameTimeDiagnosticsPlugin::FPS)
         .and_then(|fps| fps.smoothed())

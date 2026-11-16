@@ -13,7 +13,10 @@ use bevy::color::LinearRgba;
 use bevy::prelude::*;
 use star_racer_sim::track::Track;
 
-use super::{MARKING, MARKING_HEIGHT, NEON_BLUE, WALL_STRIPE, for_each_segment, on_road};
+use super::{
+    MARKING, MARKING_HEIGHT, NEON_BLUE, SLAB, WALL_DARK, WALL_STRIPE, for_each_road_segment,
+    on_road,
+};
 use crate::geometry::Geometry;
 
 /// Kerbs line both edges of the road wherever its centerline turns more tightly than this, in
@@ -60,7 +63,10 @@ pub(super) fn kerbs(lit: &mut Geometry, track: &Track) {
     for block in 0..blocks {
         let start = block as f32 * KERB_BLOCK;
         let curvature = track.point_at(start + KERB_BLOCK / 2.0).curvature;
-        if curvature.abs() < KERB_CURVATURE {
+        if curvature.abs() < KERB_CURVATURE
+            || track.in_gap(start)
+            || track.in_gap(start + KERB_BLOCK)
+        {
             continue;
         }
         // A turn to the left has its inside on the left, where lateral offsets are positive.
@@ -90,7 +96,7 @@ pub(super) fn edge_lines(lit: &mut Geometry, track: &Track) {
     for side in [1.0_f32, -1.0] {
         let outer = |half_width: f32| side * (half_width - EDGE_INSET);
         let inner = |half_width: f32| side * (half_width - EDGE_INSET - EDGE_WIDTH);
-        for_each_segment(track, |a, b, _| {
+        for_each_road_segment(track, |a, b, _| {
             lit.quad_facing_up(
                 [
                     on_road(track, a, outer(a.half_width), MARKING_HEIGHT),
@@ -197,6 +203,133 @@ const PAD_NEON: LinearRgba = LinearRgba::new(3.4, 1.6, 0.2, 1.0);
 const PAD_GLOW: Color = Color::srgb(1.0, 0.55, 0.1);
 const PAD_POOL_ALPHA: f32 = 0.55;
 
+/// Where the road stops at a gap and takes up again (see `sim::track::Gap`): the cut face of the
+/// slab, a line of hot magenta neon across the road at its edge, and the light of it thrown back
+/// along the road, so a gap reads from far off as a bright line with nothing beyond it.
+pub(super) fn gap_lips(lit: &mut Geometry, neon: &mut Geometry, glow: &mut Geometry, track: &Track) {
+    for gap in track.gaps() {
+        // The lip, the road behind it; then the far edge, the road ahead of it.
+        for (edge, back) in [(gap.at, -1.0_f32), (gap.at + gap.length, 1.0)] {
+            let point = track.point_at(edge);
+            let half = point.half_width;
+            let across = |lateral: f32, above: f32| on_road(track, point, lateral, above);
+            // The cut face, from the surface down to the underside of the slab, facing the gap.
+            let facing = world_direction(point.direction * -back);
+            let strips = 8;
+            for strip in 0..strips {
+                let right = -half + 2.0 * half * strip as f32 / strips as f32;
+                let left = right + 2.0 * half / strips as f32;
+                lit.quad(
+                    [
+                        across(right, -SLAB),
+                        across(left, -SLAB),
+                        across(left, 0.0),
+                        across(right, 0.0),
+                    ],
+                    facing,
+                    WALL_DARK,
+                );
+            }
+            // The line across the road at its edge.
+            let inside = track.point_at(edge + back * LIP_LINE);
+            for strip in 0..strips {
+                let right = -half + 2.0 * half * strip as f32 / strips as f32;
+                let left = right + 2.0 * half / strips as f32;
+                neon.quad_facing_up(
+                    [
+                        on_road(track, point, right, 2.0 * MARKING_HEIGHT),
+                        on_road(track, point, left, 2.0 * MARKING_HEIGHT),
+                        on_road(track, inside, left, 2.0 * MARKING_HEIGHT),
+                        on_road(track, inside, right, 2.0 * MARKING_HEIGHT),
+                    ],
+                    Color::LinearRgba(LIP_NEON),
+                );
+            }
+            // Its light on the road, fading away from the edge.
+            let far = track.point_at(edge + back * LIP_GLOW_REACH);
+            let bright = LIP_GLOW.with_alpha(LIP_GLOW_ALPHA);
+            let dark = LIP_GLOW.with_alpha(0.0);
+            for strip in 0..strips {
+                let right = -half + 2.0 * half * strip as f32 / strips as f32;
+                let left = right + 2.0 * half / strips as f32;
+                glow.quad_shaded(
+                    [
+                        on_road(track, point, right, POOL_HEIGHT),
+                        on_road(track, point, left, POOL_HEIGHT),
+                        on_road(track, far, left, POOL_HEIGHT),
+                        on_road(track, far, right, POOL_HEIGHT),
+                    ],
+                    Vec3::Y,
+                    [bright, bright, dark, dark],
+                );
+            }
+        }
+    }
+}
+
+/// How deep the neon line along a gap's edge is, and how far along the road its light reaches, in
+/// meters, and its colors: the neon brighter than white so it blooms.
+const LIP_LINE: f32 = 0.8;
+const LIP_GLOW_REACH: f32 = 9.0;
+const LIP_NEON: LinearRgba = LinearRgba::new(3.2, 0.25, 1.4, 1.0);
+const LIP_GLOW: Color = Color::srgb(1.0, 0.15, 0.55);
+const LIP_GLOW_ALPHA: f32 = 0.5;
+
+/// The checkpoints (see `sim::track::Track::gates`): a line of green neon across the road at each,
+/// and its light on the road either side, so a gate shows from far off without anything standing
+/// in the way.
+pub(super) fn checkpoints(neon: &mut Geometry, glow: &mut Geometry, track: &Track) {
+    for gate in track.gates().iter().skip(1) {
+        let a = track.point_at(gate - CHECKPOINT_LINE / 2.0);
+        let b = track.point_at(gate + CHECKPOINT_LINE / 2.0);
+        let strips = 8;
+        for strip in 0..strips {
+            let share = |s: f32, point: &star_racer_sim::track::TrackPoint| {
+                -point.half_width + 2.0 * point.half_width * s / strips as f32
+            };
+            let (r, l) = (strip as f32, strip as f32 + 1.0);
+            neon.quad_facing_up(
+                [
+                    on_road(track, a, share(r, &a), 2.0 * MARKING_HEIGHT),
+                    on_road(track, a, share(l, &a), 2.0 * MARKING_HEIGHT),
+                    on_road(track, b, share(l, &b), 2.0 * MARKING_HEIGHT),
+                    on_road(track, b, share(r, &b), 2.0 * MARKING_HEIGHT),
+                ],
+                Color::LinearRgba(CHECKPOINT_NEON),
+            );
+            for reach in [-CHECKPOINT_GLOW_REACH, CHECKPOINT_GLOW_REACH] {
+                let near = track.point_at(*gate);
+                let far = track.point_at(gate + reach);
+                let bright = CHECKPOINT_GLOW.with_alpha(CHECKPOINT_GLOW_ALPHA);
+                let dark = CHECKPOINT_GLOW.with_alpha(0.0);
+                glow.quad_shaded(
+                    [
+                        on_road(track, near, share(r, &near), POOL_HEIGHT),
+                        on_road(track, near, share(l, &near), POOL_HEIGHT),
+                        on_road(track, far, share(l, &far), POOL_HEIGHT),
+                        on_road(track, far, share(r, &far), POOL_HEIGHT),
+                    ],
+                    Vec3::Y,
+                    [bright, bright, dark, dark],
+                );
+            }
+        }
+    }
+}
+
+/// How deep a checkpoint's line is and how far its light reaches either side, in meters, and its
+/// colors.
+const CHECKPOINT_LINE: f32 = 0.6;
+const CHECKPOINT_GLOW_REACH: f32 = 5.0;
+const CHECKPOINT_NEON: LinearRgba = LinearRgba::new(0.3, 2.6, 1.0, 1.0);
+const CHECKPOINT_GLOW: Color = Color::srgb(0.2, 1.0, 0.55);
+const CHECKPOINT_GLOW_ALPHA: f32 = 0.35;
+
+/// A world direction from one on the plane.
+fn world_direction(direction: Vec2) -> Vec3 {
+    crate::world::direction(direction)
+}
+
 /// A pool of blue light on the road at the foot of every neon stripe of the walls, brightest at
 /// the wall and in the middle of the stripe, fading out across the road and toward its ends.
 pub(super) fn wall_light(glow: &mut Geometry, track: &Track) {
@@ -205,7 +338,7 @@ pub(super) fn wall_light(glow: &mut Geometry, track: &Track) {
     let along = |distance: f32| ((distance / WALL_STRIPE).fract() * PI).sin();
     let spacing = track.spacing();
     for side in [1.0_f32, -1.0] {
-        for_each_segment(track, |a, b, distance| {
+        for_each_road_segment(track, |a, b, distance| {
             if !neon(distance) {
                 return;
             }
@@ -257,12 +390,81 @@ mod tests {
             narrows: Vec::new(),
             scenery: Vec::new(),
             pads: Vec::new(),
+            gaps: Vec::new(),
+            checkpoints: Vec::new(),
         })
         .unwrap()
     }
 
     fn on_plane(position: Vec3) -> Vec2 {
         Vec2::new(position.x, -position.z)
+    }
+
+    /// The oval with a gap of 10 m 60 m past the line, and a checkpoint at 150 m.
+    fn gapped_oval() -> Track {
+        use star_racer_sim::track::Gap;
+        let mut description = TrackDescription {
+            name: "Gapped".into(),
+            width: 16.0,
+            segments: vec![
+                Segment::Straight { length: 100.0 },
+                Segment::Turn {
+                    angle: 180.0,
+                    radius: 40.0,
+                    transition: 20.0,
+                    banking: 0.0,
+                },
+                Segment::Straight { length: 200.0 },
+                Segment::Turn {
+                    angle: 180.0,
+                    radius: 40.0,
+                    transition: 20.0,
+                    banking: 0.0,
+                },
+                Segment::Straight { length: 100.0 },
+            ],
+            elevation: Vec::new(),
+            narrows: Vec::new(),
+            scenery: Vec::new(),
+            pads: Vec::new(),
+            gaps: Vec::new(),
+            checkpoints: vec![150.0],
+        };
+        description.gaps = vec![Gap {
+            at: 60.0,
+            length: 10.0,
+        }];
+        Track::build(&description).unwrap()
+    }
+
+    /// The road, its underside and its paint stop at a gap, whose two edges are lined with neon;
+    /// a checkpoint is a line of neon across the road.
+    #[test]
+    fn the_road_stops_at_a_gap_and_a_checkpoint_is_drawn_across_it() {
+        let track = gapped_oval();
+        let mut lit = Geometry::default();
+        super::super::road(&mut lit, &track);
+        super::super::underside(&mut lit, &track);
+        edge_lines(&mut lit, &track);
+        for position in lit.positions() {
+            let at = track.project(on_plane(position)).distance;
+            assert!(!(60.6..69.4).contains(&at), "road drawn in the gap, at {at} m");
+        }
+        let (mut neon, mut glow) = (Geometry::default(), Geometry::default());
+        gap_lips(&mut lit, &mut neon, &mut glow, &track);
+        let near = |at: f32| {
+            neon.positions()
+                .any(|position| (track.project(on_plane(position)).distance - at).abs() < 1.0)
+        };
+        assert!(near(60.0) && near(70.0), "a gap's edge is not lit");
+
+        let mut neon = Geometry::default();
+        checkpoints(&mut neon, &mut glow, &track);
+        assert!(neon.triangles() > 0);
+        for position in neon.positions() {
+            let at = track.project(on_plane(position)).distance;
+            assert!((at - 150.0).abs() < 1.0, "a checkpoint line at {at} m");
+        }
     }
 
     /// Kerbs line the turns and nothing else, from the wall in, on the inside: the oval turns left,

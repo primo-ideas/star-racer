@@ -5,9 +5,9 @@ turtle drawing the road. The format is defined by `TrackDescription` in
 `sim/src/track.rs`, and files are written in [RON](https://github.com/ron-rs/ron).
 
 Track files live in `server/data/tracks/`, one per track, named by its key: the server loads them
-all, and the player who creates a lobby picks one. The game ships one circuit today, and nothing
-anywhere assumes that: a second file in that directory is a second track on the lobby's track
-stepper. Clients receive every track when they connect (see [Protocol](protocol.md#tracks)). Every
+all, and the player who creates a lobby picks one; quick play and ranked take them in turn. The
+game ships two circuits: the skyway, and since v0.1.49 the rift (see [The rift](#the-rift)), drawn
+for the jump. Clients receive every track when they connect (see [Protocol](protocol.md#tracks)). Every
 shipped track is tested: it must load, and the autopilot must lap it drifting without touching a
 wall, faster than gripping (see [Simulation](simulation.md#autopilot)).
 
@@ -64,6 +64,11 @@ than one direction.
     narrows: [
         (at: 120.0, length: 30.0, width: 10.0, blend: 20.0),
     ],
+    // Optional: where the road is missing (see Gaps), and the gates of a lap (see Checkpoints).
+    gaps: [
+        (at: 90.0, length: 14.0),
+    ],
+    checkpoints: [40.0, 180.0],
 )
 ```
 
@@ -220,7 +225,72 @@ chevrons on each, brighter than white so they bloom, over a pool of the same lig
 The skyway has five, each off to one side so taking one is a choice of line: the exits of the bowl
 (372 m, 5 m left), of the spiral (745 m, 5 m right) and of the sink (1508 m, 6 m left), and twice
 down the dive (1205 m, 4 m left; 1290 m, 6 m right). One in the middle at 1508 m put the neutral
-autopilot six ticks late on a wall once a lap, which the shipped-track test refuses.
+autopilot six ticks late on a wall once a lap, which the shipped-track test refuses. The rift has
+four, all in the middle: after the hop, up the climb, into the rift and out of the scree.
+
+## Gaps
+
+Since v0.1.49, a track may leave its road out in places, to be jumped (see
+[Simulation](simulation.md#the-jump)): `gaps: [(at: 80.0, length: 14.0)]`, each placed by where it
+begins along the lap and how long it is, from 4 to 90 m. The road, its underside and everything
+painted on it stop at a gap's edges, and the piers stand back from them; the walls carry on over
+it, the girders of a broken bridge, and still hold a car in, so a gap is jumped along the road and
+never cut across. Each edge is the cut face of the slab, a line of hot magenta neon across the road
+at its top and the light of it thrown back along the road (`track/markings.rs`), so a gap reads
+from far off as a bright line with nothing beyond it. A car's shadow and the light under it are
+not drawn over a gap, there being no road to throw them on.
+
+A car that reaches a gap on the road falls through it and comes back at its last checkpoint (see
+[Simulation](simulation.md#falling-and-coming-back)). With the shipped car a hop clears about 25 m
+at top speed, less from a slower start, and the thruster about 120 m: a gap of 14 m is a tap, one
+of 20 m a long hop or a touch of the thruster, and one of 55 m the thruster's. The relief carries
+on under a gap, so the far side can stand lower than the lip, and a jump off a crest flies further.
+
+A gap must keep 60 m clear behind the start line, where the grid stands, and 40 m after it, and no
+pad may lie over one (`TrackError::InvalidGap`, `InvalidPad`). The autopilot presses the jump just
+before every lip (`autopilot::jumps`) and holds it across any gap it could not hop, and the
+shipped-track test refuses a lap in which it falls.
+
+## Checkpoints
+
+Since v0.1.49, the user's word "Ajoute des checkpoints pour eviter les exploits":
+`checkpoints: [600.0, 880.0]`, the meters along the lap of the gates a lap passes in order, the
+start line being the first gate without being listed. A lap counts only once a car has passed every
+one of them in order, and a car that falls through a gap comes back at the last one it passed; how
+the progress is kept honest is in [Lobbies](lobbies.md#progress-laps-and-finishing). Each is drawn
+as a line of green neon across the road, its light on the road either side, with nothing standing
+in the way.
+
+They must be in order along the lap, 40 m from each other and from the line, and none may lie in a
+gap or less than 40 m before one, so a car brought back to it has room to get going again
+(`TrackError::InvalidCheckpoint`). The skyway has three, the rift five, one before each of its gaps.
+
+## The rift
+
+`rift.ron`, the second circuit (v0.1.49, the user's word "Prépare toi à faire un nouveau niveau
+après pour bien correspondre a notre nouvelle mania"), drawn for the heavy, fast car of v0.1.44 and
+for the jump: 30 m wide, 2.02 km a lap, its relief from 5 to 42 m, its road missing in four places.
+It runs fast where the car wants to run, a 200 m launch and a long slalom of 110 m radii, and folds
+into tight bowls of 44 to 46 m, banked 32 to 34 degrees, where it wants to drift.
+
+- **The launch**: out of the line, over the hop, 14 m missing 80 m after it.
+- **The weave**: a long, fast slalom east, dropping to the bottom of the lap.
+- **The fold**: a tight left hairpin back into the middle of the lap, then right, north.
+- **The climb**: up through a tunnel and a kink right, over a crest.
+- **The lip**: 20 m missing just past the crest, under an arch, the road falling away beyond it.
+- **The sky bowl**: the highest hairpin, 42 m up.
+- **The rift**: 55 m missing at the top of the long dive southwest, the far side 10 m lower, under
+  an arch, a monolith standing over the void on either side: the thruster's.
+- **The scree**: a slalom at the bottom of the dive, then **the step**, 16 m missing.
+- **The switch**, a climbing S, and **the west bowl**, onto the run home.
+
+It was designed with a scratch tool outside the repository that integrates the clothoids as `sim`
+does and solves lengths so the loop closes, draws the plan colored by height with its gaps, gates
+and pads and the profile under it, and drives the autopilot round in both styles and with every
+personality. With the shipped car: gripping 32.3 s, drifting 31.8 s with two charges of turbo
+fired, both clean; six ticks late, gripping 32.6 s clean and drifting 35.2 s with 8 ticks against
+a wall; eight personalities from 31.3 to 33.7 s drifting; no fall in any of them. Drifting pays
+less here than on the skyway, the rift being faster and more open: that is for the user to judge.
 
 ## Scenery
 

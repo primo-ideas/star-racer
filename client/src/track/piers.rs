@@ -12,7 +12,7 @@
 use bevy::prelude::*;
 use star_racer_sim::track::{Track, TrackPoint};
 
-use super::{SLAB, WALL_THICKNESS, for_each_segment};
+use super::{SLAB, WALL_THICKNESS, for_each_road_segment};
 use crate::geometry::Geometry;
 use crate::scenery::{ABYSS, DARK};
 use crate::world;
@@ -46,7 +46,13 @@ const KEEL: Color = Color::srgb(0.03, 0.32, 0.62);
 pub(super) fn piers(lit: &mut Geometry, neon: &mut Geometry, track: &Track) {
     let count = ((track.length() - PIER_FIRST) / PIER_SPACING).floor() as usize + 1;
     for index in 0..count {
-        pier(lit, neon, track, PIER_FIRST + index as f32 * PIER_SPACING);
+        let at = PIER_FIRST + index as f32 * PIER_SPACING;
+        // No road over a gap, so nothing to carry: the piers either side of it stand back from
+        // the edges.
+        if track.in_gap(at - HEAD_LENGTH) || track.in_gap(at + HEAD_LENGTH) {
+            continue;
+        }
+        pier(lit, neon, track, at);
     }
 }
 
@@ -99,7 +105,7 @@ pub(super) fn keel_lines(neon: &mut Geometry, track: &Track) {
                 track.height_beside(&point, lateral) - SLAB - 0.03,
             )
         };
-        for_each_segment(track, |a, b, _| {
+        for_each_road_segment(track, |a, b, _| {
             let outer = |point: TrackPoint| side * edge(point);
             let inner = |point: TrackPoint| side * (edge(point) - KEEL_WIDTH);
             let corners = [
@@ -152,6 +158,8 @@ mod tests {
             narrows: Vec::new(),
             scenery: Vec::new(),
             pads: Vec::new(),
+            gaps: Vec::new(),
+            checkpoints: Vec::new(),
         })
         .unwrap()
     }

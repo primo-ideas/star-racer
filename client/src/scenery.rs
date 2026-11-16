@@ -1483,6 +1483,8 @@ mod tests {
             narrows: Vec::new(),
             scenery: Vec::new(),
             pads: Vec::new(),
+            gaps: Vec::new(),
+            checkpoints: Vec::new(),
         })
         .unwrap()
     }

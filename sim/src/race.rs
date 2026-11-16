@@ -7,7 +7,7 @@ use bitcode::{Decode, Encode};
 use glam::Vec2;
 
 use super::TICK_SECONDS;
-use super::car::{Car, CarInput, CarTuning};
+use super::car::{Car, CarInput, CarTuning, MAX_STEP};
 use super::track::Track;
 
 /// The start lights shown over the grid: one more lights up every second, and the last one lights
@@ -36,12 +36,19 @@ pub fn start_lights(until_start: f32) -> (u32, f32) {
 /// later is at the track length.
 ///
 /// Measured from changes of the car's projection on the centerline, so driving backward counts
-/// against it and nothing can be gained by crossing the start line back and forth.
+/// against it and nothing can be gained by crossing the start line back and forth. It cannot be
+/// cheated either (docs/tracks.md#checkpoints): it grows by no more than a car can drive in a
+/// tick, so a car that gets from one part of the road to another without driving the road between
+/// gains nothing; and it does not cross the start line until the car has passed every checkpoint
+/// of the lap in order, so a lap that skips one does not count, and the car has to drive another.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Progress {
     /// Distance along the centerline at the last update, in `[0, length)`.
     distance: f32,
     total: f32,
+    /// The car's [`Car::respawns`] at the last update, to tell a car brought back to a checkpoint
+    /// from one that drove there.
+    respawns: u16,
 }
 
 impl Progress {
@@ -54,12 +61,45 @@ impl Progress {
         } else {
             distance
         };
-        Self { distance, total }
+        Self {
+            distance,
+            total,
+            respawns: 0,
+        }
     }
 
-    pub fn update(&mut self, track: &Track, position: Vec2) {
-        let distance = track.project(position).distance;
-        self.total += wrapped_delta(distance - self.distance, track.length());
+    /// Starts counting where `car` stands.
+    pub fn of(track: &Track, car: &Car) -> Self {
+        Self {
+            respawns: car.respawns,
+            ..Self::new(track, car.position)
+        }
+    }
+
+    pub fn update(&mut self, track: &Track, car: &Car) {
+        let length = track.length();
+        let distance = track.project(car.position).distance;
+        if car.respawns != self.respawns {
+            // Brought back to the last gate it passed: its progress goes back to where that gate
+            // was, which is behind it by less than a lap.
+            self.respawns = car.respawns;
+            self.distance = distance;
+            if self.total >= 0.0 {
+                self.total -= wrapped_forward(self.total - distance, length);
+            } else {
+                self.total = Self::new(track, car.position).total;
+            }
+            return;
+        }
+        let step = wrapped_delta(distance - self.distance, length).clamp(-MAX_STEP, MAX_STEP);
+        let mut total = self.total + step;
+        // Crossing the line: only once every checkpoint of the lap has been passed, which leaves
+        // the car's last gate at the line itself.
+        let line = (self.total / length).floor() + 1.0;
+        if total >= line * length && car.checkpoint != 0 {
+            total = line * length - 0.01;
+        }
+        self.total = total;
         self.distance = distance;
     }
 
@@ -67,6 +107,11 @@ impl Progress {
     pub fn total(&self) -> f32 {
         self.total
     }
+}
+
+/// How far `delta` meters is forward along a loop `length` meters round, from 0 up to a lap.
+fn wrapped_forward(delta: f32, length: f32) -> f32 {
+    delta.rem_euclid(length)
 }
 
 /// A change of distance along the loop, taking the shorter way around the start line.
@@ -366,21 +411,85 @@ mod tests {
         let steps = (2.0 * track.length() / 5.0) as usize;
         for step in 1..=steps {
             let distance = initial + step as f32 * 5.0;
-            progress.update(
-                &track,
-                track.point_at(distance.rem_euclid(track.length())).position,
-            );
+            let position = track.point_at(distance.rem_euclid(track.length())).position;
+            progress.update(&track, &Car::new(position, 0.0));
         }
         let expected = initial + steps as f32 * 5.0;
         assert!((progress.total() - expected).abs() < 0.5, "{progress:?}");
         assert_eq!(lap(progress.total(), track.length()), 2);
     }
 
+    /// The oval with checkpoints at 150 and 300 m, and a car's progress walked along its
+    /// centerline in steps of 5 m from the line, the car's last gate given by `gate` for each
+    /// distance driven.
+    fn walk(meters: f32, gate: impl Fn(f32) -> u8) -> (Track, Progress) {
+        let mut description = oval(100.0, 40.0, 20.0);
+        description.checkpoints = vec![150.0, 300.0];
+        let track = Track::build(&description).unwrap();
+        let mut progress = Progress::new(&track, track.point_at(1.0).position);
+        let mut driven = 1.0;
+        while driven < meters {
+            driven += 5.0;
+            let mut car = Car::new(track.point_at(driven).position, 0.0);
+            car.checkpoint = gate(driven);
+            progress.update(&track, &car);
+        }
+        (track, progress)
+    }
+
+    fn oval_length() -> f32 {
+        Track::build(&oval(100.0, 40.0, 20.0)).unwrap().length()
+    }
+
+    /// The gate a car that passes every checkpoint has last passed after `driven` meters.
+    fn honest(driven: f32) -> u8 {
+        match driven.rem_euclid(oval_length()) {
+            at if at < 150.0 => 0,
+            at if at < 300.0 => 1,
+            _ => 2,
+        }
+    }
+
+    /// A lap counts once every checkpoint has been passed; a car that skipped one is held just
+    /// short of the line, however far it drives.
+    #[test]
+    fn a_lap_that_skips_a_checkpoint_does_not_count() {
+        let length = oval_length();
+        let (_, progress) = walk(length + 30.0, honest);
+        assert_eq!(lap(progress.total(), length), 2, "{progress:?}");
+
+        // Never passing the second checkpoint, its last gate stays the first one, line or no line.
+        let (_, progress) = walk(length + 30.0, |driven| u8::from(driven >= 150.0));
+        assert_eq!(lap(progress.total(), length), 1, "{progress:?}");
+        assert!(progress.total() > length - 1.0, "{progress:?}");
+    }
+
+    /// Getting from one part of the road to another without driving between them gains no more
+    /// than a tick's driving.
+    #[test]
+    fn progress_cannot_jump_ahead() {
+        let track = Track::build(&oval(100.0, 40.0, 20.0)).unwrap();
+        let mut progress = Progress::new(&track, track.point_at(10.0).position);
+        progress.update(&track, &Car::new(track.point_at(200.0).position, 0.0));
+        assert!(progress.total() <= 10.0 + MAX_STEP + 0.1, "{progress:?}");
+    }
+
+    /// A car brought back to its last gate goes back to the progress it had there.
+    #[test]
+    fn a_car_brought_back_goes_back_to_its_gate() {
+        let (track, mut progress) = walk(260.0, honest);
+        let mut car = Car::new(track.point_at(150.0).position, 0.0);
+        car.checkpoint = 1;
+        car.respawns = 1;
+        progress.update(&track, &car);
+        assert!((progress.total() - 150.0).abs() < 0.5, "{progress:?}");
+    }
+
     #[test]
     fn driving_backward_across_the_line_loses_progress() {
         let track = Track::build(&oval(100.0, 40.0, 20.0)).unwrap();
         let mut progress = Progress::new(&track, track.point_at(3.0).position);
-        progress.update(&track, track.point_at(track.length() - 3.0).position);
+        progress.update(&track, &Car::new(track.point_at(track.length() - 3.0).position, 0.0));
         assert!((progress.total() + 3.0).abs() < 0.1, "{progress:?}");
         assert_eq!(lap(progress.total(), track.length()), 0);
     }

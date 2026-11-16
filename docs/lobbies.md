@@ -103,6 +103,15 @@ on the centerline each tick, taking the short way around the start line, so driv
 counts against it and crossing the line back and forth gains nothing. Cars on the grid start a few
 meters below zero.
 
+It cannot be cheated (since v0.1.49, the user's word "Ajoute des checkpoints pour eviter les
+exploits"). It grows by no more than `car::MAX_STEP` (10 m) a tick, which no car can drive, so a
+car that gets from one part of the road to another without driving the road in between gains
+nothing from it. And it does not cross the start line until the car has passed every
+[checkpoint](tracks.md#checkpoints) of the lap in order: a car that skipped one is held just short
+of the line, however far it drives, until it has driven a whole lap through all of them. A car that
+falls through a gap and is brought back to its last checkpoint goes back to the progress it had
+there.
+
 A car has finished once its progress reaches `laps × length`. Its time is counted from the start
 tick to the moment it crossed, interpolated within the last tick from its progress before and
 after, so two cars finishing in the same tick are still told apart.
