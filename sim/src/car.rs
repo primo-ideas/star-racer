@@ -357,6 +357,17 @@ pub struct CarTuning {
     /// round it, and a thruster lit while falling catches the car.
     pub thrust_kick: f32,
     pub thrust_damping: f32,
+    /// In the air nothing grips: the travel keeps its direction and follows the nose only at
+    /// `air_grip` per second, where the road's `grip` holds it at once, and the nose itself turns
+    /// at `air_steering` of what the stick asks on the road. A drifting car's travel follows the
+    /// same way. Since v0.1.53; before it the car steered in the air as on the road.
+    pub air_grip: f32,
+    pub air_steering: f32,
+    /// As a drift's body swings back into line, the travel turns to meet it by this share of the
+    /// way the body closes, and when the drift ends this share of what is left becomes a slide
+    /// the grip takes up: the car comes out of its slide on a curve, as a real one does, instead
+    /// of running on straight while the body alone swings back. Since v0.1.53.
+    pub drift_exit_share: f32,
 
     /// Radius of the circle the car collides as, in meters.
     pub collision_radius: f32,
@@ -429,6 +440,9 @@ impl CarTuning {
             ("turbo_fill", self.turbo_fill),
             ("thrust_kick", self.thrust_kick),
             ("thrust_damping", self.thrust_damping),
+            ("air_grip", self.air_grip),
+            ("air_steering", self.air_steering),
+            ("drift_exit_share", self.drift_exit_share),
         ];
         for (name, value) in positive {
             if !(value.is_finite() && value > 0.0) {
@@ -447,6 +461,14 @@ impl CarTuning {
                 "drift_swing_knee_rate must be between 0 and 1, not {}",
                 self.drift_swing_knee_rate
             ));
+        }
+        for (name, value) in [
+            ("air_steering", self.air_steering),
+            ("drift_exit_share", self.drift_exit_share),
+        ] {
+            if value > 1.0 {
+                return Err(format!("{name} must be at most 1, not {value}"));
+            }
         }
         if self.drift_button_tighten > 1.0 {
             return Err(format!(
@@ -599,17 +621,34 @@ impl Car {
     /// over road before it has sunk under its lip. Between the walls (`inside`) a car that has
     /// sunk that low is under the road, or in a gap, where the thruster can do nothing for it;
     /// beyond them it can still push the car up toward a road that stands higher.
-    fn fly(&mut self, input: CarInput, tuning: &CarTuning, road: bool, inside: bool, dt: f32) {
+    ///
+    /// Heights in the air are the car's own: `climb` is how fast it rises in the world, not above
+    /// the road. On the road it is the road's own rise (`road_rate`), so a car that leaves a
+    /// climbing road, by a jump or off a lip, carries that climb into the air, and one that leaves
+    /// a diving road falls with it.
+    fn fly(
+        &mut self,
+        input: CarInput,
+        tuning: &CarTuning,
+        road: bool,
+        inside: bool,
+        road_rate: f32,
+        dt: f32,
+    ) {
         let pressed = input.jump && !self.jump_button;
         self.jump_button = input.jump;
         self.thrusting = false;
-        if self.altitude == 0.0 {
+        let on_road = self.altitude == 0.0;
+        // The height this tick is measured from: a car that was on the road moved with it.
+        let reference = if on_road { road_rate } else { 0.0 };
+        if on_road {
             self.thrust = (self.thrust + tuning.thrust_recharge * dt).min(tuning.thrust_seconds);
             self.airtime = 0.0;
             self.ignited = false;
+            self.climb = road_rate;
             if pressed {
                 // A press on the very tick the road runs out still jumps.
-                self.climb = tuning.jump_speed;
+                self.climb += tuning.jump_speed;
             } else if road {
                 return;
             }
@@ -634,10 +673,12 @@ impl Car {
         // Whatever its speed down, a car that was above the road and no longer is has landed:
         // only one already under the lip has missed it.
         let was_falling = self.is_falling();
-        self.altitude += self.climb * dt;
+        self.altitude += (self.climb - reference) * dt;
         if self.altitude <= 0.0 && road && !was_falling {
+            // Down on the road, the hull's cushion takes whatever the car fell with: it goes on
+            // with the road.
             self.altitude = 0.0;
-            self.climb = 0.0;
+            self.climb = road_rate;
         } else if self.altitude == 0.0 {
             // Rolled off the lip with no climb at all: the fall starts on the next tick.
             self.altitude = -f32::EPSILON;
@@ -680,16 +721,20 @@ impl Car {
         let here = track.project(self.position);
         let inside = track.within_walls(&here);
         let height = track.height_at(&here);
-        if self.is_airborne() && !(inside && was_inside) {
-            // Beside the road the car keeps its own height, whichever part of the road is the
-            // nearest and however high that one stands: over the road it rides the relief, off
-            // it nothing carries it.
+        // How fast the road under the car rose or fell as it moved: a car on it goes up and down
+        // with it, and leaves it with that much climb.
+        let road_rate = (height - height_before) / dt;
+        if self.is_airborne() {
+            // In the air the car keeps its own height, whatever the road under it does: it flies
+            // on over a dip, and meets a rise (since v0.1.53; until then it rode the relief over
+            // the road, and kept its height only beside it).
             self.altitude += height_before - height;
             if self.altitude == 0.0 {
                 self.altitude = -f32::EPSILON;
             }
         }
-        self.fly(input, tuning, inside && !track.in_gap(here.distance), inside, dt);
+        let road = inside && !track.in_gap(here.distance);
+        self.fly(input, tuning, road, inside, road_rate, dt);
         self.pass_gates(track, before.distance, here.distance, inside);
         // On its course: between the walls, not under the road, and where its lap has it. Off
         // it the seconds are counted, and the car brought back when they run out, or at once
@@ -785,7 +830,20 @@ impl Car {
             .min(fastest.to_radians())
             .min(gap.abs() / dt);
         self.body_rate = move_towards(self.body_rate, wanted * gap.signum(), acceleration * dt);
-        self.body += self.body_rate * dt;
+        let swung = self.body_rate * dt;
+        if self.is_drifting() && !self.is_airborne() && swung * self.body < 0.0 {
+            // Coming back into line, a sliding car's travel comes round toward its nose as much
+            // as its nose comes round toward the travel: `drift_exit_share` of the way the body
+            // closes is the travel turning to meet it, so the car comes out of its slide on a
+            // curve instead of running on straight while its body alone swings back (since
+            // v0.1.53). The nose is drawn where it would have been.
+            let met = -swung * tuning.drift_exit_share;
+            self.heading = wrap_angle(self.heading + met);
+            self.velocity = Vec2::from_angle(met).rotate(self.velocity);
+            self.body += swung - met;
+        } else {
+            self.body += swung;
+        }
     }
 
     /// Starts, holds, carries over or ends the drift.
@@ -876,9 +934,14 @@ impl Car {
         }
     }
 
-    /// Ends the drift and pays out what it built up.
+    /// Ends the drift and pays out what it built up. A share of the body's angle across the
+    /// travel becomes the gripping car's heading, the nose staying where it is drawn: the grip
+    /// then brings the travel round toward it, as a car coming out of a slide comes round.
     fn end_drift(&mut self, tuning: &CarTuning) {
         self.boost = self.boost.max(self.pending_boost(tuning));
+        let turned = self.body * tuning.drift_exit_share;
+        self.heading = wrap_angle(self.heading + turned);
+        self.body -= turned;
         self.drift = 0;
         self.drift_charge = 0.0;
         self.drift_held = 0.0;
@@ -940,8 +1003,13 @@ impl Car {
         } else {
             gripping
         };
-        // Steering right turns clockwise, a negative yaw rate.
-        let target_yaw_rate = -self.steering * steering_speed * curvature;
+        // Steering right turns clockwise, a negative yaw rate. In the air the nose turns less.
+        let air = if self.is_airborne() {
+            tuning.air_steering
+        } else {
+            1.0
+        };
+        let target_yaw_rate = -self.steering * steering_speed * curvature * air;
         let response = if self.is_drifting() {
             tuning.drift_steering_response
         } else {
@@ -963,7 +1031,13 @@ impl Car {
         let right = -forward.perp();
         let speed = self.velocity.length();
         let forward_speed = self.drive(self.velocity.dot(forward), speed, input, tuning, dt);
-        let sideways_speed = self.velocity.dot(right) * decay(tuning.grip, dt);
+        // Nothing grips in the air: the travel follows the nose only slowly.
+        let grip = if self.is_airborne() {
+            tuning.air_grip
+        } else {
+            tuning.grip
+        };
+        let sideways_speed = self.velocity.dot(right) * decay(grip, dt);
         self.velocity = forward * forward_speed + right * sideways_speed;
     }
 
@@ -978,6 +1052,13 @@ impl Car {
         };
         self.heading = wrap_angle(travel + self.yaw_rate * dt);
         let speed = self.drive(speed, speed, input, tuning, dt);
+        if self.is_airborne() && speed > 1e-3 {
+            // In the air the travel keeps its direction, following the turn only as slowly as a
+            // gripping car's follows its nose there.
+            let turned = wrap_angle(self.heading - travel) * (1.0 - decay(tuning.air_grip, dt));
+            self.velocity = Vec2::from_angle(travel + turned) * speed;
+            return;
+        }
         self.velocity = self.forward() * speed;
     }
 
@@ -1231,6 +1312,65 @@ mod tests {
         }
         assert!(!car.is_drifting());
         assert!(paid, "the drift held through the air paid nothing");
+    }
+
+    /// Coming out of a drift, the travel comes round toward the nose as the body swings back into
+    /// line, rather than running on straight: it turns further into the drift's side after the
+    /// drift ends than it does with `drift_exit_share` at nothing, and settles in line with the
+    /// nose.
+    #[test]
+    fn a_drift_ends_with_the_travel_coming_round_to_the_nose() {
+        let track = Track::build(&open_track()).unwrap();
+        let turned_after = |share: f32| {
+            let tuning = CarTuning {
+                drift_exit_share: share,
+                ..tuning()
+            };
+            let mut car = at_top_speed(&track);
+            press_into_a_drift(&mut car, 1.0, &track);
+            for _ in 0..ticks(1.0) {
+                car.step(drifting(1.0), &tuning, &track);
+            }
+            // The stick let go: the drift ends some ticks later.
+            let mut travel = None;
+            for _ in 0..ticks(2.0) {
+                car.step(ACCELERATE, &tuning, &track);
+                if !car.is_drifting() && travel.is_none() {
+                    travel = Some(car.velocity.to_angle());
+                }
+            }
+            assert!(car.slip.abs() < 0.01, "still sliding {}", car.slip);
+            // A drift to the right turns clockwise: how far further the travel turned that way.
+            wrap_angle(travel.unwrap() - car.velocity.to_angle()).to_degrees()
+        };
+        let (straight, natural) = (turned_after(0.0), turned_after(tuning().drift_exit_share));
+        assert!(natural > straight + 3.0, "{natural} against {straight} degrees");
+    }
+
+    /// In the air nothing grips: with the stick turned, the nose turns but the travel keeps its
+    /// direction, and comes round only once the car is back on the road.
+    #[test]
+    fn in_the_air_the_travel_keeps_its_direction() {
+        let track = Track::build(&open_track()).unwrap();
+        let mut car = at_top_speed(&track);
+        let travel = car.velocity.to_angle();
+        let flying = ACCELERATE.with_jump(true).with_thrust(true);
+        run(&mut car, flying, 0.25, &track);
+        let mut turned = flying;
+        turned.steer = 127;
+        run(&mut car, turned, 0.5, &track);
+        assert!(car.is_airborne());
+        let travel_turned = wrap_angle(car.velocity.to_angle() - travel).abs().to_degrees();
+        let nose_turned = wrap_angle(car.heading - travel).abs().to_degrees();
+        assert!(nose_turned > 2.0 * travel_turned, "nose {nose_turned}, travel {travel_turned}");
+
+        // The same half second on the road turns the travel much further.
+        let mut grounded = at_top_speed(&track);
+        let mut steered = ACCELERATE;
+        steered.steer = 127;
+        run(&mut grounded, steered, 0.5, &track);
+        let on_road = wrap_angle(grounded.velocity.to_angle() - travel).abs().to_degrees();
+        assert!(on_road > 2.0 * travel_turned, "road {on_road}, air {travel_turned}");
     }
 
     /// The open track with a gap `length` meters long 100 m past the line, and a checkpoint 50 m
