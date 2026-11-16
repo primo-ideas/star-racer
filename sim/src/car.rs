@@ -380,6 +380,11 @@ pub struct CarTuning {
     pub drift_kick: f32,
     pub drift_kick_acceleration: f32,
     pub drift_kick_fade: f32,
+    /// The same press throws the body round on its own axis (since v0.1.55): it starts swinging
+    /// out at `drift_kick_swing` (degrees per second, at full lock and top speed) and brakes
+    /// onto its angle at `drift_swing_acceleration`, so the car is seen to pivot at once, the
+    /// path itself turning no faster for it.
+    pub drift_kick_swing: f32,
 
     /// Radius of the circle the car collides as, in meters.
     pub collision_radius: f32,
@@ -458,6 +463,7 @@ impl CarTuning {
             ("drift_kick", self.drift_kick),
             ("drift_kick_acceleration", self.drift_kick_acceleration),
             ("drift_kick_fade", self.drift_kick_fade),
+            ("drift_kick_swing", self.drift_kick_swing),
         ];
         for (name, value) in positive {
             if !(value.is_finite() && value > 0.0) {
@@ -928,10 +934,14 @@ impl Car {
                     // Thrown into the drift: it turns in with a kick as hard as the stick is
                     // turned, a drift to the right clockwise.
                     let speed_share = (speed / tuning.top_speed).min(1.0);
-                    self.kick = -f32::from(side)
-                        * tuning.drift_kick.to_radians()
-                        * input.steer().abs()
-                        * speed_share;
+                    let thrown = input.steer().abs() * speed_share;
+                    self.kick = -f32::from(side) * tuning.drift_kick.to_radians() * thrown;
+                    // And the body pivots round at once, a drift to the right swinging the nose
+                    // to the right, a negative angle.
+                    let swing = -f32::from(side) * tuning.drift_kick_swing.to_radians() * thrown;
+                    if swing.abs() > self.body_rate.abs() || swing * self.body_rate < 0.0 {
+                        self.body_rate = swing;
+                    }
                 }
             }
         }
@@ -1439,6 +1449,30 @@ mod tests {
         assert!((kicked_later - plain_later).abs() < 15.0, "{kicked_later}, {plain_later}");
         let (gentle, _) = peak_and_later(tuning().drift_kick, 0.3);
         assert!(gentle < kicked - 20.0, "a light stick kicked {gentle} deg/s");
+    }
+
+    /// Thrown into a drift, the body pivots on its own axis at once: a tenth of a second in it
+    /// is swung far further across the travel than a drift without the kick's swing has it.
+    #[test]
+    fn a_drift_thrown_into_pivots_the_body_at_once() {
+        let track = Track::build(&open_track()).unwrap();
+        let swung_after = |swing: f32, seconds: f32| {
+            let tuning = CarTuning {
+                drift_kick_swing: swing,
+                ..tuning()
+            };
+            let mut car = at_top_speed(&track);
+            for tick in 0..ticks(seconds) {
+                car.step(CarInput::new(true, 1.0).with_drift(tick < 3), &tuning, &track);
+            }
+            assert!(car.is_drifting());
+            car.body.abs().to_degrees()
+        };
+        let (pivoted, plain) = (swung_after(200.0, 0.1), swung_after(0.0, 0.1));
+        assert!(pivoted > plain + 8.0, "{pivoted} against {plain} degrees");
+        // It settles on the drift's angle rather than running on past it.
+        let settled = swung_after(200.0, 1.5);
+        assert!(settled <= tuning().drift_angle + 1.0, "{settled} degrees");
     }
 
     /// The open track with a gap `length` meters long 100 m past the line, and a checkpoint 50 m
