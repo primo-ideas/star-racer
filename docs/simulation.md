@@ -539,6 +539,40 @@ pays out, holding the button brakes nothing, and no new drift starts there. On t
 carries on, and ends as any drift does, paying its boost when the stick lets it come back into
 line. So a drift is charged, flown across a gap, and let go of on landing.
 
+### Natural flight
+
+In v0.1.53, the user's word "Il faut que les mouvements/trajectoires soient beaucoup plus
+naturels", asked about flights and driving on the road.
+
+**Heights in the air are the car's own.** `Car::climb` is how fast the car rises in the world.
+On the road it is the road's own rise under the car, so a car that leaves a climbing road, by a
+jump or rolling off a lip, carries that climb into the air, and one leaving a diving road falls
+with it; a jump adds `jump_speed` to it. In the air the altitude is corrected every tick by
+however much the road under the car rose or fell, so the car flies on over a dip and meets a rise,
+the raised edge of a banked turn included: a car that takes off where the road turns flies into
+the banking and lands on it. Until v0.1.53 the car rode the relief over the road while it flew,
+and kept its own height only beside it. Landing, the cushion takes whatever the car fell with,
+and it goes on with the road; on the client the body sinks onto its springs as the fall stops,
+which is not counted as a hit.
+
+**Nothing grips in the air.** The nose turns at `air_steering` (0.5) of what the stick asks on the
+road, and the travel keeps its direction, following the nose at `air_grip` (2.5 per second, where
+the road's grip is 30): half a second of full lock in the air turns the nose far further than the
+path. A drift held through the air flies the same way. On landing the grip takes the travel to
+the nose. The autopilot's flights over gaps are straight, so it loses nothing; a car flown off a
+curve on the thruster now leaves the road where it used to follow it.
+
+### Out of a drift, on a curve
+
+Until v0.1.53, a drift whose stick came back to the center ran on straight while its body alone
+swung back into line over most of a second: a car sliding sideways down a straight line. Now, as
+the body swings back, the travel turns to meet it by `drift_exit_share` (0.5) of the way the body
+closes, the nose drawn where it would have been, and when the drift ends that share of what is
+left becomes a slide the grip takes up: the car comes out of its slide on a curve, as a real one
+does. It also comes back into line sooner, the gap closing from both ends. `0` is the old way.
+The value was chosen by the autopilot: at 0.3 and 0.35 a client six ticks late grazed a wall
+once a lap gripping, at 0.4 it fell once drifting; at 0.5 it laps clean.
+
 ### Snappier
 
 In v0.1.50, the user's word "Arrange le saut, pour qu'il saute plus vif": the hop leaves the road

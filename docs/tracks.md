@@ -70,7 +70,7 @@ loop skipped, about five seconds:
 
 | Loop | How | Measured |
 | --- | --- | --- |
-| The keyhole | Over the wall on the thruster, at top speed. The pad before the loop, on the left, is the hint. | 2 s in the air, 0.7 s off the road |
+| The keyhole | Over the wall on the thruster, at top speed, from the straight before the loop (615 to 635 m): later, the car flies into the banked road of the loop's first turn. The pad before the loop, on the left, is the hint. | 2.3 s in the air, 0.7 s off the road |
 | The balcony | The wall is missing where the road turns away (a [breach](#breaches)), and the road coming back lies 26 m below: straight on, nothing pressed. | 1.5 s of falling |
 | The long way round | The longest flight, on the thruster from top speed (until v0.1.51, when the thruster was weaker, it took the turbo). | 2.1 s in the air, 1.25 s off the road |
 

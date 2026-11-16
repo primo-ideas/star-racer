@@ -259,7 +259,8 @@ mod tests {
     /// to the track or to the car that closes one fails here.
     #[test]
     fn the_shortcuts_of_the_odyssey_are_there() {
-        let keyhole = straight_on(644.0, 0.0, 58.0, 1.6);
+        // From the straight before the loop: later, the car flies into the banked road of its first turn.
+        let keyhole = straight_on(625.0, 0.0, 58.0, 1.6);
         assert!(keyhole.is_some_and(|gained| gained > 400.0), "keyhole: {keyhole:?}");
         // Without flying, or with a hop only, the wall holds the car on the road.
         for hold in [0.0, 0.05] {

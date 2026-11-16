@@ -153,9 +153,12 @@ impl Motion {
             return None;
         }
         let acceleration = change / seconds;
+        // A hit is told by the speed lost along the road: landing stops the car falling all at
+        // once, which the springs feel, but it is not a hit.
+        let along = Vec3::new(acceleration.x, 0.0, acceleration.z);
         Some(Push {
             acceleration,
-            impact: (acceleration.length() - IMPACT_ACCELERATION).max(0.0) * seconds,
+            impact: (along.length() - IMPACT_ACCELERATION).max(0.0) * seconds,
         })
     }
 }
@@ -223,11 +226,17 @@ pub(crate) fn sway(
         else {
             continue;
         };
-        // Climbing or diving, the car's velocity has a part up or down the road.
+        // Climbing or diving, the car's velocity has a part up or down the road; in the air, its
+        // own climb, so landing stops it falling all at once and the body sinks onto its springs.
         let gradient = track
             .as_ref()
             .map_or(Vec2::ZERO, |track| track.0.surface(car.position).gradient);
-        let velocity = world::direction(car.velocity) + Vec3::Y * gradient.dot(car.velocity);
+        let vertical = if car.is_airborne() {
+            car.climb
+        } else {
+            gradient.dot(car.velocity)
+        };
+        let velocity = world::direction(car.velocity) + Vec3::Y * vertical;
         let push = sway.motion.update(place.translation, velocity, seconds);
         if push.is_none() {
             // A car seen for the first time, or put somewhere else: its body starts at rest.

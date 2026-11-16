@@ -163,6 +163,19 @@
     thrust_kick: 7.0,
     thrust_damping: 4.0,
 
+    // In the air (since v0.1.53): nothing grips, so the travel keeps its direction and follows
+    // the nose at air_grip per second (the road's grip is 30), and the nose turns at air_steering
+    // of what the stick asks on the road. Lower air_grip flies straighter whatever the stick does;
+    // higher steers in the air.
+    air_grip: 2.5,
+    air_steering: 0.5,
+
+    // Out of a drift (since v0.1.53): this share of the body's angle across the travel becomes a
+    // real slide the grip takes up, so the travel comes round toward the nose as the drift ends,
+    // as a car does coming out of a slide, instead of running on straight while the body alone
+    // swings back into line: at 0.5 the travel and the nose meet halfway. 0 is the old way.
+    drift_exit_share: 0.5,
+
     // Walls. The bounce is the share of the impact speed that comes back, from 0 to 1. The impact
     // friction is the speed along the wall a hit takes, per m/s it takes into it: a graze costs
     // little, a blow at an angle a lot. The friction slows a car scraping along a wall, per second.

@@ -19,7 +19,7 @@ pub mod names;
 pub mod ranked;
 
 /// Bump on every incompatible protocol change.
-pub const PROTOCOL_VERSION: u32 = 32;
+pub const PROTOCOL_VERSION: u32 = 33;
 
 /// Local server port. In production, the reverse proxy terminates TLS and forwards here.
 pub const DEFAULT_PORT: u16 = 8080;
