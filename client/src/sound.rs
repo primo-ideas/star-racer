@@ -10,7 +10,8 @@
 //!   timeline while their car is predicted, and so do their sounds.
 //! - **The car**: a tick as it breaks into a drift, a whoosh as a drift pays its boost, a deeper
 //!   and longer one for the turbo, a soft bell as a charge of turbo fills, a thud on a wall, as
-//!   hard as the hit. Under them, without a break, the drone of `sound/drone.rs`: thrusters, wind
+//!   hard as the hit, a pop as it hops, a thump and a roar as its thruster lights, a knock as it
+//!   lands. Under them, without a break, the drone of `sound/drone.rs`: thrusters, wind
 //!   and the hiss of the drift. The player's own car is heard as it is predicted, on the frame the
 //!   press is seen; a spectator hears the car they watch.
 //! - **The menus**: a tick as the focus moves and a click on whatever is pressed.
@@ -98,6 +99,10 @@ struct Sounds {
     charged: Handle<Tone>,
     /// The car hit a wall.
     hit: Handle<Tone>,
+    /// The car hopped off the road, its thruster lit, and it came back down.
+    hop: Handle<Tone>,
+    ignite: Handle<Tone>,
+    land: Handle<Tone>,
     /// In the menus: the focus moved, something was pressed.
     focus: Handle<Tone>,
     press: Handle<Tone>,
@@ -223,6 +228,48 @@ fn add_sounds(
             width: 0.9,
         }),
     });
+    // The hop: a short springy pop, a low note bending up under a puff of air.
+    let hop = tones.add(Tone {
+        partials: vec![(140.0, 1.0), (280.0, 0.4)],
+        seconds: 0.18,
+        attack: 0.004,
+        decay: 18.0,
+        slide: 1.8,
+        noise: Some(Noise {
+            level: 0.5,
+            from: 700.0,
+            to: 1600.0,
+            width: 0.7,
+        }),
+    });
+    // The thruster lighting: a deep thump and a roar of air opening upward, a second push.
+    let ignite = tones.add(Tone {
+        partials: vec![(62.0, 1.0), (124.0, 0.5)],
+        seconds: 0.75,
+        attack: 0.006,
+        decay: 4.5,
+        slide: 1.6,
+        noise: Some(Noise {
+            level: 1.3,
+            from: 220.0,
+            to: 1500.0,
+            width: 0.9,
+        }),
+    });
+    // Landing: a soft, low knock, the hull settling back on its cushion.
+    let land = tones.add(Tone {
+        partials: vec![(70.0, 1.0), (105.0, 0.4)],
+        seconds: 0.2,
+        attack: 0.003,
+        decay: 20.0,
+        slide: 0.7,
+        noise: Some(Noise {
+            level: 0.6,
+            from: 500.0,
+            to: 180.0,
+            width: 0.8,
+        }),
+    });
     // The menus: a tick for the focus, barely there, and a short rising click for a press.
     let focus = tones.add(Tone {
         partials: vec![(1046.5, 1.0)],
@@ -257,6 +304,9 @@ fn add_sounds(
         turbo,
         charged,
         hit,
+        hop,
+        ignite,
+        land,
         focus,
         press,
         drone: controls,
@@ -439,7 +489,8 @@ fn play_car(
         } else {
             0.0
         },
-        drift: f32::from(u8::from(car.is_drifting())),
+        drift: f32::from(u8::from(car.is_drifting() && !car.is_airborne())),
+        thrust: f32::from(u8::from(car.thrusting)),
         charge,
     });
 
@@ -457,6 +508,15 @@ fn play_car(
                 &sounds.boost,
                 0.55 + 0.35 * car.boost.min(1.3),
             );
+        }
+        if car.is_airborne() && !before.is_airborne() && car.climb > 0.0 {
+            sounds.play(&mut commands, &sounds.hop, 0.7);
+        }
+        if car.thrusting && !before.thrusting && !before.ignited {
+            sounds.play(&mut commands, &sounds.ignite, 0.9);
+        }
+        if !car.is_airborne() && before.is_airborne() && before.altitude > 0.3 {
+            sounds.play(&mut commands, &sounds.land, 0.5 + 0.08 * before.altitude.min(5.0));
         }
         if car.turbo.floor() > before.turbo.floor() && car.turbo_boost <= before.turbo_boost {
             sounds.play(&mut commands, &sounds.charged, 0.6);
@@ -512,7 +572,7 @@ mod tests {
             .add_systems(Startup, add_sounds);
         app.update();
         let tones = app.world().resource::<Assets<Tone>>();
-        assert_eq!(tones.len(), 12);
+        assert_eq!(tones.len(), 15);
         for (_, tone) in tones.iter() {
             let samples: Vec<f32> = tone.decoder().collect();
             let peak = samples

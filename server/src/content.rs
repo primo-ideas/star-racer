@@ -240,7 +240,7 @@ mod tests {
         car.turbo_boost = if speed > tuning.boost_top_speed { 3.0 } else { 0.0 };
         for tick in 0..3 * TICK_RATE {
             let held = (tick as f32 * TICK_SECONDS) < hold;
-            car.step(CarInput::new(true, 0.0).with_jump(held), &tuning, track);
+            car.step(CarInput::new(true, 0.0).with_jump(held).with_thrust(held), &tuning, track);
             if car.respawns > 0 {
                 return None;
             }
@@ -252,25 +252,26 @@ mod tests {
     }
 
     /// The Odyssey's three shortcuts are there to be found, and cost what they should
-    /// (docs/tracks.md#shortcuts): the keyhole is flown on the thruster, from a little over top
-    /// speed; the balcony is driven off through its breach, with nothing pressed; and the long
-    /// way round is flown on the turbo, and is too far at top speed. Each skips hundreds of
-    /// meters of road. A change to the track or to the car that closes one, or opens the last to
-    /// everyone, fails here.
+    /// (docs/tracks.md#shortcuts): the keyhole and the long way round are flown straight on over
+    /// the wall on the thruster, from top speed (until v0.1.51 the long way round needed the turbo,
+    /// the tank being smaller); the balcony is driven off through its breach, with nothing
+    /// pressed. Each skips hundreds of meters of road. A hop alone does not clear a wall. A change
+    /// to the track or to the car that closes one fails here.
     #[test]
     fn the_shortcuts_of_the_odyssey_are_there() {
-        let keyhole = straight_on(644.0, 0.0, 62.0, 1.6);
+        let keyhole = straight_on(644.0, 0.0, 58.0, 1.6);
         assert!(keyhole.is_some_and(|gained| gained > 400.0), "keyhole: {keyhole:?}");
-        // Without flying, the wall holds the car on the road.
-        let held = straight_on(644.0, 0.0, 58.0, 0.0);
-        assert!(held.is_some_and(|gained| gained < 200.0), "keyhole, on the road: {held:?}");
+        // Without flying, or with a hop only, the wall holds the car on the road.
+        for hold in [0.0, 0.05] {
+            let held = straight_on(644.0, 0.0, 58.0, hold);
+            assert!(held.is_some_and(|gained| gained < 200.0), "keyhole, on the road: {held:?}");
+        }
 
-        let balcony = straight_on(1912.0, 9.0, 58.0, 0.0);
+        let balcony = straight_on(1992.0, 9.0, 58.0, 0.0);
         assert!(balcony.is_some_and(|gained| gained > 350.0), "balcony: {balcony:?}");
 
-        let long_way = straight_on(4177.0, 0.0, 87.0, 1.6);
+        let long_way = straight_on(4257.0, 0.0, 58.0, 1.6);
         assert!(long_way.is_some_and(|gained| gained > 400.0), "long way round: {long_way:?}");
-        assert_eq!(straight_on(4177.0, 0.0, 58.0, 1.6), None, "the long way round at top speed");
     }
 
     /// Scenery is decoration, so building a track only checks that a prop stands off the road where

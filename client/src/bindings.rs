@@ -7,9 +7,14 @@
 //! them, which is also how they are read.
 //!
 //! The defaults: W or the up arrow accelerates, A and D or the left and right arrows steer, Shift
-//! or Space drifts, E or the down arrow fires the turbo; on a gamepad the right bumper
-//! accelerates, the right trigger drifts and Y, the top face button, fires the turbo (the user's
-//! choice, 2026-11-11). Control is never a default: with W held it closes a browser tab, which is
+//! or the right Shift drifts, E or the down arrow fires the turbo, Space or Q jumps and thrusts; on
+//! a gamepad the right bumper accelerates, the right trigger drifts, Y, the top face button, fires
+//! the turbo (the user's choice, 2026-11-11), and A, the bottom one, jumps and thrusts.
+//!
+//! The jump and the thrust are two actions on the same keys and button by default (the user's
+//! word, v0.1.52: "fais en deux touches bindable, mais mis sur le même bouton par défaut, qui
+//! d'ailleurs est Croix/A"): pressed, the car hops; held, the thruster lights at the top of the
+//! hop. They are the one pair a key may serve together. Control is never a default: with W held it closes a browser tab, which is
 //! also why a page does not offer it at all.
 //!
 //! What is stored is the name of each key and button, and a name this version does not know is
@@ -28,17 +33,28 @@ pub enum Action {
     Drift,
     Turbo,
     Jump,
+    Thrust,
 }
 
 impl Action {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::Accelerate,
         Self::SteerLeft,
         Self::SteerRight,
         Self::Drift,
         Self::Turbo,
         Self::Jump,
+        Self::Thrust,
     ];
+
+    /// Whether a key or a button may do both `self` and `other`: the jump and the thrust share
+    /// theirs by default, so binding one never takes it from the other.
+    pub fn shares_with(self, other: Self) -> bool {
+        matches!(
+            (self, other),
+            (Self::Jump, Self::Thrust) | (Self::Thrust, Self::Jump)
+        )
+    }
 
     pub fn label(self) -> &'static str {
         match self {
@@ -48,6 +64,7 @@ impl Action {
             Self::Drift => "Drift",
             Self::Turbo => "Turbo",
             Self::Jump => "Jump",
+            Self::Thrust => "Thrust",
         }
     }
 }
@@ -118,9 +135,12 @@ pub struct Bindings {
     pub steer_right: Binding,
     pub drift: Binding,
     pub turbo: Binding,
-    /// Pressed, a hop; held, the thruster (since v0.1.48). Space and A, as in Rocket Racing,
-    /// which moved the drift's second key from Space to the right Shift.
+    /// Pressed, a hop (since v0.1.48). Space and A, as in Rocket Racing, which moved the
+    /// drift's second key from Space to the right Shift.
     pub jump: Binding,
+    /// Held in the air, the thruster (since v0.1.52; until then the jump held). The jump's keys
+    /// and button by default. Choices saved before it existed are given its default.
+    pub thrust: Binding,
 }
 
 impl Default for Bindings {
@@ -146,6 +166,7 @@ impl Default for Bindings {
             ),
             turbo: Binding::new(KeyCode::KeyE, KeyCode::ArrowDown, GamepadButton::North),
             jump: Binding::new(KeyCode::Space, KeyCode::KeyQ, GamepadButton::South),
+            thrust: Binding::new(KeyCode::Space, KeyCode::KeyQ, GamepadButton::South),
         }
     }
 }
@@ -159,17 +180,18 @@ impl Bindings {
             Action::Drift => &self.drift,
             Action::Turbo => &self.turbo,
             Action::Jump => &self.jump,
+            Action::Thrust => &self.thrust,
         }
     }
 
     /// The same bindings with every key and button the jump holds taken from any other action
     /// that held it too. Choices saved before the jump existed bound Space to the drift, and the
     /// jump's default is Space: it wins it, and the drift gets the right Shift back in its place
-    /// if that is free.
+    /// if that is free. The thrust shares the jump's, and keeps them.
     pub fn with_jump_free(mut self) -> Self {
         let jump = self.jump;
         for action in Action::ALL {
-            if action == Action::Jump {
+            if action == Action::Jump || action.shares_with(Action::Jump) {
                 continue;
             }
             let binding = self.of_mut(action);
@@ -199,13 +221,17 @@ impl Bindings {
             Action::Drift => &mut self.drift,
             Action::Turbo => &mut self.turbo,
             Action::Jump => &mut self.jump,
+            Action::Thrust => &mut self.thrust,
         }
     }
 
     /// Binds `key` to `action`, in its first or its second place. A key does one thing: whatever
-    /// else it was bound to lets go of it.
+    /// else it was bound to lets go of it, but for the one action it may share it with.
     pub fn bind_key(&mut self, action: Action, alternate: bool, key: KeyCode) {
         for other in Action::ALL {
+            if action.shares_with(other) {
+                continue;
+            }
             let binding = self.of_mut(other);
             for slot in [&mut binding.key, &mut binding.alternate] {
                 if slot.0 == Some(key) {
@@ -221,9 +247,13 @@ impl Bindings {
         }
     }
 
-    /// Binds a gamepad button to `action`, taking it from whatever else it was bound to.
+    /// Binds a gamepad button to `action`, taking it from whatever else it was bound to, but for
+    /// the one action it may share it with.
     pub fn bind_button(&mut self, action: Action, button: GamepadButton) {
         for other in Action::ALL {
+            if action.shares_with(other) {
+                continue;
+            }
             let slot = &mut self.of_mut(other).gamepad;
             if slot.0 == Some(button) {
                 slot.0 = None;
@@ -475,6 +505,23 @@ mod tests {
 
     /// Choices saved before the jump existed had Space on the drift: the jump takes it, and the
     /// drift gets the right Shift in its place.
+    /// The jump and the thrust are on A and Space by default, and binding one leaves the other
+    /// where it was; anything else bound to the key still lets go of it.
+    #[test]
+    fn the_jump_and_the_thrust_share_their_button() {
+        let mut bindings = Bindings::default();
+        assert_eq!(bindings.jump, bindings.thrust);
+        assert_eq!(bindings.thrust.gamepad.0, Some(GamepadButton::South));
+        bindings.bind_key(Action::Jump, false, KeyCode::KeyF);
+        assert_eq!(bindings.thrust.key.0, Some(KeyCode::Space));
+        bindings.bind_key(Action::Thrust, false, KeyCode::KeyF);
+        assert_eq!(bindings.jump.key.0, Some(KeyCode::KeyF));
+        bindings.bind_button(Action::Thrust, GamepadButton::West);
+        assert_eq!(bindings.jump.gamepad.0, Some(GamepadButton::South));
+        bindings.bind_key(Action::Turbo, false, KeyCode::KeyF);
+        assert_eq!((bindings.jump.key.0, bindings.thrust.key.0), (None, None));
+    }
+
     #[test]
     fn the_jump_takes_space_from_an_old_drift() {
         let mut old = Bindings::default();

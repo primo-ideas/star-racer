@@ -41,12 +41,14 @@ pub struct Drive {
     pub drift: f32,
     /// How far the drift has charged, from 0 to 1: the hiss rises with it.
     pub charge: f32,
+    /// 1 while the thruster burns: a low roar of its own.
+    pub thrust: f32,
 }
 
 /// [`Drive`] as the audio thread reads it while the game writes it: one number at a time, each
 /// whole, which is all a sound gliding toward them needs.
 #[derive(Default)]
-pub struct Controls([AtomicU32; 5]);
+pub struct Controls([AtomicU32; 6]);
 
 impl Controls {
     pub fn set(&self, drive: Drive) {
@@ -56,6 +58,7 @@ impl Controls {
             drive.boost,
             drive.drift,
             drive.charge,
+            drive.thrust,
         ];
         for (slot, value) in self.0.iter().zip(values) {
             slot.store(value.to_bits(), Ordering::Relaxed);
@@ -63,14 +66,15 @@ impl Controls {
     }
 
     fn get(&self) -> Drive {
-        let [on, speed, boost, drift, charge] =
-            [0, 1, 2, 3, 4].map(|slot| f32::from_bits(self.0[slot].load(Ordering::Relaxed)));
+        let [on, speed, boost, drift, charge, thrust] =
+            [0, 1, 2, 3, 4, 5].map(|slot| f32::from_bits(self.0[slot].load(Ordering::Relaxed)));
         Drive {
             on,
             speed,
             boost,
             drift,
             charge,
+            thrust,
         }
     }
 }
@@ -95,8 +99,10 @@ impl Decodable for Drone {
             gust: 0.0,
             air: Hiss::new(0xa1e),
             grit: Hiss::new(0x9217),
+            blast: Hiss::new(0xb1a5),
             wind: Filter::default(),
             skid: Filter::default(),
+            burn: Filter::default(),
         }
     }
 }
@@ -119,8 +125,10 @@ pub struct DroneSamples {
     gust: f32,
     air: Hiss,
     grit: Hiss,
+    blast: Hiss,
     wind: Filter,
     skid: Filter,
+    burn: Filter,
 }
 
 impl Iterator for DroneSamples {
@@ -138,12 +146,14 @@ impl Iterator for DroneSamples {
         follow(&mut self.now.boost, self.asked.boost);
         follow(&mut self.now.drift, self.asked.drift);
         follow(&mut self.now.charge, self.asked.charge);
+        follow(&mut self.now.thrust, self.asked.thrust);
         let Drive {
             on,
             speed,
             boost,
             drift,
             charge,
+            thrust,
         } = self.now;
         if on < 1e-4 {
             return Some(0.0);
@@ -190,7 +200,11 @@ impl Iterator for DroneSamples {
             .run(self.grit.next(), 1500.0 + 1300.0 * charge, 0.25);
         let skid = hiss * 0.16 * drift * (0.8 + 0.2 * (TAU * self.scrub).sin());
 
-        Some((AMPLITUDE * on * (thrusters + wind + skid)).clamp(-1.0, 1.0))
+        // The thruster under the car: a low, rough roar of its own while it burns.
+        let (_, roar) = self.burn.run(self.blast.next(), 260.0, 1.1);
+        let burn = roar * 0.45 * thrust;
+
+        Some((AMPLITUDE * on * (thrusters + wind + skid + burn)).clamp(-1.0, 1.0))
     }
 }
 
@@ -251,6 +265,7 @@ mod tests {
             boost: 1.0,
             drift: 1.0,
             charge: 1.0,
+            thrust: 1.0,
             ..car(1.55)
         });
         println!("standing {standing}, racing {racing}, flat out {flat_out}, peak {peak}");

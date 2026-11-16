@@ -508,6 +508,37 @@ height with the car, so the car is seen lifting off; and the HUD shows a THRUST 
 while the car is in the air or the tank is filling. What the jump is for, the rift says
 (v0.1.49): its road is missing in four places (see [Tracks](tracks.md#gaps)).
 
+### Hop, then thrust
+
+In v0.1.52, the user's word "Améliore le feeling du saut. Il faut que ça saute puis thrust.
+D'ailleurs fais en deux touches bindable, mais mis sur le même bouton par défaut, qui d'ailleurs
+est Croix/A. Agrandis les précipices, car on doit pouvoir thrust bien davantage. [...] On doit
+pouvoir drift, maintenir le s'envoler en conservant la barre de drift pour la relâcher plus tard."
+
+**Two inputs.** `CarInput::jump`, pressed on the road, hops; `CarInput::thrust`, held in the air,
+fires the thruster. They are two actions to bind, on the same keys and button by default (Space,
+Q and A / cross; see [Interface](ui.md#settings)), so a press hops and a hold flies, and either
+can be moved apart from the other. The thrust alone on the road does nothing.
+
+**Two stages.** The thruster lights only once the hop has had `thrust_delay` (0.2 s), which is
+the top of the hop with the shipped car: the car pops 0.9 m up, hangs there for an instant, then
+the thruster lights with a **kick**, its climb brought up to `thrust_kick` (7 m/s) on that tick,
+once a flight (`Car::ignited`), so it is felt as a second push rather than the hop going on. It
+then climbs at 7.5 m/s and settles at about 5.3 m, `thrust_damping` (4 per second) holding back
+its climb so it does not bob round its hover; the same damping catches a car that lights its
+thruster while falling. Unlike before, a thrust let go and pressed again in the air lights the
+thruster again while the tank lasts. The tank holds `thrust_seconds` 3.5 s (1.5 before), filled
+on the road at `thrust_recharge` 1.4 s a second: a full flight is about 3.8 s in the air and
+220 m at top speed (110 before). `thrust_acceleration` is 100 m/s² and `thrust_ceiling` 10 m.
+On the client the hop pops, the ignition thumps and roars, the burn has a roar of its own in the
+drone, landing knocks, and a gamepad rumbles at each.
+
+**A drift is held through the air**, as in Rocket Racing. A car that leaves the road drifting
+stays drifting until it lands: nothing ends the drift in the air, its charge neither grows nor
+pays out, holding the button brakes nothing, and no new drift starts there. On the road again it
+carries on, and ends as any drift does, paying its boost when the stick lets it come back into
+line. So a drift is charged, flown across a gap, and let go of on landing.
+
 ### Snappier
 
 In v0.1.50, the user's word "Arrange le saut, pour qu'il saute plus vif": the hop leaves the road

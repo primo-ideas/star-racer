@@ -50,6 +50,8 @@ there is a car to hear. It has three voices, each following a number the game se
   all of it, and only then is a whine heard over it, five times higher and quiet.
 - **Wind.** Noise under a filter that stays low (110 Hz on the grid, 530 at top speed), kept
   well under the hum and rising and falling in slow gusts; it opens up and roars only on a boost.
+- **The thruster's burn** (since v0.1.52). While it burns, a low, rough roar of noise around
+  260 Hz, under the hum.
 - **The drift.** A narrow band of noise, scrubbing 23 times a second, while the car drifts. Its
   band rises from 1.5 to 2.8 kHz as the drift charges, so a drift worth letting go of is heard as
   well as seen.
@@ -82,6 +84,9 @@ Claude has not heard it: whether it is pleasant over a whole race is the user's 
 | Boost | a boost fires, a drift's or the start's | 0.7 s: noise rising from 0.5 to 3.2 kHz over a note climbing an octave from A2; louder for a longer boost |
 | Turbo | a charge of turbo fires | 1.3 s: the same gesture from an octave lower, wider and louder |
 | Turbo charged | a charge of turbo fills | a small bell, D6 and the fifth over it |
+| Hop | the car leaves the road with a climb | 0.18 s: a pop, a low note bending up under a puff of air |
+| Ignition | the thruster lights, once a flight | 0.75 s: a deep thump and a roar of air opening upward |
+| Landing | back on the road from over 0.3 m | 0.2 s: a soft, low knock, louder the higher the fall |
 | Wall | the car hits a wall | a knock falling an octave from 85 Hz with noise falling under it; louder the harder the hit, silent under 1.5 m/s, at most every 0.15 s |
 | Focus | the focus moves in a menu | a 50 ms tick on C6, quiet |
 | Press | anything is pressed in a menu | a 0.12 s click rising a fifth from C5 |

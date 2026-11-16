@@ -85,8 +85,12 @@ pub struct Car {
     pub climb: f32,
     /// Whether the jump button was down on the last tick, so a press is told apart from a hold.
     pub jump_button: bool,
-    /// Seconds the jump button has been held since it lifted the car off the road; 0 on it.
-    pub jump_held: f32,
+    /// Seconds since the car left the road; 0 on it. The thruster lights only once the hop has
+    /// had `thrust_delay` of it.
+    pub airtime: f32,
+    /// Whether the thruster has lit since the car left the road: the kick of its ignition comes
+    /// once a flight.
+    pub ignited: bool,
     /// Seconds of thrust left in the tank, from 0 to `thrust_seconds`. It fills on the road.
     pub thrust: f32,
     /// Whether the thruster pushed the car up this tick, for its flames and its sound.
@@ -154,8 +158,12 @@ pub struct CarInput {
     pub steer: i8,
     /// Pressed to fire a charge of the turbo.
     pub turbo: bool,
-    /// Pressed to jump; held, the thruster carries the car higher and longer.
+    /// Pressed on the road to hop.
     pub jump: bool,
+    /// Held in the air to fire the thruster, which carries the car higher and longer. By default
+    /// the jump's own button: pressed, the car hops; held, the thruster lights at the top of the
+    /// hop. Two inputs so each can be bound on its own (since v0.1.52).
+    pub thrust: bool,
 }
 
 impl CarInput {
@@ -167,6 +175,7 @@ impl CarInput {
             steer: (steer.clamp(-1.0, 1.0) * 127.0).round() as i8,
             turbo: false,
             jump: false,
+            thrust: false,
         }
     }
 
@@ -180,6 +189,10 @@ impl CarInput {
 
     pub fn with_jump(self, jump: bool) -> Self {
         Self { jump, ..self }
+    }
+
+    pub fn with_thrust(self, thrust: bool) -> Self {
+        Self { thrust, ..self }
     }
 
     /// In `[-1, 1]`, right positive. A peer may send -128, which counts as full left.
@@ -337,6 +350,13 @@ pub struct CarTuning {
     pub thrust_ceiling: f32,
     pub thrust_seconds: f32,
     pub thrust_recharge: f32,
+    /// The thruster's ignition, once a flight: the car's climb is brought up to at least
+    /// `thrust_kick` (m/s) on the tick it lights, so the thrust is felt as a second push after
+    /// the hop rather than as the hop going on. While it burns, `thrust_damping` (per second)
+    /// holds back the climb, and the fall, so the car settles at its hover instead of bobbing
+    /// round it, and a thruster lit while falling catches the car.
+    pub thrust_kick: f32,
+    pub thrust_damping: f32,
 
     /// Radius of the circle the car collides as, in meters.
     pub collision_radius: f32,
@@ -407,6 +427,8 @@ impl CarTuning {
             ("drift_press_buffer", self.drift_press_buffer),
             ("drift_wall_tolerance", self.drift_wall_tolerance),
             ("turbo_fill", self.turbo_fill),
+            ("thrust_kick", self.thrust_kick),
+            ("thrust_damping", self.thrust_damping),
         ];
         for (name, value) in positive {
             if !(value.is_finite() && value > 0.0) {
@@ -567,9 +589,10 @@ impl Car {
         }
     }
 
-    /// The jump and the thruster: a press on the road lifts the car, a hold keeps the thruster
-    /// pushing while the tank lasts, and the pull of `air_gravity` brings it back down onto the
-    /// road under it.
+    /// The jump and the thruster: a press of the jump on the road hops the car; the thrust held in
+    /// the air, once the hop has had `thrust_delay`, lights the thruster with a kick and keeps it
+    /// pushing while the tank lasts, as often as it is pressed again; and the pull of
+    /// `air_gravity` brings the car back down onto the road under it.
     ///
     /// Where there is no road (`road`), over a gap or beyond the walls, there is nothing to come
     /// down onto: a car that gets there on the road falls, and lands again only if it gets back
@@ -582,7 +605,8 @@ impl Car {
         self.thrusting = false;
         if self.altitude == 0.0 {
             self.thrust = (self.thrust + tuning.thrust_recharge * dt).min(tuning.thrust_seconds);
-            self.jump_held = 0.0;
+            self.airtime = 0.0;
+            self.ignited = false;
             if pressed {
                 // A press on the very tick the road runs out still jumps.
                 self.climb = tuning.jump_speed;
@@ -590,21 +614,21 @@ impl Car {
                 return;
             }
         }
+        self.airtime += dt;
         let mut lift = -tuning.air_gravity;
-        if input.jump {
-            self.jump_held += dt;
-            let sunk = inside && self.is_falling();
-            if self.jump_held > tuning.thrust_delay && self.thrust > 0.0 && !sunk {
-                // Weaker the nearer the ceiling, so the car settles under it instead of hitting
-                // it; nothing at all above it.
-                let room = (1.0 - self.altitude / tuning.thrust_ceiling).clamp(0.0, 1.0);
-                lift += tuning.thrust_acceleration * room;
-                self.thrust = (self.thrust - dt).max(0.0);
-                self.thrusting = true;
+        let sunk = inside && self.is_falling();
+        if input.thrust && self.airtime > tuning.thrust_delay && self.thrust > 0.0 && !sunk {
+            if !self.ignited {
+                // The ignition: a second push, after the hop.
+                self.ignited = true;
+                self.climb = self.climb.max(tuning.thrust_kick);
             }
-        } else {
-            // Let go, the thruster is done for this jump.
-            self.jump_held = f32::MAX;
+            // Weaker the nearer the ceiling, so the car settles under it instead of hitting it;
+            // nothing at all above it.
+            let room = (1.0 - self.altitude / tuning.thrust_ceiling).clamp(0.0, 1.0);
+            lift += tuning.thrust_acceleration * room - tuning.thrust_damping * self.climb;
+            self.thrust = (self.thrust - dt).max(0.0);
+            self.thrusting = true;
         }
         self.climb += lift * dt;
         // Whatever its speed down, a car that was above the road and no longer is has landed:
@@ -786,6 +810,11 @@ impl Car {
         let speed = self.velocity.length();
         if self.is_drifting() {
             self.drift_press = 0.0;
+            if self.is_airborne() {
+                // Held through the air, as in Rocket Racing: nothing ends it, nothing charges
+                // it, and it carries on when the car lands, to be let go of then.
+                return;
+            }
             // Decided on the stick itself, which says what the player means before the steering
             // has followed it.
             if input.drift && input.steer() * f32::from(self.drift) < -DRIFT_SWITCH_STICK {
@@ -808,7 +837,7 @@ impl Car {
                     0.0
                 };
             }
-        } else if speed >= tuning.drift_min_speed {
+        } else if speed >= tuning.drift_min_speed && !self.is_airborne() {
             let pressed = pressed || self.drift_press > 0.0;
             let side = if pressed && input.steer().abs() >= DRIFT_PRESS_STICK {
                 // Steering right is a drift to the right, side 1.
@@ -992,7 +1021,7 @@ impl Car {
             };
             move_towards(forward_speed, 0.0, held_back + coasting)
         };
-        if self.is_drifting() && input.drift {
+        if self.is_drifting() && input.drift && !self.is_airborne() {
             // A drift costs nothing; tightening it with the button does, and the longer the
             // button is held, the harder it brakes.
             let drag = tuning.drift_button_drag + tuning.drift_button_drag_ramp * self.drift_held;
@@ -1113,7 +1142,7 @@ mod tests {
             let (mut highest, mut airborne, mut emptiest) = (0.0f32, 0usize, f32::MAX);
             for tick in 0..ticks(4.0) {
                 let held = (tick as f32 * TICK_SECONDS) < hold;
-                car.step(ACCELERATE.with_jump(held), &tuning(), &track);
+                car.step(ACCELERATE.with_jump(held).with_thrust(held), &tuning(), &track);
                 highest = highest.max(car.altitude);
                 airborne += usize::from(car.is_airborne());
                 emptiest = emptiest.min(car.thrust);
@@ -1138,6 +1167,72 @@ mod tests {
         assert!((car.thrust - tuning().thrust_seconds).abs() < 1e-3, "{}", car.thrust);
     }
 
+    /// The jump and the thrust are two inputs: the thrust alone on the road does nothing, and
+    /// held from the press it waits for the hop to have risen before it lights, with a kick that
+    /// is felt as a second push: the climb jumps up on the tick it lights.
+    #[test]
+    fn the_car_hops_then_the_thruster_lights() {
+        let track = Track::build(&open_track()).unwrap();
+        let mut car = at_top_speed(&track);
+        run(&mut car, ACCELERATE.with_thrust(true), 1.0, &track);
+        assert!(!car.is_airborne(), "the thrust alone lifted the car");
+
+        let mut car = at_top_speed(&track);
+        run(&mut car, ACCELERATE, 1.0, &track);
+        let held = ACCELERATE.with_jump(true).with_thrust(true);
+        let (mut lit_at, mut kick) = (None, 0.0_f32);
+        for tick in 0..ticks(1.0) {
+            let climb = car.climb;
+            car.step(held, &tuning(), &track);
+            if car.thrusting && lit_at.is_none() {
+                lit_at = Some(tick as f32 * TICK_SECONDS);
+                kick = car.climb - climb;
+            }
+        }
+        let lit_at = lit_at.expect("the thruster never lit");
+        assert!(
+            (tuning().thrust_delay - TICK_SECONDS..tuning().thrust_delay + TICK_SECONDS)
+                .contains(&lit_at),
+            "lit at {lit_at} s"
+        );
+        assert!(kick > 2.0, "the ignition added {kick} m/s");
+        assert!(car.altitude > 2.0, "{} m up after a second", car.altitude);
+    }
+
+    /// A drift carried into the air is held there: it does not end, its charge neither grows nor
+    /// pays out, and it carries on when the car lands, paying its boost once the stick lets go
+    /// of it on the road.
+    #[test]
+    fn a_drift_is_held_through_the_air_and_let_go_of_on_landing() {
+        let track = Track::build(&open_track()).unwrap();
+        let mut car = at_top_speed(&track);
+        press_into_a_drift(&mut car, 1.0, &track);
+        run(&mut car, drifting(1.0), 1.5, &track);
+        assert!(car.is_drifting());
+        let charge = car.drift_charge;
+        // Up on the thruster, the stick let go: on the road that would end the drift.
+        let flying = ACCELERATE.with_jump(true).with_thrust(true);
+        let mut airborne = 0;
+        for _ in 0..ticks(2.0) {
+            car.step(flying, &tuning(), &track);
+            if car.is_airborne() {
+                airborne += 1;
+                assert!(car.is_drifting(), "the drift ended in the air");
+                assert!((car.drift_charge - charge).abs() < 0.05, "{}", car.drift_charge);
+            }
+            assert_eq!(car.boost, 0.0, "the drift paid out, airborne {}", car.is_airborne());
+        }
+        assert!(airborne > ticks(1.5), "in the air for {airborne} ticks");
+        // Down again, the stick still centered: the drift ends and pays.
+        let mut paid = false;
+        for _ in 0..ticks(4.0) {
+            car.step(ACCELERATE, &tuning(), &track);
+            paid |= !car.is_airborne() && car.boost > 0.0;
+        }
+        assert!(!car.is_drifting());
+        assert!(paid, "the drift held through the air paid nothing");
+    }
+
     /// The open track with a gap `length` meters long 100 m past the line, and a checkpoint 50 m
     /// before it.
     fn gapped(length: f32) -> Track {
@@ -1154,7 +1249,7 @@ mod tests {
         for _ in 0..ticks(seconds) {
             let at = track_distance(track, car);
             let jump = (from..to).contains(&at) && car.respawns == 0;
-            car.step(ACCELERATE.with_jump(jump), &tuning(), track);
+            car.step(ACCELERATE.with_jump(jump).with_thrust(jump), &tuning(), track);
         }
     }
 
@@ -1254,7 +1349,7 @@ mod tests {
         for hop in [false, true] {
             let mut car = aimed_at_the_wall();
             for tick in 0..ticks(1.0) {
-                car.step(ACCELERATE.with_jump(hop && tick < 2), &tuning(), &track);
+                car.step(ACCELERATE.with_jump(hop && tick < 2).with_thrust(hop && tick < 2), &tuning(), &track);
                 assert!(track.within_walls(&track.project(car.position)), "left the road");
             }
             assert_eq!(car.respawns, 0);
@@ -1264,7 +1359,7 @@ mod tests {
         let mut car = aimed_at_the_wall();
         let (mut outside, mut longest) = (false, 0.0_f32);
         for _ in 0..ticks(5.0) {
-            car.step(ACCELERATE.with_jump(true), &tuning(), &track);
+            car.step(ACCELERATE.with_jump(true).with_thrust(true), &tuning(), &track);
             outside |= !track.within_walls(&track.project(car.position));
             longest = longest.max(car.astray);
             if car.respawns > 0 {
@@ -1357,7 +1452,7 @@ mod tests {
         car.thrust = tuning().thrust_seconds;
         let mut boosted = false;
         for _ in 0..ticks(1.5) {
-            car.step(ACCELERATE.with_jump(true), &tuning(), &track);
+            car.step(ACCELERATE.with_jump(true).with_thrust(true), &tuning(), &track);
             boosted |= car.is_boosting();
         }
         assert!(!boosted, "boosted in the air");
@@ -1466,6 +1561,7 @@ mod tests {
         steer: 0,
         turbo: false,
         jump: false,
+        thrust: false,
     };
 
     fn drifting(steer: f32) -> CarInput {

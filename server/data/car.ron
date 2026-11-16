@@ -143,20 +143,25 @@
     turbo_top_speed: 87.0,
     turbo_acceleration: 80.0,
 
-    // The jump, as in Rocket Racing (docs/simulation.md#the-jump). A press lifts the car off the
-    // road at jump_speed (m/s); air_gravity (m/s²) brings it back, stronger than the road's
-    // gravity so a hop is short: at 6 and 28, 0.64 m up and 0.43 s in the air. Held past
-    // thrust_delay (s), the thruster pushes up at thrust_acceleration (m/s²), less and less
-    // toward thrust_ceiling (m), so the car climbs and hovers where push and pull meet (about
-    // 3 m at 46 and 8), for as long as the tank holds: thrust_seconds, filled again on the road at
-    // thrust_recharge seconds per second. In the air the car feels no slope and touches no pad.
+    // The jump, as in Rocket Racing (docs/simulation.md#the-jump, #hop-then-thrust). A press of
+    // the jump lifts the car off the road at jump_speed (m/s); air_gravity (m/s²) brings it back,
+    // stronger than the road's gravity so a hop is short: at 10 and 50, 1 m up and 0.4 s in the
+    // air. The thrust held in the air, once the hop has had thrust_delay (s, the top of the hop),
+    // lights the thruster with a kick, the climb brought up to thrust_kick (m/s), then pushes at
+    // thrust_acceleration (m/s²), less and less toward thrust_ceiling (m), thrust_damping (per
+    // second) holding back its climb so it settles where push and pull meet (about 5.3 m), for as
+    // long as the tank holds: thrust_seconds, filled again on the road at thrust_recharge seconds
+    // per second. A full tank flies about 220 m at top speed. In the air the car feels no slope
+    // and touches no pad, and a drift is held until it lands.
     jump_speed: 10.0,
     air_gravity: 50.0,
-    thrust_delay: 0.1,
-    thrust_acceleration: 95.0,
-    thrust_ceiling: 8.0,
-    thrust_seconds: 1.5,
-    thrust_recharge: 0.75,
+    thrust_delay: 0.2,
+    thrust_acceleration: 100.0,
+    thrust_ceiling: 10.0,
+    thrust_seconds: 3.5,
+    thrust_recharge: 1.4,
+    thrust_kick: 7.0,
+    thrust_damping: 4.0,
 
     // Walls. The bounce is the share of the impact speed that comes back, from 0 to 1. The impact
     // friction is the speed along the wall a hit takes, per m/s it takes into it: a graze costs

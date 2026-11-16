@@ -100,8 +100,8 @@ pub struct Gap {
 }
 
 /// The longest gap allowed: the thruster's whole tank at top speed, with room to spare, carries
-/// a car about 120 m.
-pub const MAX_GAP: f32 = 90.0;
+/// a car about 220 m (90 until v0.1.51, when it carried it 110).
+pub const MAX_GAP: f32 = 200.0;
 
 /// How far from the start line a gap must keep: behind it stands the starting grid, and ahead
 /// of it the start.
@@ -129,7 +129,7 @@ impl Gap {
             return Err("the distance along the track must be between zero and its length");
         }
         if !(self.length.is_finite() && (4.0..=MAX_GAP).contains(&self.length)) {
-            return Err("the length must be from 4 to 90 meters");
+            return Err("the length must be from 4 to 200 meters");
         }
         let start = self.at;
         let end = self.at + self.length;

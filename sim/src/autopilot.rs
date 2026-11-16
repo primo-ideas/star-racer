@@ -146,19 +146,19 @@ pub fn drive(car: &Car, track: &Track) -> CarInput {
 
 /// [`drive`], with a personality.
 pub fn drive_as(personality: &Personality, car: &Car, track: &Track) -> CarInput {
+    let jump = jumps(car, track);
     CarInput::new(true, pursue(personality, car, track, LOOK_AHEAD_TIME))
-        .with_jump(jumps(car, track))
+        .with_jump(jump)
+        .with_thrust(jump)
 }
 
-/// Seconds of travel before a gap's lip the autopilot presses the jump.
-const JUMP_LEAD: f32 = 0.1;
+/// Seconds of travel before a gap's lip the autopilot presses the jump: early enough that a
+/// client seeing its car a few ticks late still leaves the road before the lip.
+const JUMP_LEAD: f32 = 0.2;
 
-/// The longest gap the autopilot hops rather than flies, in seconds of travel: a hop stays up a
-/// little over 0.4 s with the shipped car.
-const HOP_REACH: f32 = 0.3;
-
-/// Whether the autopilot holds the jump: pressed just before a gap's lip, and held across a gap
-/// too long to hop, so the thruster carries it over.
+/// Whether the autopilot holds the jump and the thrust: pressed a little before a gap's lip, and
+/// held across the gap, so the thruster, lit at the top of the hop, carries it over whatever the
+/// gap's length.
 fn jumps(car: &Car, track: &Track) -> bool {
     let here = track.project(car.position).distance;
     let speed = car.velocity.length().max(1.0);
@@ -170,7 +170,7 @@ fn jumps(car: &Car, track: &Track) -> bool {
         if car.altitude == 0.0 {
             to_lip < lead
         } else {
-            gap.length > speed * HOP_REACH && (to_lip < lead || past_lip < gap.length + 2.0)
+            to_lip < lead || past_lip < gap.length + 2.0
         }
     })
 }
@@ -216,9 +216,11 @@ pub fn drive_in_style_as(
     if style == Style::Grip {
         return drive_as(personality, car, track);
     }
+    let jump = jumps(car, track);
     drift_through_turns(personality, car, track)
         .with_turbo(fires_turbo(personality, car, track))
-        .with_jump(jumps(car, track))
+        .with_jump(jump)
+        .with_thrust(jump)
 }
 
 /// Whether to press the turbo button now: with a charge to spend, out of a drift, and with the

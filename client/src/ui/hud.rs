@@ -617,7 +617,11 @@ fn spawn_hud(
                             &fonts,
                             controls.key_label(Action::Jump),
                             controls.jump.label(Input::Gamepad),
-                            "Jump"
+                            if controls.jump == controls.thrust {
+                                "Jump, hold to fly"
+                            } else {
+                                "Jump"
+                            }
                         ),
                         hint(&fonts, "Esc", "Start", "Leave"),
                     ],

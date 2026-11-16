@@ -15,7 +15,7 @@ must lap it drifting without touching a wall, faster than gripping (see
 
 ## The Odyssey
 
-`odyssey.ron`: 30 m from wall to wall, **5.06 km a lap**, its relief from 8 to 60 m, its road
+`odyssey.ron`: 30 m from wall to wall, **5.22 km a lap** (5.06 until v0.1.51), its relief from 6 to 60 m, its road
 missing in four places, eleven checkpoints, eight speed pads, and three shortcuts. The lap is one
 big turn to the left, a rounded rectangle about 1.2 km by 0.9, with three loops hanging off its
 outside: the road leaves its line to the right, winds round a tight banked loop and comes back to
@@ -26,21 +26,24 @@ a quarter turn of 140 m, straights with a gap to jump.
 - **The weave**: a long, fast slalom, dropping 12 m.
 - **The keyhole**: the first loop, 440 m of it, the lowest part of the lap.
 - **The long left**: a wide banked quarter turn, climbing.
-- **The leap**: 45 m missing on the way up, under an arch: the thruster's.
+- **The leap**: 110 m missing on the way up, under an arch: the thruster's.
 - **The climb**: a slalom through a tunnel up to the top of the lap, 60 m up.
 - **The balcony**: the second loop, out over the void, winding down 26 m.
 - **The sky bowl**, a banked left, and **the gate**, the top straight pinched to 18 m.
 - **The dive**: down 30 m through a fast kink under a tunnel.
-- **The rift**: 55 m missing at the bottom of the dive, a monolith standing over the void on
+- **The rift**: 170 m missing at the bottom of the dive, a monolith standing over the void on
   either side.
 - **The scree**, a slalom, and **the step**, 16 m missing on the way out of it.
 - **The west corner**, climbing, and **the esses**, through a tunnel.
 - **The long way round**: the third loop, the widest.
 - **The last corner**, onto the run home.
 
-With the shipped car the autopilot laps it gripping in 80.4 s and drifting in 77.5 s with four
-charges of turbo fired, both without touching a wall or falling; six ticks late, 80.8 s clean
-and 79.4 s with 9 ticks against a wall; eight personalities from 73.4 to 82.1 s. It takes no
+Since v0.1.52 its leap and its rift are 110 and 170 m long (45 and 55 before), the straights
+under them stretched by 80 and 100 m, for a thruster that flies twice as far (the user's word:
+"Agrandis les précipices, car on doit pouvoir thrust bien davantage"). With the shipped car the
+autopilot laps it gripping in 83.0 s and drifting in 79.4 s with five charges of turbo fired,
+both without touching a wall or falling; six ticks late, 83.4 s clean and 88.2 s with 99 ticks
+against a wall; eight personalities from 75.3 to 84.0 s. It takes no
 shortcut. A race is two laps by default, since a lap is two and a half times what the skyway's
 was.
 
@@ -67,9 +70,9 @@ loop skipped, about five seconds:
 
 | Loop | How | Measured |
 | --- | --- | --- |
-| The keyhole | Over the wall on the thruster, held all the way. At top speed it comes down in the last of the loop's exit, 30 to 40 degrees across the road; a little over top speed lands it in line. The pad before the loop, on the left, is the hint and the speed. | 1.6 s in the air, 0.5 to 1.0 s off the road |
+| The keyhole | Over the wall on the thruster, at top speed. The pad before the loop, on the left, is the hint. | 2 s in the air, 0.7 s off the road |
 | The balcony | The wall is missing where the road turns away (a [breach](#breaches)), and the road coming back lies 26 m below: straight on, nothing pressed. | 1.5 s of falling |
-| The long way round | The longest flight, 1.7 s on the thruster: at top speed and on a pad's boost the car falls short; on a drift's boost held or the turbo it lands. | lost at 58 and 66 m/s, lands from 75 |
+| The long way round | The longest flight, on the thruster from top speed (until v0.1.51, when the thruster was weaker, it took the turbo). | 2.1 s in the air, 1.25 s off the road |
 
 Nothing announces them but a pad pointing the wrong way and a wall that is not there. A failed
 one costs the fall, the count and the way back from the checkpoint before the loop.
@@ -310,7 +313,7 @@ four, all in the middle: after the hop, up the climb, into the rift and out of t
 
 Since v0.1.49, a track may leave its road out in places, to be jumped (see
 [Simulation](simulation.md#the-jump)): `gaps: [(at: 80.0, length: 14.0)]`, each placed by where it
-begins along the lap and how long it is, from 4 to 90 m. The road, its underside and everything
+begins along the lap and how long it is, from 4 to 200 m (90 until v0.1.51). The road, its underside and everything
 painted on it stop at a gap's edges, and the piers stand back from them; the walls carry on over
 it, the girders of a broken bridge, and hold a car that is no higher than they are. Each edge is the cut face of the slab, a line of hot magenta neon across the road
 at its top and the light of it thrown back along the road (`track/markings.rs`), so a gap reads
@@ -318,14 +321,14 @@ from far off as a bright line with nothing beyond it. A car's shadow and the lig
 not drawn over a gap, there being no road to throw them on.
 
 A car that reaches a gap on the road falls through it and comes back at its last checkpoint (see
-[Simulation](simulation.md#off-the-road)). With the shipped car a hop clears about 23 m
-at top speed, less from a slower start, and the thruster about 110 m: a gap of 14 m is a tap, one
-of 20 m a long hop or a touch of the thruster, and one of 55 m the thruster's. The relief carries
+[Simulation](simulation.md#off-the-road)). With the shipped car a hop clears about 22 m
+at top speed, less from a slower start, and the thruster about 220 m: a gap of 14 m is a tap,
+and anything longer the thruster's, lit at the top of the hop. The relief carries
 on under a gap, so the far side can stand lower than the lip, and a jump off a crest flies further.
 
 A gap must keep 60 m clear behind the start line, where the grid stands, and 40 m after it, and no
-pad may lie over one (`TrackError::InvalidGap`, `InvalidPad`). The autopilot presses the jump just
-before every lip (`autopilot::jumps`) and holds it across any gap it could not hop, and the
+pad may lie over one (`TrackError::InvalidGap`, `InvalidPad`). The autopilot presses the jump 0.2 s
+before every lip (`autopilot::jumps`) and holds the jump and the thrust across every gap, and the
 shipped-track test refuses a lap in which it falls.
 
 ## Checkpoints
