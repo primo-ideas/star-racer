@@ -114,6 +114,8 @@ pub fn tuning() -> CarTuning {
         drift_kick: 80.0,
         drift_kick_acceleration: 1600.0,
         drift_kick_fade: 320.0,
+        // No pivot unless a test asks for one: the swing's own gathering is tested without it.
+        drift_kick_swing: 0.0,
         collision_radius: 1.2,
         wall_bounce: 0.2,
         wall_impact_friction: 0.5,

@@ -577,6 +577,31 @@ as ever, and the stick tightens or opens it. A drift the car breaks into by turn
 kick. The autopilot holds the button while the kick lasts: catching it with the stick otherwise
 ended the drift it began, and it threw some seventy drifts a lap instead of fifteen.
 
+### A pivot, not a sharper turn
+
+In v0.1.55 the user insisted: "ça tourne trop vite quand on drift, et on doit vraiment avoir une
+rotation de la voiture sur son axe beaucoup plus claire". The drift's path turned at up to
+111 degrees per second at top speed, and the kick of v0.1.54 made it turn faster still, while the
+body, swung out at 45 degrees per second at most and slowed past 15 degrees, was barely seen to
+pivot. Now the turning is the body's and the path stays calm:
+
+- the path: `drift_radius_tight` 44 m instead of 30 (75 degrees per second at top speed, the
+  button still pulling it to 31 m), the kick on the path down to `drift_kick` 25;
+- the body: `drift_angle` 55 degrees instead of 36, swung out at `drift_swing_rate` 140 degrees
+  per second (45) with `drift_swing_acceleration` 400 (120), the knee at 35 degrees with a share
+  of 0.6, so the car is seen sideways rather than slightly askew;
+- the throw: a drift started by a press with the stick turned throws the body round on its own
+  axis at `drift_kick_swing` (200 degrees per second at full lock and top speed) on the very tick,
+  braking onto its angle: 25 degrees at 0.15 s, 44 at 0.3 s, 55 at 0.5 s, where it was 6 degrees
+  at 0.25 s. A drift broken into by turning hard still unscrews slowly, as the tests of the
+  swing's gathering check;
+- out of it, `drift_exit_share` 0.3 instead of 0.5, the bigger angle closing faster.
+
+Traced at full lock from top speed: the path turns 2, 5, 8, 12, 16, 20 degrees at 0.05 to 0.3 s,
+where it turned 3, 9, 15, 20, 25, 29 in v0.1.54, with the strong kick on the path. The autopilot laps
+the Odyssey gripping in 84.2 s and drifting in 81.2 s, clean; six ticks late it now straightens
+out of any drift before a gap, having flown one off the road sideways.
+
 ### Out of a drift, on a curve
 
 Until v0.1.53, a drift whose stick came back to the center ran on straight while its body alone

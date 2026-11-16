@@ -238,6 +238,17 @@ fn fires_turbo(personality: &Personality, car: &Car, track: &Track) -> bool {
 }
 
 fn drift_through_turns(personality: &Personality, car: &Car, track: &Track) -> CarInput {
+    if gap_within(car, track, GAP_STRAIGHT) {
+        // Lined up for a gap, the car lands where it pointed when it left the road: no drift is
+        // started this close to one, and one under way is straightened out of, the stick
+        // centered until the body is back in line.
+        if car.is_drifting() {
+            return CarInput::new(true, 0.0)
+                .with_jump(jumps(car, track))
+                .with_thrust(jumps(car, track));
+        }
+        return drive_as(personality, car, track);
+    }
     if car.is_drifting() {
         let steer = pursue(personality, car, track, DRIFT_LOOK_AHEAD_TIME);
         // Into the drift is toward its side, which is the sign of `drift` for the stick.
@@ -258,6 +269,19 @@ fn drift_through_turns(personality: &Personality, car: &Car, track: &Track) -> C
     } else {
         input
     }
+}
+
+/// How far before a gap's lip the autopilot stops drifting, in meters: a drift held into the air
+/// keeps its travel there, and one taken in at an angle flies off the road.
+const GAP_STRAIGHT: f32 = 90.0;
+
+/// Whether a gap's lip lies less than `meters` ahead of the car along the road.
+fn gap_within(car: &Car, track: &Track, meters: f32) -> bool {
+    let here = track.project(car.position).distance;
+    track
+        .gaps()
+        .iter()
+        .any(|gap| (gap.at - here).rem_euclid(track.length()) < meters)
 }
 
 /// How much the centerline turns over the next [`DRIFT_LOOK_AHEAD`] meters, in radians, positive
