@@ -184,6 +184,8 @@ mod tests {
                     let context = format!("{key}, {style:?}, {delay_ticks} ticks late");
                     println!("{context}: {report:?}");
                     let lap_time = report.lap_time.expect(&context);
+                    // Every gap is jumped: a fall is a lap the autopilot cannot drive.
+                    assert_eq!(report.falls, 0, "{context}: {report:?}");
                     if delay_ticks == 0 {
                         // Gripping may have to scrape through turns meant for drifting. A
                         // drifting lap gets a small budget instead of none: a slide worth having

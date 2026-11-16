@@ -73,6 +73,63 @@ pub struct TrackDescription {
     /// Patches of road that boost a car driving over them (see [`Pad`]).
     #[serde(default)]
     pub pads: Vec<Pad>,
+    /// Stretches where the road is missing, to be jumped (see [`Gap`]).
+    #[serde(default)]
+    pub gaps: Vec<Gap>,
+    /// Meters along the lap of the gates a car must pass, in order, between two crossings of the
+    /// start line for a lap to count, and where a car that falls comes back (see
+    /// docs/tracks.md#checkpoints). The start line is the first gate without being listed.
+    #[serde(default)]
+    pub checkpoints: Vec<f32>,
+}
+
+/// A gap: a stretch where the road is missing, from wall to wall. The walls carry on over it, as
+/// the girders of a broken bridge, and still hold a car in; a car on the road when it reaches the
+/// lip falls through, and comes back at the last checkpoint it passed. A hop clears a short one,
+/// the thruster a long one.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Encode, Decode)]
+#[serde(deny_unknown_fields)]
+pub struct Gap {
+    /// Meters along the lap from the start line where the road stops.
+    pub at: f32,
+    /// How long the stretch without road is, in meters.
+    pub length: f32,
+}
+
+/// The longest gap allowed: the thruster's whole tank at top speed, with room to spare, carries
+/// a car about 120 m.
+pub const MAX_GAP: f32 = 90.0;
+
+/// How far from the start line a gap must keep: behind it stands the starting grid, and ahead
+/// of it the start.
+const GAP_CLEAR_BEHIND_LINE: f32 = 60.0;
+const GAP_CLEAR_AFTER_LINE: f32 = 40.0;
+
+/// The closest two gates may be, and the most road a checkpoint must leave a car coming back to
+/// it before the next gap begins.
+const MIN_GATE_SPACING: f32 = 40.0;
+const CHECKPOINT_RUN_UP: f32 = 40.0;
+
+impl Gap {
+    /// Whether `distance` meters along a lap `length` meters round falls in the gap.
+    pub fn covers(&self, distance: f32, length: f32) -> bool {
+        (distance - self.at).rem_euclid(length) < self.length
+    }
+
+    fn validate(&self, length: f32) -> Result<(), &'static str> {
+        if !(self.at.is_finite() && (0.0..length).contains(&self.at)) {
+            return Err("the distance along the track must be between zero and its length");
+        }
+        if !(self.length.is_finite() && (4.0..=MAX_GAP).contains(&self.length)) {
+            return Err("the length must be from 4 to 90 meters");
+        }
+        let start = self.at;
+        let end = self.at + self.length;
+        if end > length - GAP_CLEAR_BEHIND_LINE || start < GAP_CLEAR_AFTER_LINE {
+            return Err("a gap must keep 60 m clear behind the start line and 40 m after it");
+        }
+        Ok(())
+    }
 }
 
 /// A speed pad: a patch of road, glowing chevrons on it, that boosts any car driving over it as a
@@ -391,6 +448,16 @@ pub enum TrackError {
         index: usize,
         reason: &'static str,
     },
+    /// A gap cannot be placed as written.
+    InvalidGap {
+        index: usize,
+        reason: &'static str,
+    },
+    /// A checkpoint cannot be placed as written.
+    InvalidCheckpoint {
+        index: usize,
+        reason: &'static str,
+    },
     /// A prop of the scenery cannot be placed or built as written.
     InvalidProp {
         index: usize,
@@ -418,6 +485,10 @@ impl fmt::Display for TrackError {
             ),
             Self::InvalidNarrows { index, reason } => write!(f, "narrows {index}: {reason}"),
             Self::InvalidPad { index, reason } => write!(f, "pad {index}: {reason}"),
+            Self::InvalidGap { index, reason } => write!(f, "gap {index}: {reason}"),
+            Self::InvalidCheckpoint { index, reason } => {
+                write!(f, "checkpoint {index}: {reason}")
+            }
             Self::InvalidProp { index, reason } => write!(f, "prop {index}: {reason}"),
             Self::NotALoop { total_angle } => write!(
                 f,
@@ -488,6 +559,9 @@ pub struct Track {
     /// A closed loop: the point after the last one is the first one.
     points: Vec<TrackPoint>,
     pads: Vec<Pad>,
+    gaps: Vec<Gap>,
+    /// Meters along the lap of every gate, the start line first.
+    gates: Vec<f32>,
 }
 
 impl Track {
@@ -553,6 +627,47 @@ impl Track {
             pad.validate(length as f32, half_width)
                 .map_err(|reason| TrackError::InvalidPad { index, reason })?;
         }
+        let lap = length as f32;
+        for (index, gap) in description.gaps.iter().enumerate() {
+            gap.validate(lap)
+                .map_err(|reason| TrackError::InvalidGap { index, reason })?;
+        }
+        for (index, pad) in description.pads.iter().enumerate() {
+            if description
+                .gaps
+                .iter()
+                .any(|gap| gap.covers(pad.at, lap) || gap.covers(pad.at + pad.length, lap))
+            {
+                return Err(TrackError::InvalidPad {
+                    index,
+                    reason: "a pad cannot lie over a gap",
+                });
+            }
+        }
+        let mut previous = 0.0;
+        for (index, &at) in description.checkpoints.iter().enumerate() {
+            let invalid = |reason| TrackError::InvalidCheckpoint { index, reason };
+            if !(at.is_finite() && (0.0..lap).contains(&at)) {
+                return Err(invalid(
+                    "the distance along the track must be between zero and its length",
+                ));
+            }
+            if at - previous < MIN_GATE_SPACING || lap - at < MIN_GATE_SPACING {
+                return Err(invalid(
+                    "checkpoints must be in order along the lap, 40 m from each other and the line",
+                ));
+            }
+            if description
+                .gaps
+                .iter()
+                .any(|gap| (gap.at - at).rem_euclid(lap) < CHECKPOINT_RUN_UP || gap.covers(at, lap))
+            {
+                return Err(invalid(
+                    "a checkpoint cannot lie in a gap, nor less than 40 m before one",
+                ));
+            }
+            previous = at;
+        }
         for (index, prop) in description.scenery.iter().enumerate() {
             prop.validate(length as f32)
                 .map_err(|reason| TrackError::InvalidProp { index, reason })?;
@@ -571,6 +686,10 @@ impl Track {
             spacing: spacing as f32,
             points,
             pads: description.pads.clone(),
+            gaps: description.gaps.clone(),
+            gates: std::iter::once(0.0)
+                .chain(description.checkpoints.iter().copied())
+                .collect(),
         })
     }
 
@@ -581,6 +700,22 @@ impl Track {
     /// The speed pads, in the order the file gives them.
     pub fn pads(&self) -> &[Pad] {
         &self.pads
+    }
+
+    /// The gaps in the road, in the order the file gives them.
+    pub fn gaps(&self) -> &[Gap] {
+        &self.gaps
+    }
+
+    /// Whether the road is missing `distance` meters along the lap.
+    pub fn in_gap(&self, distance: f32) -> bool {
+        self.gaps.iter().any(|gap| gap.covers(distance, self.length))
+    }
+
+    /// Meters along the lap of every gate a lap passes, in order: the start line, at 0, then each
+    /// checkpoint.
+    pub fn gates(&self) -> &[f32] {
+        &self.gates
     }
 
     /// Whether a car at `projection` is on a speed pad.
@@ -1002,6 +1137,43 @@ mod tests {
 
     use super::*;
     use crate::test_support::{banked_oval, oval};
+
+    /// A gap must keep clear of the start line, and a checkpoint clear of the gaps and in order.
+    #[test]
+    fn gaps_and_checkpoints_are_placed_with_room() {
+        let lap = Track::build(&oval(100.0, 40.0, 20.0)).unwrap().length();
+        let build = |gaps: Vec<Gap>, checkpoints: Vec<f32>| {
+            let mut description = oval(100.0, 40.0, 20.0);
+            description.gaps = gaps;
+            description.checkpoints = checkpoints;
+            Track::build(&description)
+        };
+        let gap = |at: f32, length: f32| Gap { at, length };
+        assert!(build(vec![gap(100.0, 20.0)], vec![50.0]).is_ok());
+        assert!(matches!(
+            build(vec![gap(10.0, 20.0)], vec![]),
+            Err(TrackError::InvalidGap { .. })
+        ));
+        assert!(matches!(
+            build(vec![gap(lap - 70.0, 20.0)], vec![]),
+            Err(TrackError::InvalidGap { .. })
+        ));
+        assert!(matches!(
+            build(vec![gap(100.0, 20.0)], vec![110.0]),
+            Err(TrackError::InvalidCheckpoint { .. })
+        ));
+        assert!(matches!(
+            build(vec![gap(100.0, 20.0)], vec![80.0]),
+            Err(TrackError::InvalidCheckpoint { .. })
+        ));
+        assert!(matches!(
+            build(vec![], vec![200.0, 150.0]),
+            Err(TrackError::InvalidCheckpoint { .. })
+        ));
+        let track = build(vec![gap(100.0, 20.0)], vec![50.0, 250.0]).unwrap();
+        assert_eq!(track.gates(), &[0.0, 50.0, 250.0]);
+        assert!(track.in_gap(110.0) && !track.in_gap(99.0) && !track.in_gap(121.0));
+    }
 
     /// A pad must lie on the lap and on the road, between its walls.
     #[test]

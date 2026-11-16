@@ -548,7 +548,7 @@ mod tests {
         use glam::Vec2;
 
         use star_racer_sim::track::scenery::{Prop, Side};
-        use star_racer_sim::track::{Elevation, Narrows, Pad, Segment};
+        use star_racer_sim::track::{Elevation, Gap, Narrows, Pad, Segment};
 
         let welcome = ServerMessage::Welcome {
             tracks: vec![TrackInfo {
@@ -613,6 +613,11 @@ mod tests {
                         length: 10.0,
                         width: 6.0,
                     }],
+                    gaps: vec![Gap {
+                        at: 120.0,
+                        length: 24.0,
+                    }],
+                    checkpoints: vec![90.0, 300.0],
                 },
             }],
             identity: Identity {
@@ -679,6 +684,8 @@ mod tests {
                     jump_held: 0.4,
                     thrust: 0.9,
                     thrusting: true,
+                    checkpoint: 2,
+                    respawns: 3,
                 },
                 progress: 812.5,
                 drift_gauge: 0.4,

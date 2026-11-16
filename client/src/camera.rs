@@ -190,6 +190,10 @@ enum Shot {
 /// How much of a car's height over the road, in a jump, the camera rises with it.
 const FOLLOW_ALTITUDE: f32 = 0.7;
 
+/// How far the camera follows a car falling through a gap, in meters under the road, before it
+/// stays there and watches it drop away.
+const FALL_FOLLOWED: f32 = 4.0;
+
 fn spawn_camera_and_light(mut commands: Commands) {
     commands.spawn((
         MainCamera,
@@ -281,7 +285,7 @@ fn follow_car(
     // the car lifting off the road rather than the road dropping away.
     let car_position = world::position(
         car.position,
-        view.followed_height + car.altitude * FOLLOW_ALTITUDE,
+        view.followed_height + car.altitude.max(-FALL_FOLLOWED) * FOLLOW_ALTITUDE,
     );
     let slope = view.followed_gradient;
     let fov = if finished {
@@ -635,6 +639,8 @@ mod tests {
             narrows: Vec::new(),
             scenery: Vec::new(),
             pads: Vec::new(),
+            gaps: Vec::new(),
+            checkpoints: Vec::new(),
         })
         .unwrap()
     }

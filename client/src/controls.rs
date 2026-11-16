@@ -113,7 +113,9 @@ fn send_input(
                 let held = script
                     .jump
                     .is_some_and(|hold| time.elapsed_secs() % crate::settings::JUMP_EVERY < hold);
-                autopilot::drive_in_style_as(style, &personality, &car, &track.0).with_jump(held)
+                // `--jump` presses on top of the jumps the autopilot makes over gaps.
+                let input = autopilot::drive_in_style_as(style, &personality, &car, &track.0);
+                input.with_jump(input.jump || held)
             }
             _ => CarInput::default(),
         }

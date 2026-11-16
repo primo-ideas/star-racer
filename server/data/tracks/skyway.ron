@@ -109,6 +109,9 @@
     // Speed pads: glowing chevrons on the road that boost whoever drives over them (see
     // docs/tracks.md#speed-pads). At the exits of the bowl, the spiral and the sink, and twice down
     // the dive, each off to one side, so a line that takes them is a choice.
+    // The gates a lap passes in order (see docs/tracks.md#checkpoints): at the top of the
+    // switchback, in the sky bowl and in the sink.
+    checkpoints: [470.0, 1040.0, 1470.0],
     pads: [
         (at: 372.0, lateral: 5.0),
         (at: 745.0, lateral: -5.0),

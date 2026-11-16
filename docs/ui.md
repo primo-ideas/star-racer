@@ -382,6 +382,8 @@ The autopilot waits for the start on screen before pressing the accelerator, so 
 graded S, and a capture about 14 s after entering a lobby of one shows the grade over "GO!".
 
 With `--autopilot`, `--laps 1 --min-players 1` and a `--capture-delay` of about 33 s, the capture
-shows the results of a race. `--autopilot-drift` drives the same lap drifting through the turns, so
+shows the results of a race. A checkpoint passed is announced where the start grade was, CHECKPOINT
+and the gate's number out of the lap's, in green for 1.4 s, and a car brought back after a fall,
+BACK ON TRACK in magenta. `--autopilot-drift` drives the same lap drifting through the turns, so
 a capture mid-lap shows a car sliding with the DRIFT gauge filling. The game feel of the menus
 (animation, focus, gamepad) is left for a human to judge.

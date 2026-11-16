@@ -91,7 +91,28 @@ pub struct Car {
     pub thrust: f32,
     /// Whether the thruster pushed the car up this tick, for its flames and its sound.
     pub thrusting: bool,
+    /// The last gate of the track the car passed in order (see [`Track::gates`]): 0 for the start
+    /// line, then each checkpoint. A car that falls through a gap comes back there.
+    pub checkpoint: u8,
+    /// How many times the car has come back to a checkpoint after a fall, so whoever counts its
+    /// progress knows it was moved rather than driven.
+    pub respawns: u16,
 }
+
+/// How far under the road a car falling through a gap drops before it comes back at its last
+/// checkpoint, in meters: about 1.5 s of falling.
+pub const FALL_DEPTH: f32 = 30.0;
+
+/// How far under the lip of the road a car may have sunk and still land on it, in meters: a
+/// jump that barely makes it lands; one under the slab has missed.
+pub const LIP: f32 = 0.6;
+
+/// A car brought back to a checkpoint sets off at this share of top speed.
+pub const RESPAWN_SPEED_SHARE: f32 = 0.6;
+
+/// The most a car can move along the track in one tick and still be driving rather than being
+/// moved: 600 m/s.
+pub const MAX_STEP: f32 = 10.0;
 
 /// How many charges the turbo meter holds.
 pub const TURBO_CHARGES: f32 = 3.0;
@@ -475,30 +496,79 @@ impl Car {
             .clamp(0.0, tuning.drift_max_boost)
     }
 
-    /// Whether the car is off the road, in a jump.
+    /// Whether the car is off the road: in a jump, or falling through a gap.
     pub fn is_airborne(&self) -> bool {
-        self.altitude > 0.0
+        self.altitude != 0.0
+    }
+
+    /// Whether the car has fallen under the road through a gap, too low to land on it again.
+    pub fn is_falling(&self) -> bool {
+        self.altitude <= -LIP
+    }
+
+    /// Brings a car that fell back onto the road at the last gate it passed, on the centerline,
+    /// heading down the road at [`RESPAWN_SPEED_SHARE`] of top speed. It keeps its turbo meter;
+    /// everything it was doing in the air is gone.
+    fn respawn(&mut self, tuning: &CarTuning, track: &Track) {
+        let gate = track.gates()[usize::from(self.checkpoint).min(track.gates().len() - 1)];
+        let point = track.point_at(gate);
+        let heading = point.direction.to_angle();
+        *self = Self {
+            position: point.position,
+            velocity: point.direction * tuning.top_speed * RESPAWN_SPEED_SHARE,
+            heading,
+            turbo: self.turbo,
+            thrust: tuning.thrust_seconds,
+            checkpoint: self.checkpoint,
+            respawns: self.respawns.wrapping_add(1),
+            // Held through the fall, the buttons must be let go before they count again.
+            drift_button: self.drift_button,
+            turbo_button: self.turbo_button,
+            jump_button: self.jump_button,
+            ..Self::default()
+        };
+    }
+
+    /// Moves the car's last gate on when it drives across the next one, from `before` to `after`
+    /// meters along the lap. Only the next gate counts, crossed forward by a step a car can
+    /// drive: gates are passed in order or not at all.
+    fn pass_gates(&mut self, track: &Track, before: f32, after: f32) {
+        let gates = track.gates();
+        let next = (usize::from(self.checkpoint) + 1) % gates.len();
+        let step = crate::race::wrapped_delta(after - before, track.length());
+        if step > 0.0
+            && step < MAX_STEP
+            && (gates[next] - before).rem_euclid(track.length()) < step
+        {
+            self.checkpoint = next as u8;
+        }
     }
 
     /// The jump and the thruster: a press on the road lifts the car, a hold keeps the thruster
     /// pushing while the tank lasts, and the pull of `air_gravity` brings it back down onto the
     /// road under it.
-    fn fly(&mut self, input: CarInput, tuning: &CarTuning, dt: f32) {
+    ///
+    /// Over a gap there is no road to come down onto: a car that reaches it on the road falls
+    /// (`over_gap`), and lands again only if it gets back over road before it has sunk under its
+    /// lip.
+    fn fly(&mut self, input: CarInput, tuning: &CarTuning, over_gap: bool, dt: f32) {
         let pressed = input.jump && !self.jump_button;
         self.jump_button = input.jump;
         self.thrusting = false;
-        if !self.is_airborne() {
+        if self.altitude == 0.0 {
             self.thrust = (self.thrust + tuning.thrust_recharge * dt).min(tuning.thrust_seconds);
             self.jump_held = 0.0;
-            if !pressed {
+            if pressed {
+                // A press on the very tick the road runs out still jumps.
+                self.climb = tuning.jump_speed;
+            } else if !over_gap {
                 return;
             }
-            self.climb = tuning.jump_speed;
         }
         let mut lift = -tuning.air_gravity;
         if input.jump {
             self.jump_held += dt;
-            if self.jump_held > tuning.thrust_delay && self.thrust > 0.0 {
+            if self.jump_held > tuning.thrust_delay && self.thrust > 0.0 && !self.is_falling() {
                 // Weaker the nearer the ceiling, so the car settles under it instead of hitting
                 // it; nothing at all above it.
                 let room = (1.0 - self.altitude / tuning.thrust_ceiling).clamp(0.0, 1.0);
@@ -511,10 +581,14 @@ impl Car {
             self.jump_held = f32::MAX;
         }
         self.climb += lift * dt;
+        let was_falling = self.is_falling();
         self.altitude += self.climb * dt;
-        if self.altitude <= 0.0 {
+        if self.altitude <= 0.0 && !over_gap && !was_falling && self.altitude > -LIP {
             self.altitude = 0.0;
             self.climb = 0.0;
+        } else if self.altitude == 0.0 {
+            // Rolled off the lip with no climb at all: the fall starts on the next tick.
+            self.altitude = -f32::EPSILON;
         }
     }
 
@@ -526,6 +600,7 @@ impl Car {
     /// Advances the car by one tick.
     pub fn step(&mut self, input: CarInput, tuning: &CarTuning, track: &Track) {
         let dt = TICK_SECONDS;
+        let before = track.project(self.position).distance;
         let (charge, turbo) = (self.drift_charge, self.turbo);
         self.fire_turbo(input, tuning, dt);
         // The steering moves on the very tick the stick does, and eases in as it gets there.
@@ -548,13 +623,16 @@ impl Car {
             self.grip(input, tuning, dt);
         }
         self.position += self.velocity * dt;
-        self.fly(input, tuning, dt);
+        let here = track.project(self.position);
+        self.fly(input, tuning, track.in_gap(here.distance), dt);
+        if self.altitude < -FALL_DEPTH {
+            self.respawn(tuning, track);
+            return;
+        }
+        self.pass_gates(track, before, here.distance);
         // A speed pad under the car boosts it, as long as it is on it, and for `pad_boost` after;
         // a car flying over it is not on it.
-        if !self.is_airborne()
-            && !track.pads().is_empty()
-            && track.on_pad(&track.project(self.position))
-        {
+        if !self.is_airborne() && track.on_pad(&here) {
             self.boost = self.boost.max(tuning.pad_boost);
         }
 
@@ -1003,6 +1081,104 @@ mod tests {
         let mut car = landed;
         run(&mut car, ACCELERATE, 3.0, &track);
         assert!((car.thrust - tuning().thrust_seconds).abs() < 1e-3, "{}", car.thrust);
+    }
+
+    /// The open track with a gap `length` meters long 100 m past the line, and a checkpoint 50 m
+    /// before it.
+    fn gapped(length: f32) -> Track {
+        use crate::track::Gap;
+        let mut description = open_track();
+        description.gaps = vec![Gap { at: 100.0, length }];
+        description.checkpoints = vec![50.0];
+        Track::build(&description).unwrap()
+    }
+
+    /// Drives `car` down the open track at top speed for `seconds`, pressing the jump while the
+    /// car is between `from` and `to` meters along it.
+    fn run_at_the_gap(car: &mut Car, track: &Track, seconds: f32, from: f32, to: f32) {
+        for _ in 0..ticks(seconds) {
+            let at = track_distance(track, car);
+            let jump = (from..to).contains(&at) && car.respawns == 0;
+            car.step(ACCELERATE.with_jump(jump), &tuning(), track);
+        }
+    }
+
+    fn track_distance(track: &Track, car: &Car) -> f32 {
+        track.project(car.position).distance
+    }
+
+    fn flying_start() -> Car {
+        let mut car = Car::new(Vec2::ZERO, 0.0);
+        car.velocity = Vec2::new(tuning().top_speed, 0.0);
+        car.thrust = tuning().thrust_seconds;
+        car
+    }
+
+    /// A car that drives onto a gap falls through it, and comes back on the road at the last
+    /// checkpoint it passed, heading down the road, keeping its turbo meter.
+    #[test]
+    fn a_car_falls_through_a_gap_and_comes_back_at_its_checkpoint() {
+        let track = gapped(30.0);
+        let mut car = flying_start();
+        car.turbo = 2.0;
+        let mut lowest = 0.0_f32;
+        for _ in 0..ticks(6.0) {
+            car.step(ACCELERATE, &tuning(), &track);
+            lowest = lowest.min(car.altitude);
+            if car.respawns > 0 {
+                break;
+            }
+        }
+        assert_eq!(car.respawns, 1, "never came back");
+        assert!(lowest < -FALL_DEPTH + 1.0, "fell only to {lowest} m");
+        assert_eq!(car.checkpoint, 1);
+        assert!(car.position.distance(track.point_at(50.0).position) < 0.1);
+        assert_eq!(car.altitude, 0.0);
+        assert!((car.velocity.length() - RESPAWN_SPEED_SHARE * tuning().top_speed).abs() < 0.1);
+        assert_eq!(car.turbo, 2.0);
+    }
+
+    /// A hop clears a short gap, not a long one; the thruster clears the long one.
+    #[test]
+    fn a_hop_clears_a_short_gap_and_the_thruster_a_long_one() {
+        // Pressed for a tick or two a few meters before the lip: a hop.
+        let short = gapped(12.0);
+        let mut car = flying_start();
+        run_at_the_gap(&mut car, &short, 5.0, 94.0, 95.5);
+        assert_eq!(car.respawns, 0, "a hop fell into a 12 m gap");
+        assert_eq!(car.altitude, 0.0);
+
+        let long = gapped(50.0);
+        let mut car = flying_start();
+        run_at_the_gap(&mut car, &long, 6.0, 94.0, 95.5);
+        assert_eq!(car.respawns, 1, "a hop cleared a 50 m gap");
+
+        // Held from there across the gap: the thruster.
+        let mut car = flying_start();
+        run_at_the_gap(&mut car, &long, 6.0, 94.0, 150.0);
+        assert_eq!(car.respawns, 0, "the thruster fell into a 50 m gap");
+        assert_eq!(car.altitude, 0.0);
+        assert!(track_distance(&long, &car) > 160.0);
+    }
+
+    /// Gates are passed in order: a car that skipped one passes none after it.
+    #[test]
+    fn gates_are_passed_in_order() {
+        let mut description = open_track();
+        description.checkpoints = vec![300.0, 600.0];
+        let track = Track::build(&description).unwrap();
+        let drive_from = |at: f32, checkpoint: u8| {
+            let mut car = Car::new(track.point_at(at).position, 0.0);
+            car.velocity = Vec2::new(tuning().top_speed, 0.0);
+            car.checkpoint = checkpoint;
+            for _ in 0..ticks(1.0) {
+                car.step(ACCELERATE, &tuning(), &track);
+            }
+            car.checkpoint
+        };
+        assert_eq!(drive_from(280.0, 0), 1, "the first checkpoint was not passed");
+        assert_eq!(drive_from(580.0, 1), 2, "the second checkpoint was not passed");
+        assert_eq!(drive_from(580.0, 0), 0, "a checkpoint was passed out of order");
     }
 
     /// A car in the air flies over a speed pad without being boosted.

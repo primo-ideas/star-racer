@@ -152,9 +152,11 @@ fn show_charge(
         }
         return;
     }
+    // Painted on the road round the car: not while the car is off it, in a jump or over a gap,
+    // where the HUD's gauge still shows the charge.
     let drifting = view
         .own_snapshot
-        .filter(|snapshot| snapshot.car.is_drifting());
+        .filter(|snapshot| snapshot.car.is_drifting() && !snapshot.car.is_airborne());
     let (Some(snapshot), Some(track)) = (drifting, track) else {
         *visibility = Visibility::Hidden;
         return;

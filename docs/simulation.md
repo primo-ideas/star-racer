@@ -504,8 +504,25 @@ On screen the car rises by its altitude along the road's own up while its shadow
 under it stay on the road, shrinking with the height (`stay_on_the_road` in `race.rs`); a flame
 points down from under the hull while the thruster burns; the chase camera rises 0.7 of the
 height with the car, so the car is seen lifting off; and the HUD shows a THRUST gauge, the tank,
-while the car is in the air or the tank is filling. What the jump is for is the next level's to
-say: the skyway was drawn before it, with nothing to jump over.
+while the car is in the air or the tank is filling. What the jump is for, the rift says
+(v0.1.49): its road is missing in four places (see [Tracks](tracks.md#gaps)).
+
+### Falling, and coming back
+
+Over a [gap](tracks.md#gaps) there is no road to come down onto. A car that reaches one on the
+road, or comes down over one, falls: `air_gravity` pulls it under the road, and once it has sunk
+past `LIP` (0.6 m) it can no longer land, even if it gets back over road. A jump that barely makes
+it lands; one under the slab has missed. Under `FALL_DEPTH` (30 m, about 1.5 s of falling) the car
+is brought back to the last [checkpoint](tracks.md#checkpoints) it passed (`Car::checkpoint`), on
+the centerline, heading down the road at `RESPAWN_SPEED_SHARE` (0.6) of top speed, with its turbo
+meter and a full tank, and nothing else of what it was doing. `Car::respawns` counts the times, so
+the server's progress knows the car was moved rather than driven. It is all in the car, so a fall
+is predicted like the rest; the camera follows it 4 m down and watches it drop away, the drift's
+arc is not painted while the car is off the road, and the HUD says BACK ON TRACK.
+
+A car passes the next gate of the lap, and only the next, when a tick carries it across forward by
+less than `MAX_STEP`: gates are passed in order or not at all. The HUD names each one passed:
+CHECKPOINT 2/5.
 
 ### Accelerating, no brake
 
