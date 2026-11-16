@@ -600,6 +600,12 @@ fn spawn_hud(
                             controls.turbo.label(Input::Gamepad),
                             "Turbo"
                         ),
+                        hint(
+                            &fonts,
+                            controls.key_label(Action::Jump),
+                            controls.jump.label(Input::Gamepad),
+                            "Jump"
+                        ),
                         hint(&fonts, "Esc", "Start", "Leave"),
                     ],
                 ));
@@ -989,6 +995,25 @@ fn build_model(
                 model.shown.insert(Block::Gauge);
                 model.text(Slot::GaugeLabel, "TURBO BOOST", theme::MAGENTA);
                 model.gauge = (snapshot.turbo_gauge, theme::MAGENTA);
+            } else if let Some(tuning) = membership
+                .state
+                .as_ref()
+                .map(|state| &state.tuning)
+                .filter(|tuning| {
+                    tuning.thrust_seconds > 0.0
+                        && (snapshot.car.is_airborne()
+                            || snapshot.car.thrust < tuning.thrust_seconds - 1e-3)
+                })
+            {
+                // In the air, or the tank still filling after a flight: what is left of it.
+                model.shown.insert(Block::Gauge);
+                let color = if snapshot.car.thrusting {
+                    theme::TEXT
+                } else {
+                    theme::NEON
+                };
+                model.text(Slot::GaugeLabel, "THRUST", color);
+                model.gauge = (snapshot.car.thrust / tuning.thrust_seconds, theme::NEON);
             } else if snapshot.car.boost > 0.0 {
                 model.shown.insert(Block::Gauge);
                 model.text(Slot::GaugeLabel, "BOOST", theme::AMBER);

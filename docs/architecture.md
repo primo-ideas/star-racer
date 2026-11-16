@@ -367,6 +367,8 @@ included. On a slow machine, always build the same way, with `--workspace`.
 - `--autopilot` lets the shared autopilot drive the client's car, through the same input path as
   a player. With `--capture-delay`, it shows the car mid-lap, the camera behind it.
   `--autopilot-drift` uses the drifting style, so the capture catches a slide and the DRIFT gauge.
+  `--jump <seconds>` has the autopilot also press the jump every four seconds of the run and hold
+  it that long: 0.05 hops, 2 flies on the thruster (with `--capture-delay` about 9, mid-flight).
 - `--identity <dir>` points a client at its own key, to run several players on one machine.
 - Client unit tests cover the snapshot interpolation and clock estimate, the world mapping, quad
   winding, generated nicknames and HUD formatting, and the cars' springs: a body pitching up as

@@ -27,15 +27,17 @@ pub enum Action {
     SteerRight,
     Drift,
     Turbo,
+    Jump,
 }
 
 impl Action {
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::Accelerate,
         Self::SteerLeft,
         Self::SteerRight,
         Self::Drift,
         Self::Turbo,
+        Self::Jump,
     ];
 
     pub fn label(self) -> &'static str {
@@ -45,6 +47,7 @@ impl Action {
             Self::SteerRight => "Steer right",
             Self::Drift => "Drift",
             Self::Turbo => "Turbo",
+            Self::Jump => "Jump",
         }
     }
 }
@@ -115,6 +118,9 @@ pub struct Bindings {
     pub steer_right: Binding,
     pub drift: Binding,
     pub turbo: Binding,
+    /// Pressed, a hop; held, the thruster (since v0.1.48). Space and A, as in Rocket Racing,
+    /// which moved the drift's second key from Space to the right Shift.
+    pub jump: Binding,
 }
 
 impl Default for Bindings {
@@ -135,10 +141,11 @@ impl Default for Bindings {
             ),
             drift: Binding::new(
                 KeyCode::ShiftLeft,
-                KeyCode::Space,
+                KeyCode::ShiftRight,
                 GamepadButton::RightTrigger2,
             ),
             turbo: Binding::new(KeyCode::KeyE, KeyCode::ArrowDown, GamepadButton::North),
+            jump: Binding::new(KeyCode::Space, KeyCode::KeyQ, GamepadButton::South),
         }
     }
 }
@@ -151,7 +158,37 @@ impl Bindings {
             Action::SteerRight => &self.steer_right,
             Action::Drift => &self.drift,
             Action::Turbo => &self.turbo,
+            Action::Jump => &self.jump,
         }
+    }
+
+    /// The same bindings with every key and button the jump holds taken from any other action
+    /// that held it too. Choices saved before the jump existed bound Space to the drift, and the
+    /// jump's default is Space: it wins it, and the drift gets the right Shift back in its place
+    /// if that is free.
+    pub fn with_jump_free(mut self) -> Self {
+        let jump = self.jump;
+        for action in Action::ALL {
+            if action == Action::Jump {
+                continue;
+            }
+            let binding = self.of_mut(action);
+            for slot in [&mut binding.key, &mut binding.alternate] {
+                if slot.0.is_some() && jump.keys().any(|key| Some(key) == slot.0) {
+                    slot.0 = None;
+                }
+            }
+            if binding.gamepad.0.is_some() && binding.gamepad.0 == jump.gamepad.0 {
+                binding.gamepad.0 = None;
+            }
+        }
+        let taken = Action::ALL
+            .iter()
+            .any(|action| self.of(*action).keys().any(|key| key == KeyCode::ShiftRight));
+        if self.drift.alternate.0.is_none() && !taken {
+            self.drift.alternate.0 = Some(KeyCode::ShiftRight);
+        }
+        self
     }
 
     fn of_mut(&mut self, action: Action) -> &mut Binding {
@@ -161,6 +198,7 @@ impl Bindings {
             Action::SteerRight => &mut self.steer_right,
             Action::Drift => &mut self.drift,
             Action::Turbo => &mut self.turbo,
+            Action::Jump => &mut self.jump,
         }
     }
 
@@ -426,12 +464,28 @@ mod tests {
         let mut bindings = Bindings::default();
         bindings.bind_key(Action::Turbo, false, KeyCode::Space);
         assert_eq!(bindings.turbo.key.0, Some(KeyCode::Space));
-        assert_eq!(bindings.drift.alternate.0, None);
+        assert_eq!(bindings.jump.key.0, None);
+        assert_eq!(bindings.jump.alternate.0, Some(KeyCode::KeyQ));
         assert_eq!(bindings.drift.key.0, Some(KeyCode::ShiftLeft));
 
         bindings.bind_button(Action::Turbo, GamepadButton::RightTrigger2);
         assert_eq!(bindings.drift.gamepad.0, None);
         assert_eq!(bindings.drift.label(Input::Gamepad), UNBOUND);
+    }
+
+    /// Choices saved before the jump existed had Space on the drift: the jump takes it, and the
+    /// drift gets the right Shift in its place.
+    #[test]
+    fn the_jump_takes_space_from_an_old_drift() {
+        let mut old = Bindings::default();
+        old.drift.alternate.0 = Some(KeyCode::Space);
+        old.drift.gamepad.0 = Some(GamepadButton::South);
+        let bindings = old.with_jump_free();
+        assert_eq!(bindings.jump.key.0, Some(KeyCode::Space));
+        assert_eq!(bindings.drift.key.0, Some(KeyCode::ShiftLeft));
+        assert_eq!(bindings.drift.alternate.0, Some(KeyCode::ShiftRight));
+        assert_eq!(bindings.drift.gamepad.0, None);
+        assert_eq!(Bindings::default().with_jump_free(), Bindings::default());
     }
 
     /// A name from another version is nothing bound, not a file that cannot be read.
