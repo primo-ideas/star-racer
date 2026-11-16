@@ -1,5 +1,5 @@
-// The Odyssey, the one circuit the game ships (v0.1.50): a long lap through the sky, 30 m from
-// wall to wall and 5.22 km round, drawn for everything the car does. It runs fast where the car
+// The Odyssey, the one circuit the game ships (v0.1.50): a long lap through the sky, 40 m from
+// wall to wall and 5.28 km round, drawn for everything the car does. It runs fast where the car
 // wants to run, folds into tight banked loops where it wants to drift, breaks off four times
 // where it has to jump, and hides three shortcuts for whoever looks for them.
 //
@@ -37,7 +37,7 @@
 // solved for so the loop closes. The format is described in docs/tracks.md.
 (
     name: "Odyssey",
-    width: 30.0,
+    width: 40.0,
     segments: [
         // The launch, over the hop.
         Straight(length: 240.0),
@@ -47,7 +47,7 @@
         Turn(angle: -35.0, radius: 110.0, transition: 22.0, banking: 12.0),
         Straight(length: 70.0),
         // The keyhole.
-        Turn(angle: -110.0, radius: 34.0, transition: 18.0, banking: 22.0),
+        Turn(angle: -110.0, radius: 34.0, transition: 18.0, banking: 14.0),
         Straight(length: 40.0),
         Turn(angle: 220.0, radius: 46.0, transition: 24.0, banking: 30.0),
         Straight(length: 40.0),
@@ -63,11 +63,11 @@
         Turn(angle: -40.0, radius: 70.0, transition: 22.0, banking: 16.0),
         Straight(length: 60.0),
         // The balcony.
-        Turn(angle: -120.0, radius: 32.0, transition: 16.0, banking: 20.0),
-        Straight(length: 18.0),
-        Turn(angle: 240.0, radius: 44.0, transition: 22.0, banking: 30.0),
-        Straight(length: 18.0),
-        Turn(angle: -120.0, radius: 32.0, transition: 16.0, banking: 20.0),
+        Turn(angle: -110.0, radius: 32.0, transition: 16.0, banking: 20.0),
+        Straight(length: 30.0),
+        Turn(angle: 220.0, radius: 52.0, transition: 22.0, banking: 30.0),
+        Straight(length: 30.0),
+        Turn(angle: -110.0, radius: 32.0, transition: 16.0, banking: 20.0),
         Straight(length: 80.0),
         // The sky bowl.
         Turn(angle: 90.0, radius: 60.0, transition: 26.0, banking: 28.0),
@@ -97,7 +97,7 @@
         Turn(angle: 216.0, radius: 52.0, transition: 26.0, banking: 30.0),
         Straight(length: 25.0),
         Turn(angle: -108.0, radius: 40.0, transition: 20.0, banking: 20.0),
-        Straight(length: /*B*/226.32),
+        Straight(length: /*B*/256.00),
         // The last corner.
         Turn(angle: 90.0, radius: 60.0, transition: 26.0, banking: 28.0),
         // The run home. The starting grid sits along it.
@@ -112,37 +112,37 @@
         (at: 1317.0, height: 24.0), (at: 1442.1, height: 30.0), (at: 1603.1, height: 33.0),
         (at: 1672.0, height: 36.0), (at: 1807.0, height: 46.0), (at: 1933.0, height: 56.0),
         // The balcony, winding down: it comes back 26 m under where it left.
-        (at: 1993.0, height: 60.0), (at: 2083.8, height: 56.0), (at: 2196.1, height: 48.0),
-        (at: 2314.4, height: 39.0), (at: 2401.2, height: 34.0), (at: 2481.1, height: 34.0),
+        (at: 1993.0, height: 60.0), (at: 2083.2, height: 56.0), (at: 2210.1, height: 48.0),
+        (at: 2345.4, height: 39.0), (at: 2429.4, height: 34.0), (at: 2509.3, height: 34.0),
         // The sky bowl and the gate, then the dive to the rift, the bottom of the lap.
-        (at: 2545.1, height: 36.0), (at: 2603.3, height: 38.0), (at: 2646.1, height: 38.0),
-        (at: 2746.9, height: 26.0), (at: 2891.7, height: 14.0), (at: 3027.7, height: 8.0),
-        (at: 3287.3, height: 8.0), (at: 3411.7, height: 12.0), (at: 3542.7, height: 10.0),
+        (at: 2573.3, height: 36.0), (at: 2631.5, height: 38.0), (at: 2674.3, height: 38.0),
+        (at: 2775.1, height: 26.0), (at: 2919.9, height: 14.0), (at: 3055.9, height: 8.0),
+        (at: 3315.5, height: 8.0), (at: 3439.9, height: 12.0), (at: 3570.9, height: 10.0),
         // Up the west corner and the esses to the long way round, and home.
-        (at: 3692.7, height: 12.0), (at: 3761.7, height: 18.0), (at: 3828.7, height: 22.0),
-        (at: 3986.7, height: 28.0), (at: 4121.7, height: 34.0), (at: 4257.7, height: 36.0),
-        (at: 4493.2, height: 32.0), (at: 4720.5, height: 30.0), (at: 5004.6, height: 30.0),
-        (at: 5124.6, height: 30.0),
+        (at: 3720.9, height: 12.0), (at: 3789.9, height: 18.0), (at: 3856.9, height: 22.0),
+        (at: 4014.9, height: 28.0), (at: 4149.9, height: 34.0), (at: 4285.9, height: 36.0),
+        (at: 4521.4, height: 32.0), (at: 4748.7, height: 30.0), (at: 5062.5, height: 30.0),
+        (at: 5182.5, height: 30.0),
     ],
     // The gate: the top straight pinched to 18 m before the dive.
     narrows: [
-        (at: 2624.7, length: 60.0, width: 18.0, blend: 30.0),
+        (at: 2652.9, length: 60.0, width: 18.0, blend: 30.0),
     ],
     // Where the road is missing (docs/tracks.md#gaps): a hop clears the first and the last, the
     // leap and the rift are the thruster's.
     gaps: [
         (at: 150.0, length: 14.0),
         (at: 1475.0, length: 110.0),
-        (at: 3060.0, length: 170.0),
-        (at: 3611.7, length: 16.0),
+        (at: 3088.2, length: 170.0),
+        (at: 3639.9, length: 16.0),
     ],
     // The gates a lap passes in order, and where a car that is lost comes back
     // (docs/tracks.md#checkpoints): one before and one after each loop, never one inside, and one
     // before each gap.
-    checkpoints: [560.0, 1147.0, 1427.0, 1947.0, 2445.1, 2731.9, 3011.7, 3531.7, 3861.7, 4211.7, 4821.8],
+    checkpoints: [560.0, 1147.0, 1427.0, 1947.0, 2473.3, 2760.1, 3039.9, 3559.9, 3889.9, 4239.9, 4863.2],
     // The balcony's missing wall (docs/tracks.md#breaches).
     breaches: [
-        (at: 1996.8, length: 45.0, side: Left),
+        (at: 1996.6, length: 45.0, side: Left),
     ],
     // Speed pads: before the hop, on the keyhole's line, before the leap, toward the breach, down
     // the dive, into the rift, out of the scree and onto the run home.
@@ -151,19 +151,19 @@
         (at: 610.0, lateral: 8.0),
         (at: 1457.4, lateral: 0.0),
         (at: 1957.0, lateral: 9.0),
-        (at: 2663.3, lateral: -6.0),
-        (at: 3041.9, lateral: 0.0),
-        (at: 3551.7, lateral: 5.0),
-        (at: 4812.2, lateral: 0.0),
+        (at: 2691.5, lateral: -6.0),
+        (at: 3070.1, lateral: 0.0),
+        (at: 3579.9, lateral: 5.0),
+        (at: 4852.4, lateral: 0.0),
     ],
     // The city is on the outside of the lap, the right of the road all the way round, and inside
     // the three loops: the ground the shortcuts fly over is left to the dark.
     scenery: [
         // The line, under its arch, between two stands.
         Gantry(at: 0.0),
-        Grandstand(at: 5120.0, side: Right, offset: 4.0, length: 80.0, rows: 8),
-        Grandstand(at: 5135.0, side: Left, offset: 4.0, length: 60.0, rows: 6),
-        Skyline(at: 5070.0, side: Right, offset: 8.0, length: 140.0, depth: 70.0, height: 38.0),
+        Grandstand(at: 5177.9, side: Right, offset: 4.0, length: 80.0, rows: 8),
+        Grandstand(at: 5192.9, side: Left, offset: 4.0, length: 60.0, rows: 6),
+        Skyline(at: 5127.9, side: Right, offset: 8.0, length: 140.0, depth: 70.0, height: 38.0),
         // The launch: an arch over the hop's lip, a mast on either side of the far one.
         Billboard(at: 60.0, side: Right, offset: 3.0),
         Gantry(at: 146.0),
@@ -198,53 +198,53 @@
         Skyline(at: 1790.0, side: Right, offset: 8.0, length: 150.0, depth: 70.0, height: 42.0),
         // The balcony, around a spire, the highest thing in the city.
         Chevrons(at: 1988.0, side: Right),
-        Tower(at: 2197.0, side: Left, offset: 12.0, height: 70.0, width: 22.0, depth: 22.0),
-        Grandstand(at: 2150.0, side: Right, offset: 4.0, length: 95.0, rows: 10),
-        Skyline(at: 2080.0, side: Right, offset: 8.0, length: 230.0, depth: 60.0, height: 34.0),
+        Tower(at: 2211.1, side: Left, offset: 12.0, height: 70.0, width: 22.0, depth: 22.0),
+        Grandstand(at: 2160.6, side: Right, offset: 4.0, length: 95.0, rows: 10),
+        Skyline(at: 2076.8, side: Right, offset: 8.0, length: 230.0, depth: 60.0, height: 34.0),
         // The sky bowl and the gate.
-        Chevrons(at: 2476.0, side: Right),
-        Skyline(at: 2480.0, side: Right, offset: 8.0, length: 130.0, depth: 70.0, height: 40.0),
-        Gantry(at: 2642.2),
+        Chevrons(at: 2504.2, side: Right),
+        Skyline(at: 2508.2, side: Right, offset: 8.0, length: 130.0, depth: 70.0, height: 40.0),
+        Gantry(at: 2670.4),
         // The dive, through a tunnel on its kink.
-        Billboard(at: 2707.3, side: Right, offset: 3.0),
-        Tunnel(at: 2850.0, length: 70.0),
-        Skyline(at: 2660.0, side: Right, offset: 8.0, length: 210.0, depth: 80.0, height: 44.0),
-        Skyline(at: 2810.0, side: Right, offset: 8.0, length: 210.0, depth: 80.0, height: 40.0),
+        Billboard(at: 2735.5, side: Right, offset: 3.0),
+        Tunnel(at: 2878.2, length: 70.0),
+        Skyline(at: 2688.2, side: Right, offset: 8.0, length: 210.0, depth: 80.0, height: 44.0),
+        Skyline(at: 2838.2, side: Right, offset: 8.0, length: 210.0, depth: 80.0, height: 40.0),
         // The rift: its gate on the lip, two monoliths standing over the void, masts and a stand
         // where the road takes up again.
-        Gantry(at: 3056.0, clearance: 9.0),
-        Monolith(at: 3141.5, side: Left, offset: 40.0, height: 48.0, width: 14.0),
-        Monolith(at: 3148.0, side: Right, offset: 50.0, height: 40.0, width: 12.0),
-        Pylon(at: 3234.0, side: Left, offset: 1.0, height: 18.0),
-        Pylon(at: 3234.0, side: Right, offset: 1.0, height: 18.0),
-        Grandstand(at: 3238.0, side: Right, offset: 4.0, length: 50.0, rows: 8),
+        Gantry(at: 3084.2, clearance: 9.0),
+        Monolith(at: 3169.7, side: Left, offset: 40.0, height: 48.0, width: 14.0),
+        Monolith(at: 3176.2, side: Right, offset: 50.0, height: 40.0, width: 12.0),
+        Pylon(at: 3262.2, side: Left, offset: 1.0, height: 18.0),
+        Pylon(at: 3262.2, side: Right, offset: 1.0, height: 18.0),
+        Grandstand(at: 3266.2, side: Right, offset: 4.0, length: 50.0, rows: 8),
         // The scree and the step.
-        Chevrons(at: 3281.2, side: Right),
-        Skyline(at: 3300.0, side: Right, offset: 8.0, length: 240.0, depth: 70.0, height: 38.0),
-        Gantry(at: 3607.5),
-        Pylon(at: 3631.0, side: Left, offset: 1.0, height: 14.0),
-        Pylon(at: 3631.0, side: Right, offset: 1.0, height: 14.0),
+        Chevrons(at: 3309.4, side: Right),
+        Skyline(at: 3328.2, side: Right, offset: 8.0, length: 240.0, depth: 70.0, height: 38.0),
+        Gantry(at: 3635.7),
+        Pylon(at: 3659.2, side: Left, offset: 1.0, height: 14.0),
+        Pylon(at: 3659.2, side: Right, offset: 1.0, height: 14.0),
         // The west corner and the esses, through a tunnel.
-        Chevrons(at: 3688.0, side: Right),
-        Skyline(at: 3700.0, side: Right, offset: 8.0, length: 200.0, depth: 80.0, height: 42.0),
-        Chevrons(at: 3904.0, side: Left),
-        Tunnel(at: 4030.0, length: 60.0),
-        Skyline(at: 3910.0, side: Right, offset: 8.0, length: 145.0, depth: 70.0, height: 40.0),
-        Skyline(at: 4055.0, side: Right, offset: 8.0, length: 145.0, depth: 70.0, height: 36.0),
+        Chevrons(at: 3716.2, side: Right),
+        Skyline(at: 3728.2, side: Right, offset: 8.0, length: 200.0, depth: 80.0, height: 42.0),
+        Chevrons(at: 3932.2, side: Left),
+        Tunnel(at: 4058.2, length: 60.0),
+        Skyline(at: 3938.2, side: Right, offset: 8.0, length: 145.0, depth: 70.0, height: 40.0),
+        Skyline(at: 4083.2, side: Right, offset: 8.0, length: 145.0, depth: 70.0, height: 36.0),
         // The long way round, around a tower.
-        Chevrons(at: 4252.0, side: Left),
-        Tower(at: 4490.0, side: Left, offset: 14.0, height: 52.0, width: 26.0, depth: 26.0),
-        Grandstand(at: 4440.0, side: Right, offset: 4.0, length: 100.0, rows: 8),
-        Skyline(at: 4350.0, side: Right, offset: 8.0, length: 145.0, depth: 70.0, height: 38.0),
-        Skyline(at: 4495.0, side: Right, offset: 8.0, length: 145.0, depth: 70.0, height: 34.0),
-        Pylon(at: 4710.0, side: Right, offset: 1.0, height: 18.0),
+        Chevrons(at: 4280.2, side: Left),
+        Tower(at: 4518.2, side: Left, offset: 14.0, height: 52.0, width: 26.0, depth: 26.0),
+        Grandstand(at: 4468.2, side: Right, offset: 4.0, length: 100.0, rows: 8),
+        Skyline(at: 4378.2, side: Right, offset: 8.0, length: 145.0, depth: 70.0, height: 38.0),
+        Skyline(at: 4523.2, side: Right, offset: 8.0, length: 145.0, depth: 70.0, height: 34.0),
+        Pylon(at: 4738.2, side: Right, offset: 1.0, height: 18.0),
         // The last corner.
-        Billboard(at: 4812.2, side: Left, offset: 3.0),
-        Chevrons(at: 4940.6, side: Right),
-        Skyline(at: 4734.9, side: Right, offset: 8.0, length: 250.0, depth: 80.0, height: 42.0),
+        Billboard(at: 4852.4, side: Left, offset: 3.0),
+        Chevrons(at: 4997.6, side: Right),
+        Skyline(at: 4764.9, side: Right, offset: 8.0, length: 250.0, depth: 80.0, height: 42.0),
         // Far out in the dark, inside the lap.
-        Monolith(at: 2780.0, side: Left, offset: 110.0, height: 44.0),
-        Monolith(at: 3580.0, side: Left, offset: 120.0, height: 40.0),
+        Monolith(at: 2808.2, side: Left, offset: 110.0, height: 44.0),
+        Monolith(at: 3608.2, side: Left, offset: 120.0, height: 40.0),
         Monolith(at: 1531.0, side: Left, offset: 130.0, height: 44.0),
         Monolith(at: 200.0, side: Left, offset: 130.0, height: 40.0),
     ],

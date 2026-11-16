@@ -260,7 +260,7 @@ mod tests {
     #[test]
     fn the_shortcuts_of_the_odyssey_are_there() {
         // From the straight before the loop: later, the car flies into the banked road of its first turn.
-        let keyhole = straight_on(625.0, 0.0, 58.0, 1.6);
+        let keyhole = straight_on(620.0, 0.0, 58.0, 1.6);
         assert!(keyhole.is_some_and(|gained| gained > 400.0), "keyhole: {keyhole:?}");
         // Without flying, or with a hop only, the wall holds the car on the road.
         for hold in [0.0, 0.05] {
@@ -268,10 +268,10 @@ mod tests {
             assert!(held.is_some_and(|gained| gained < 200.0), "keyhole, on the road: {held:?}");
         }
 
-        let balcony = straight_on(1992.0, 9.0, 58.0, 0.0);
+        let balcony = straight_on(2000.0, 0.0, 58.0, 0.0);
         assert!(balcony.is_some_and(|gained| gained > 350.0), "balcony: {balcony:?}");
 
-        let long_way = straight_on(4257.0, 0.0, 58.0, 1.6);
+        let long_way = straight_on(4275.0, 0.0, 58.0, 1.6);
         assert!(long_way.is_some_and(|gained| gained > 400.0), "long way round: {long_way:?}");
     }
 

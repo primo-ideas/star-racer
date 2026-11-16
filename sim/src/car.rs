@@ -101,6 +101,10 @@ pub struct Car {
     /// How many times the car has come back to a checkpoint after a fall, so whoever counts its
     /// progress knows it was moved rather than driven.
     pub respawns: u16,
+    /// The kick a drift started on a press of the button turns in with, in radians per second
+    /// of extra rotation, positive to the left: it comes in at once and fades out (see
+    /// `drift_kick`). Nothing outside that first moment.
+    pub kick: f32,
     /// Seconds the car has been off its course without a break: off the road, or on a part of it
     /// its lap does not have it on yet. Past [`ASTRAY_SECONDS`] it is brought back to its last
     /// checkpoint; back on its course, the count is forgotten.
@@ -368,6 +372,14 @@ pub struct CarTuning {
     /// the grip takes up: the car comes out of its slide on a curve, as a real one does, instead
     /// of running on straight while the body alone swings back. Since v0.1.53.
     pub drift_exit_share: f32,
+    /// A drift started by a press of the button with the stick turned turns in with a kick
+    /// (since v0.1.54): `drift_kick` (degrees per second, at full lock) of rotation on top of
+    /// what the stick asks, reached at `drift_kick_acceleration` (degrees per second per second)
+    /// and fading out at `drift_kick_fade`, after which the drift goes on as slowly as ever and
+    /// the stick tightens or opens it. A drift the car breaks into by turning hard has none.
+    pub drift_kick: f32,
+    pub drift_kick_acceleration: f32,
+    pub drift_kick_fade: f32,
 
     /// Radius of the circle the car collides as, in meters.
     pub collision_radius: f32,
@@ -443,6 +455,9 @@ impl CarTuning {
             ("air_grip", self.air_grip),
             ("air_steering", self.air_steering),
             ("drift_exit_share", self.drift_exit_share),
+            ("drift_kick", self.drift_kick),
+            ("drift_kick_acceleration", self.drift_kick_acceleration),
+            ("drift_kick_fade", self.drift_kick_fade),
         ];
         for (name, value) in positive {
             if !(value.is_finite() && value > 0.0) {
@@ -897,7 +912,8 @@ impl Car {
             }
         } else if speed >= tuning.drift_min_speed && !self.is_airborne() {
             let pressed = pressed || self.drift_press > 0.0;
-            let side = if pressed && input.steer().abs() >= DRIFT_PRESS_STICK {
+            let kicked = pressed && input.steer().abs() >= DRIFT_PRESS_STICK;
+            let side = if kicked {
                 // Steering right is a drift to the right, side 1.
                 input.steer().signum() as i8
             } else if self.unscrewed_past(tuning.drift_entry_angle.to_radians(), tuning) {
@@ -908,6 +924,15 @@ impl Car {
             };
             if side != 0 {
                 self.start_drift(side);
+                if kicked {
+                    // Thrown into the drift: it turns in with a kick as hard as the stick is
+                    // turned, a drift to the right clockwise.
+                    let speed_share = (speed / tuning.top_speed).min(1.0);
+                    self.kick = -f32::from(side)
+                        * tuning.drift_kick.to_radians()
+                        * input.steer().abs()
+                        * speed_share;
+                }
             }
         }
     }
@@ -939,6 +964,7 @@ impl Car {
     /// then brings the travel round toward it, as a car coming out of a slide comes round.
     fn end_drift(&mut self, tuning: &CarTuning) {
         self.boost = self.boost.max(self.pending_boost(tuning));
+        self.kick = 0.0;
         let turned = self.body * tuning.drift_exit_share;
         self.heading = wrap_angle(self.heading + turned);
         self.body -= turned;
@@ -1009,7 +1035,7 @@ impl Car {
         } else {
             1.0
         };
-        let target_yaw_rate = -self.steering * steering_speed * curvature * air;
+        let target_yaw_rate = -self.steering * steering_speed * curvature * air + self.kick;
         let response = if self.is_drifting() {
             tuning.drift_steering_response
         } else {
@@ -1019,8 +1045,14 @@ impl Car {
             self.yaw_rate + (target_yaw_rate - self.yaw_rate) * (1.0 - decay(response, dt));
         // The car's weight: its rotation changes no faster than this, so it gathers steadily and
         // dies away steadily once the stick lets go.
-        let weight = tuning.yaw_acceleration.to_radians() * dt;
-        self.yaw_rate = move_towards(self.yaw_rate, wanted, weight);
+        // A drift's kick comes in faster than the weight would let it, then fades out.
+        let weight = if self.kick == 0.0 {
+            tuning.yaw_acceleration
+        } else {
+            tuning.yaw_acceleration + tuning.drift_kick_acceleration
+        };
+        self.yaw_rate = move_towards(self.yaw_rate, wanted, weight.to_radians() * dt);
+        self.kick = move_towards(self.kick, 0.0, tuning.drift_kick_fade.to_radians() * dt);
     }
 
     /// A tick of gripping: the rotation turns the nose, the velocity is split along it, and
@@ -1371,6 +1403,42 @@ mod tests {
         run(&mut grounded, steered, 0.5, &track);
         let on_road = wrap_angle(grounded.velocity.to_angle() - travel).abs().to_degrees();
         assert!(on_road > 2.0 * travel_turned, "road {on_road}, air {travel_turned}");
+    }
+
+    /// Thrown into a drift with the stick turned, the car turns in with a kick: its rotation goes
+    /// well past what the stick alone gives within a tenth of a second, then falls back to it and
+    /// the drift goes on slowly. A drift broken into by turning hard gets none, nor does a press
+    /// with the stick barely turned get much.
+    #[test]
+    fn a_drift_thrown_into_turns_in_with_a_kick() {
+        let track = Track::build(&open_track()).unwrap();
+        let peak_and_later = |kick: f32, steer: f32| {
+            let tuning = CarTuning {
+                drift_kick: kick,
+                ..tuning()
+            };
+            let mut car = at_top_speed(&track);
+            let (mut peak, mut at_half) = (0.0_f32, 0.0_f32);
+            for tick in 0..ticks(1.0) {
+                let input = CarInput::new(true, steer).with_drift(tick < 3);
+                car.step(input, &tuning, &track);
+                if tick < ticks(0.15) {
+                    peak = peak.max(car.yaw_rate.abs());
+                }
+                if tick == ticks(0.6) {
+                    at_half = car.yaw_rate.abs();
+                }
+            }
+            assert!(car.is_drifting());
+            (peak.to_degrees(), at_half.to_degrees())
+        };
+        let (kicked, kicked_later) = peak_and_later(tuning().drift_kick, 1.0);
+        let (plain, plain_later) = peak_and_later(0.0, 1.0);
+        assert!(kicked > plain + 30.0, "{kicked} against {plain} deg/s");
+        // Once it has faded, the drift turns as it would have.
+        assert!((kicked_later - plain_later).abs() < 15.0, "{kicked_later}, {plain_later}");
+        let (gentle, _) = peak_and_later(tuning().drift_kick, 0.3);
+        assert!(gentle < kicked - 20.0, "a light stick kicked {gentle} deg/s");
     }
 
     /// The open track with a gap `length` meters long 100 m past the line, and a checkpoint 50 m
@@ -2160,7 +2228,13 @@ mod tests {
                 fastest.to_degrees()
             );
             assert!(sharpest.to_degrees() < 40.0, "{}", sharpest.to_degrees());
-            let tightest = tuning().top_speed / (tuning().drift_radius_tight * 0.7);
+            // A tapped drift turns in with its kick on top (since v0.1.54).
+            let tightest = tuning().top_speed / (tuning().drift_radius_tight * 0.7)
+                + if tapped {
+                    tuning().drift_kick.to_radians()
+                } else {
+                    0.0
+                };
             assert!(
                 fastest < tightest + tuning().drift_swing_rate.to_radians() * 1.05,
                 "{} deg/s",
@@ -2460,6 +2534,11 @@ mod tests {
         assert!(car.turbo > 1.0 && car.turbo < 2.0, "{}", car.turbo);
         run(&mut car, CarInput::new(true, 1.0), 20.0, &track);
         assert_eq!(car.turbo, TURBO_CHARGES);
+        // Brought back to the middle of the track, heading down it, so the run out of the drift
+        // meets no wall wherever the drift went.
+        car.position = Vec2::ZERO;
+        car.velocity = Vec2::new(car.velocity.length(), 0.0);
+        car.heading = 0.0;
 
         // Out of the drift, and its boost left to run out.
         run(&mut car, ACCELERATE, 6.0, &track);
