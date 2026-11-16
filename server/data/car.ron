@@ -26,9 +26,6 @@
     // does and eases in as it gets there, so the car turns at once, gently, then a little harder;
     // at 14, most of the way in 0.15 s. Lower is softer, higher is sharper.
     steering_rate: 14.0,
-    // Per second: how quickly the rotation follows the steering, well above steering_rate so it
-    // adds no delay, and only smooths the change of radius when a drift starts or ends.
-    steering_response: 60.0,
     // Degrees per second per second: the car's weight. Its rotation changes no faster than this,
     // gathering steadily from the very tick the steering moves and dying away the same way when the
     // stick lets go, so the car carries on round a little. Small corrections never meet it; a full
@@ -56,8 +53,6 @@
     // the car travels on, the body swings far across it without carrying the car wide, the speed
     // holds and a charge builds up. Bringing the body back into line, stick centered or against
     // the drift, ends it and turns the charge into a boost.
-    // Slowest speed a drift starts or keeps going at (m/s).
-    drift_min_speed: 12.0,
     // How far a gripping car's nose must unscrew into a turn to break into a drift without the
     // button, in degrees, and how far it unscrews at full lock at top speed while it still grips
     // (grip_swing_angle): the body swings off the travel, tail out, in proportion to how hard the
@@ -65,9 +60,6 @@
     // three quarters lock breaks away after 0.53 s and full lock after 0.47 s. Before v0.1.44 the
     // car broke away when its real slide passed 5 degrees, which carried it out on the way there.
     drift_entry_angle: 11.0,
-    // How far back into line the body must come, with the stick keeping it there, for a drift to
-    // end, in degrees. Holding the button keeps the drift alive whatever the body does.
-    drift_exit_angle: 8.0,
     grip_swing_angle: 16.0,
     // How far the body swings across the travel with the steering fully into the drift, in
     // degrees, most of it with the first half of the steering. 55 (measured on Rocket Racing) threw
@@ -79,17 +71,14 @@
     // How the body swings there and back: it comes off the travel on the very tick the drift
     // starts, slowly, its swing gathering speed at this many degrees per second per second, up to
     // the fastest swing, in degrees per second, and slowing the same way to stop on its angle.
-    // Past the knee, in degrees across, the body swings further out at no more than this share of
-    // the fastest swing: the car is carried across less directly once it is well into its slide
-    // (the user's word on 2026-11-12, v0.1.37). Swinging back into line is never held back.
-    // With 150, 45, 15 and 0.5, a tap at full lock has the body 6 degrees out at 0.25 s, 17 at
-    // 0.5 s, 23 at 0.75 s and 29 at 1 s, and a drift ends 0.8 s after the stick straightens.
-    // Without the knee (v0.1.35) it was 6, 17, 28 and 36; at 260 and 75 (v0.1.32 and v0.1.33) 10,
-    // 29 and 41 at 0.75 s, ending in 0.6 s; at 450 and 110 (v0.1.12 to v0.1.31) 15, 43 and 55.
+    // Broken into at full lock from top speed, the body is 8 degrees out at 0.25 s, 23 at 0.5 s
+    // and 50 at 0.75 s; thrown, drift_kick_swing sets it off faster. The fastest swing only
+    // matters carrying a drift over to the other side in an S: 0.82 s to swing 45 degrees past
+    // the line, 0.77 s with no limit. The knee of v0.1.37 to v0.1.56 (drift_swing_knee,
+    // drift_swing_knee_rate) went in v0.1.57: at 55 degrees and 400 the body never swung fast
+    // enough past it for it to change anything.
     drift_swing_acceleration: 400.0,
     drift_swing_rate: 140.0,
-    drift_swing_knee: 35.0,
-    drift_swing_knee_rate: 0.6,
     // Radius of the curve the car drifts on with the stick fully to one side and the body swung
     // fully out, in meters: the curve tightens from the gripping car's to this one as the body
     // swings out. The stick is signed: centered runs straight and against the drift turns the
@@ -97,16 +86,10 @@
     // Since v0.1.55, 44: the path turns at 75 degrees per second at top speed where 30 turned it at
     // 111, the user finding it turned too fast.
     drift_radius_tight: 44.0,
-    // Per second: how quickly the curve follows the steering in a drift, as fast as the rotation
-    // does while gripping, smoothing only the button's tightening.
-    drift_steering_response: 60.0,
     // Holding the drift button multiplies the drift radius by this: it tightens the turn beyond
     // what the stick alone gives. Held with the stick well against the drift, it carries the drift
     // over to the other side, charge and all, through an S.
     drift_button_tighten: 0.7,
-    // Seconds the button must stay held for that tightening to take full effect: it comes in
-    // steadily from the press, so the tap that starts a drift barely tightens it.
-    drift_button_tighten_time: 0.4,
     // What holding the button costs, in m/s² when it is pressed, then that much more per second it
     // stays held: a drift costs nothing, tightening it does, harder and harder.
     drift_button_drag: 1.5,
@@ -114,9 +97,6 @@
     // Seconds a press of the drift button is remembered: pressed a moment before the stick is
     // turned, or before the car is fast enough, it still starts the drift. 0.15 until v0.1.34.
     drift_press_buffer: 0.25,
-    // The hardest a drifting car can meet a wall and keep its drift, in m/s into the wall. A graze
-    // is forgiven, and charges nothing while it lasts; a hit loses the drift and what it built up.
-    drift_wall_tolerance: 3.0,
     // Charge before any boost (s), seconds of boost per second of charge beyond it, and the
     // longest boost (s). The charge grows from half to one and a half times real time, tighter drifts
     // faster, so a full charge takes two to three and a half seconds of drift.
@@ -181,18 +161,17 @@
     drift_exit_share: 0.3,
 
     // Into a drift thrown with the stick turned and the button pressed together (since v0.1.54,
-    // the user's word "on doit avoir un joli coup de braquage avant que ce redevienne lent"):
-    // drift_kick degrees per second of rotation on top of what the stick asks, at full lock and
-    // top speed, reached at drift_kick_acceleration (in about 0.05 s) and fading out at
-    // drift_kick_fade (in a quarter of a second): about 12 degrees of turn-in, after which the
-    // drift is as slow as ever and the stick tightens or opens it. 0 is no kick.
-    drift_kick: 25.0,
-    drift_kick_acceleration: 1600.0,
-    drift_kick_fade: 320.0,
+    // the user's word "on doit avoir un joli coup de braquage avant que ce redevienne lent"): for
+    // drift_kick_time seconds at full lock and top speed, less with a lighter stick, the car's
+    // rotation is nine times lighter than yaw_acceleration lets it be, so it turns in at once;
+    // after it the drift is as slow as ever and the stick tightens or opens it. 0 is no kick.
+    // Until v0.1.56 three numbers (drift_kick, drift_kick_acceleration, drift_kick_fade), whose
+    // only felt effect was that lighter weight (docs/simulation.md#fewer-drift-numbers).
+    drift_kick_time: 0.1,
     // Since v0.1.55, at the user's word "ça tourne trop vite quand on drift, et on doit vraiment
-    // avoir une rotation de la voiture sur son axe beaucoup plus claire": the kick is mostly the
-    // body pivoting on its own axis, swung out at drift_kick_swing degrees per second and braking
-    // onto its angle, and only a little the path (drift_kick, 80 in v0.1.54).
+    // avoir une rotation de la voiture sur son axe beaucoup plus claire": thrown, the body pivots
+    // on its own axis, swung out at drift_kick_swing degrees per second and braking onto its
+    // angle.
     drift_kick_swing: 200.0,
 
     // Walls. The bounce is the share of the impact speed that comes back, from 0 to 1. The impact
