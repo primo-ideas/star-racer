@@ -115,7 +115,7 @@ fn send_input(
                     .is_some_and(|hold| time.elapsed_secs() % crate::settings::JUMP_EVERY < hold);
                 // `--jump` presses on top of the jumps the autopilot makes over gaps.
                 let input = autopilot::drive_in_style_as(style, &personality, &car, &track.0);
-                input.with_jump(input.jump || held)
+                input.with_jump(input.jump || held).with_thrust(input.thrust || held)
             }
             _ => CarInput::default(),
         }
@@ -169,6 +169,8 @@ fn player_input(
     let mut drift = keyboard.any_pressed(bindings.drift.keys()) || touch.drifting();
     let mut turbo = keyboard.any_pressed(bindings.turbo.keys()) || touch.firing_turbo();
     let mut jump = keyboard.any_pressed(bindings.jump.keys()) || touch.jumping();
+    // The touch cross has one branch for both: arriving on it hops, staying holds the thruster.
+    let mut thrust = keyboard.any_pressed(bindings.thrust.keys()) || touch.jumping();
     let mut steer: f32 = touch.steer();
 
     let mut left = keyboard.any_pressed(bindings.steer_left.keys());
@@ -178,6 +180,7 @@ fn player_input(
         drift |= bindings.drift.held_on(gamepad);
         turbo |= bindings.turbo.held_on(gamepad);
         jump |= bindings.jump.held_on(gamepad);
+        thrust |= bindings.thrust.held_on(gamepad);
         steer += stick_steering(gamepad.left_stick().x);
         // The buttons bound to steering say left or right and nothing between, as keys do.
         left |= bindings.steer_left.held_on(gamepad);
@@ -189,6 +192,7 @@ fn player_input(
         .with_drift(drift)
         .with_turbo(turbo)
         .with_jump(jump)
+        .with_thrust(thrust)
 }
 
 /// A stick resting this far off center does not steer: a worn one rests a little off it.
@@ -265,6 +269,8 @@ struct Rumbled {
     drifting: bool,
     boosting: bool,
     turbo: bool,
+    airborne: bool,
+    thrusting: bool,
 }
 
 /// Rumbles every gamepad when the player's car hits a wall, harder the harder the hit, breaks into
@@ -314,6 +320,21 @@ fn rumble(
     } else if car.boost > 0.0 && !rumbled.boosting {
         send(0.35, 0.6, 180);
     }
+    // The hop is a tap of the weak motor; the thruster's ignition a push of both, and its burn
+    // a light hum for as long as it lasts; landing, a knock.
+    if car.is_airborne() && !rumbled.airborne && car.climb > 0.0 {
+        send(0.0, 0.35, 60);
+    }
+    if car.thrusting && !rumbled.thrusting {
+        send(0.55, 0.8, 200);
+    } else if car.thrusting {
+        send(0.12, 0.2, 40);
+    }
+    if !car.is_airborne() && rumbled.airborne {
+        send(0.5, 0.3, 90);
+    }
+    rumbled.airborne = car.is_airborne();
+    rumbled.thrusting = car.thrusting;
     rumbled.drifting = car.is_drifting();
     rumbled.boosting = car.boost > 0.0;
     rumbled.turbo = car.turbo_boost > 0.0;

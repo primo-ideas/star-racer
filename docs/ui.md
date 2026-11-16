@@ -127,9 +127,9 @@ SETTINGS, on the first screen, opens a dialog over it (`ui/settings.rs`; `--sett
 once). What it holds is stored with the other choices, written out as it changes, and in force
 from the next lobby entered.
 
-**With keys and a gamepad**, it is the table of bindings (`client/src/bindings.rs`): six actions
--- accelerate, steer left, steer right, drift, turbo, jump -- each with two keys and one gamepad
-button.
+**With keys and a gamepad**, it is the table of bindings (`client/src/bindings.rs`): seven actions
+-- accelerate, steer left, steer right, drift, turbo, jump, thrust -- each with two keys and one
+gamepad button.
 
 | Action | Key | Or | Gamepad |
 | --- | --- | --- | --- |
@@ -139,11 +139,15 @@ button.
 | Drift | Shift | right Shift | RT (right trigger) |
 | Turbo | E | down arrow | Y (top face button) |
 | Jump | Space | Q | A (bottom face button) |
+| Thrust | Space | Q | A (bottom face button) |
 
 Those are the defaults, the gamepad's drift and turbo being the user's choice of 2026-11-11. The
 jump (v0.1.48) took Space and A, Rocket Racing's, and the drift's second key became the right
 Shift; choices saved before it had Space on the drift, and are given the new arrangement when read
-(`Bindings::with_jump_free`). The
+(`Bindings::with_jump_free`). The thrust (v0.1.52) is the one action that shares its keys and
+button with another, the jump's, as the user asked: a press hops and a hold flies. Binding either
+never takes its key from the other, though anything else bound to that key still lets go of it
+(`Action::shares_with`), and the hints over a race say "Jump, hold to fly" while the two agree. The
 left stick always steers and is not in the table. A place is changed by picking it and pressing
 the key or the button it should be: the dialog *listens* for the next press, and while it does the
 menus do not answer and nothing has the focus, which is what lets the arrows, Space and the
@@ -295,7 +299,7 @@ the left**, toward the middle of the screen, where a right thumb folds more easi
 stretches toward the edge: arriving on it is the press, which fires a charge if the meter holds
 one, and the phone kicks for 70 ms as it fires. **The jump is the third, straight down** (since
 v0.1.48), a thumb pulled back toward the edge: arriving on it hops, staying on it holds the
-thruster. The fourth is drawn as the empty slot it is, and lights up grey rather than neon when a
+thruster (the branch is both the jump and the thrust). The fourth is drawn as the empty slot it is, and lights up grey rather than neon when a
 thumb finds it, so it is plain that it is there and waiting for whatever comes next.
 
 **Neither thumb has to find its control again.** Anywhere in the bottom of the left half steers,
