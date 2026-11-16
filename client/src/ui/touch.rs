@@ -350,6 +350,11 @@ impl TouchControls {
     pub fn firing_turbo(self) -> bool {
         self.branch == Some(Branch::TURBO)
     }
+
+    /// The thumb is on the jump branch: arriving there hops, staying there holds the thruster.
+    pub fn jumping(self) -> bool {
+        self.branch == Some(Branch::JUMP)
+    }
 }
 
 /// How hard a thumb resting `offset` from the middle of the gap between the buttons steers, and
@@ -375,6 +380,9 @@ impl Branch {
     /// The turbo is the second, toward the middle of the screen: a right thumb folds that way
     /// more easily than it stretches toward the edge.
     const TURBO: Self = Self::Left;
+    /// The jump is the third, straight down: a thumb pulled back toward the edge of the screen,
+    /// and held there for the thruster.
+    const JUMP: Self = Self::Down;
 
     const ALL: [Self; 4] = [Self::Up, Self::Left, Self::Right, Self::Down];
 
@@ -383,6 +391,7 @@ impl Branch {
         match self {
             Self::DRIFT => "DRIFT",
             Self::TURBO => "TURBO",
+            Self::JUMP => "JUMP",
             _ => "",
         }
     }
@@ -464,7 +473,11 @@ impl Pad {
     /// Whether the pad does anything at all. An empty branch still answers a thumb that finds
     /// it, so it is plain that it is there and that it is waiting for a function.
     fn works(self) -> bool {
-        !matches!(self, Self::Branch(branch) if branch != Branch::DRIFT && branch != Branch::TURBO)
+        !matches!(
+            self,
+            Self::Branch(branch)
+                if branch != Branch::DRIFT && branch != Branch::TURBO && branch != Branch::JUMP
+        )
     }
 
     /// Background, border and text, as it should look now, held this far.

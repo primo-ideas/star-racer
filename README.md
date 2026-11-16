@@ -56,7 +56,7 @@ There is no brake: the game is full speed all the time. **Tap the drift button w
 
 The car handling is tuned in `server/data/car.ron`. The server reloads it within a second of every save, so you can keep driving while adjusting it.
 
-Useful client options (`--help` for all of them): `--guest` (or `--account <name> --password <password>`, with `--create` the first time) to skip the first screen, `--lobby <name>` to enter a lobby (created with `--track`, `--laps` and `--min-players` if it does not exist), `--identity <dir>` to run several clients on one machine, `--autopilot` (or `--autopilot-drift`) to let the car drive itself, and `--capture <file.png>` with `--capture-delay <seconds>` to take a screenshot and exit. The game is quiet by default: `--log info` (or `?log=info` in the browser) makes it say what it is doing. For example, a race alone: `--guest --lobby Test --min-players 1`.
+Useful client options (`--help` for all of them): `--guest` (or `--account <name> --password <password>`, with `--create` the first time) to skip the first screen, `--lobby <name>` to enter a lobby (created with `--track`, `--laps` and `--min-players` if it does not exist), `--identity <dir>` to run several clients on one machine, `--autopilot` (or `--autopilot-drift`) to let the car drive itself (`--jump <seconds>` has it jump every four seconds too), and `--capture <file.png>` with `--capture-delay <seconds>` to take a screenshot and exit. The game is quiet by default: `--log info` (or `?log=info` in the browser) makes it say what it is doing. For example, a race alone: `--guest --lobby Test --min-players 1`.
 
 ## In a browser
 

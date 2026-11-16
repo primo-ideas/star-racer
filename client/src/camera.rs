@@ -187,6 +187,9 @@ enum Shot {
     TrackSide { left: bool },
 }
 
+/// How much of a car's height over the road, in a jump, the camera rises with it.
+const FOLLOW_ALTITUDE: f32 = 0.7;
+
 fn spawn_camera_and_light(mut commands: Commands) {
     commands.spawn((
         MainCamera,
@@ -274,7 +277,12 @@ fn follow_car(
         track: track.as_deref(),
         roofs: roofs.as_deref(),
     };
-    let car_position = world::position(car.position, view.followed_height);
+    // In the air the camera rises after the car, though not quite as high, so a jump is seen as
+    // the car lifting off the road rather than the road dropping away.
+    let car_position = world::position(
+        car.position,
+        view.followed_height + car.altitude * FOLLOW_ALTITUDE,
+    );
     let slope = view.followed_gradient;
     let fov = if finished {
         show_finish(

@@ -60,7 +60,13 @@ pub struct Script {
     pub garage: bool,
     /// Let the autopilot drive, in this style.
     pub autopilot: Option<Style>,
+    /// With the autopilot, also press the jump every `JUMP_EVERY` seconds and hold it this long:
+    /// a twentieth of a second hops, two seconds fly on the thruster.
+    pub jump: Option<f32>,
 }
+
+/// How often the autopilot jumps with `--jump`, in seconds.
+pub const JUMP_EVERY: f32 = 4.0;
 
 /// How an unattended run comes in.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -313,6 +319,11 @@ pub fn read() -> Settings {
         #[arg(long, conflicts_with = "autopilot")]
         autopilot_drift: bool,
 
+        /// With the autopilot, also jump every four seconds, holding the button this many seconds:
+        /// 0.05 hops, 2 flies on the thruster.
+        #[arg(long)]
+        jump: Option<f32>,
+
         /// How loud the game is, from 0 (silent) to 1.
         #[arg(long, default_value_t = DEFAULT_VOLUME)]
         volume: f32,
@@ -368,6 +379,7 @@ pub fn read() -> Settings {
             settings: args.settings,
             garage: args.garage,
             autopilot: autopilot_style(args.autopilot, args.autopilot_drift),
+            jump: args.jump,
         },
         touch: args.touch,
         latency: args.latency,
@@ -431,6 +443,7 @@ pub fn read() -> Settings {
             settings: has("settings"),
             garage: has("garage"),
             autopilot: autopilot_style(has("autopilot"), has("autopilot_drift")),
+            jump: get("jump").and_then(|value| value.parse().ok()),
         },
         touch: has("touch") || touchscreen(),
         latency: has("latency"),

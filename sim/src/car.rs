@@ -78,6 +78,19 @@ pub struct Car {
     pub turbo_boost: f32,
     /// Whether the turbo button was down on the last tick, so a press is told apart from a hold.
     pub turbo_button: bool,
+    /// How high the car flies over the road, in meters: 0 on it. A jump lifts it, the thruster
+    /// holds it up, and it comes down onto the road under it, wherever that has got to.
+    pub altitude: f32,
+    /// How fast it climbs, in m/s, negative as it falls.
+    pub climb: f32,
+    /// Whether the jump button was down on the last tick, so a press is told apart from a hold.
+    pub jump_button: bool,
+    /// Seconds the jump button has been held since it lifted the car off the road; 0 on it.
+    pub jump_held: f32,
+    /// Seconds of thrust left in the tank, from 0 to `thrust_seconds`. It fills on the road.
+    pub thrust: f32,
+    /// Whether the thruster pushed the car up this tick, for its flames and its sound.
+    pub thrusting: bool,
 }
 
 /// How many charges the turbo meter holds.
@@ -104,6 +117,8 @@ pub struct CarInput {
     pub steer: i8,
     /// Pressed to fire a charge of the turbo.
     pub turbo: bool,
+    /// Pressed to jump; held, the thruster carries the car higher and longer.
+    pub jump: bool,
 }
 
 impl CarInput {
@@ -114,6 +129,7 @@ impl CarInput {
             drift: false,
             steer: (steer.clamp(-1.0, 1.0) * 127.0).round() as i8,
             turbo: false,
+            jump: false,
         }
     }
 
@@ -123,6 +139,10 @@ impl CarInput {
 
     pub fn with_turbo(self, turbo: bool) -> Self {
         Self { turbo, ..self }
+    }
+
+    pub fn with_jump(self, jump: bool) -> Self {
+        Self { jump, ..self }
     }
 
     /// In `[-1, 1]`, right positive. A peer may send -128, which counts as full left.
@@ -266,6 +286,21 @@ pub struct CarTuning {
     /// boost's does.
     pub turbo_acceleration: f32,
 
+    /// The jump, as in Rocket Racing: a press lifts the car off the road at `jump_speed` (m/s),
+    /// and what pulls it back down is `air_gravity` (m/s², stronger than the road's `gravity`, so
+    /// a hop is short and snappy). Held past `thrust_delay` (s), the thruster under the car pushes
+    /// up at `thrust_acceleration` (m/s²), less and less as it nears `thrust_ceiling` (m), so it
+    /// climbs and then hovers where the push and the pull meet, for as long as the tank holds:
+    /// `thrust_seconds` of thrust, filled again on the road at `thrust_recharge` seconds per
+    /// second. In the air the car neither feels the slope nor touches a pad.
+    pub jump_speed: f32,
+    pub air_gravity: f32,
+    pub thrust_delay: f32,
+    pub thrust_acceleration: f32,
+    pub thrust_ceiling: f32,
+    pub thrust_seconds: f32,
+    pub thrust_recharge: f32,
+
     /// Radius of the circle the car collides as, in meters.
     pub collision_radius: f32,
     /// Share of the speed into a wall that bounces back, from 0 to 1.
@@ -310,6 +345,9 @@ impl CarTuning {
             ("turbo_seconds", self.turbo_seconds),
             ("turbo_top_speed", self.turbo_top_speed),
             ("turbo_acceleration", self.turbo_acceleration),
+            ("jump_speed", self.jump_speed),
+            ("air_gravity", self.air_gravity),
+            ("thrust_ceiling", self.thrust_ceiling),
             ("collision_radius", self.collision_radius),
         ];
         let non_negative = [
@@ -437,6 +475,49 @@ impl Car {
             .clamp(0.0, tuning.drift_max_boost)
     }
 
+    /// Whether the car is off the road, in a jump.
+    pub fn is_airborne(&self) -> bool {
+        self.altitude > 0.0
+    }
+
+    /// The jump and the thruster: a press on the road lifts the car, a hold keeps the thruster
+    /// pushing while the tank lasts, and the pull of `air_gravity` brings it back down onto the
+    /// road under it.
+    fn fly(&mut self, input: CarInput, tuning: &CarTuning, dt: f32) {
+        let pressed = input.jump && !self.jump_button;
+        self.jump_button = input.jump;
+        self.thrusting = false;
+        if !self.is_airborne() {
+            self.thrust = (self.thrust + tuning.thrust_recharge * dt).min(tuning.thrust_seconds);
+            self.jump_held = 0.0;
+            if !pressed {
+                return;
+            }
+            self.climb = tuning.jump_speed;
+        }
+        let mut lift = -tuning.air_gravity;
+        if input.jump {
+            self.jump_held += dt;
+            if self.jump_held > tuning.thrust_delay && self.thrust > 0.0 {
+                // Weaker the nearer the ceiling, so the car settles under it instead of hitting
+                // it; nothing at all above it.
+                let room = (1.0 - self.altitude / tuning.thrust_ceiling).clamp(0.0, 1.0);
+                lift += tuning.thrust_acceleration * room;
+                self.thrust = (self.thrust - dt).max(0.0);
+                self.thrusting = true;
+            }
+        } else {
+            // Let go, the thruster is done for this jump.
+            self.jump_held = f32::MAX;
+        }
+        self.climb += lift * dt;
+        self.altitude += self.climb * dt;
+        if self.altitude <= 0.0 {
+            self.altitude = 0.0;
+            self.climb = 0.0;
+        }
+    }
+
     /// Whether a boost is pushing the car, a drift's, a start's or the turbo's.
     pub fn is_boosting(&self) -> bool {
         self.boost > 0.0 || self.turbo_boost > 0.0
@@ -455,9 +536,11 @@ impl Car {
         // On a slope, gravity pulls downhill. For a body resting on a height field, the horizontal
         // part of that pull is `g × gradient / (1 + |gradient|²)`. It comes before the grip, which
         // then holds against it the way tires would.
-        let surface = track.surface(self.position);
-        let pull = tuning.gravity / (1.0 + surface.gradient.length_squared());
-        self.velocity -= surface.gradient * pull * dt;
+        if !self.is_airborne() {
+            let surface = track.surface(self.position);
+            let pull = tuning.gravity / (1.0 + surface.gradient.length_squared());
+            self.velocity -= surface.gradient * pull * dt;
+        }
 
         if self.is_drifting() {
             self.skate(input, tuning, dt);
@@ -465,8 +548,13 @@ impl Car {
             self.grip(input, tuning, dt);
         }
         self.position += self.velocity * dt;
-        // A speed pad under the car boosts it, as long as it is on it, and for `pad_boost` after.
-        if !track.pads().is_empty() && track.on_pad(&track.project(self.position)) {
+        self.fly(input, tuning, dt);
+        // A speed pad under the car boosts it, as long as it is on it, and for `pad_boost` after;
+        // a car flying over it is not on it.
+        if !self.is_airborne()
+            && !track.pads().is_empty()
+            && track.on_pad(&track.project(self.position))
+        {
             self.boost = self.boost.max(tuning.pad_boost);
         }
 
@@ -879,6 +967,67 @@ mod tests {
         assert_eq!(car.drift, 1);
     }
 
+    /// A press hops the car a little off the road and lands it soon after; held, the thruster
+    /// carries it higher and keeps it up far longer, until its tank runs dry, and the tank fills
+    /// again on the road.
+    #[test]
+    fn a_tap_hops_and_a_hold_thrusts() {
+        let track = Track::build(&open_track()).unwrap();
+        let flight = |hold: f32| {
+            let mut car = at_top_speed(&track);
+            run(&mut car, ACCELERATE, 2.0, &track);
+            assert!(car.thrust > 0.0, "the tank is empty on the road");
+            let (mut highest, mut airborne, mut emptiest) = (0.0f32, 0usize, f32::MAX);
+            for tick in 0..ticks(4.0) {
+                let held = (tick as f32 * TICK_SECONDS) < hold;
+                car.step(ACCELERATE.with_jump(held), &tuning(), &track);
+                highest = highest.max(car.altitude);
+                airborne += usize::from(car.is_airborne());
+                emptiest = emptiest.min(car.thrust);
+            }
+            assert!(!car.is_airborne(), "never came down");
+            (highest, airborne as f32 * TICK_SECONDS, emptiest, car)
+        };
+        let (hop, hop_time, hop_tank, _) = flight(0.05);
+        assert!(hop > 0.3 && hop < 1.0, "a hop of {hop} m");
+        assert!(hop_time < 0.7, "a hop of {hop_time} s");
+        assert!(hop_tank > tuning().thrust_seconds - 0.01, "a hop spent {hop_tank} of thrust");
+
+        let (thrust, thrust_time, emptiest, landed) = flight(3.0);
+        assert!(thrust > 2.0 * hop, "the thruster took it {thrust} m up");
+        assert!(thrust < tuning().thrust_ceiling, "{thrust} m");
+        assert!(thrust_time > 2.0 * hop_time, "{thrust_time} s in the air");
+        assert!(emptiest < 0.01, "the tank never ran dry: {emptiest}");
+
+        // Back on the road, the tank fills again.
+        let mut car = landed;
+        run(&mut car, ACCELERATE, 3.0, &track);
+        assert!((car.thrust - tuning().thrust_seconds).abs() < 1e-3, "{}", car.thrust);
+    }
+
+    /// A car in the air flies over a speed pad without being boosted.
+    #[test]
+    fn a_car_in_the_air_misses_the_pad() {
+        use crate::track::Pad;
+        let mut description = open_track();
+        description.pads = vec![Pad {
+            at: 30.0,
+            lateral: 0.0,
+            length: 6.0,
+            width: 6.0,
+        }];
+        let track = Track::build(&description).unwrap();
+        let mut car = Car::new(Vec2::ZERO, 0.0);
+        car.velocity = Vec2::new(tuning().top_speed, 0.0);
+        car.thrust = tuning().thrust_seconds;
+        let mut boosted = false;
+        for _ in 0..ticks(1.5) {
+            car.step(ACCELERATE.with_jump(true), &tuning(), &track);
+            boosted |= car.is_boosting();
+        }
+        assert!(!boosted, "boosted in the air");
+    }
+
     /// A car driving over a speed pad is boosted, for `pad_boost` once it has left it; one driving
     /// beside it is not.
     #[test]
@@ -981,6 +1130,7 @@ mod tests {
         drift: false,
         steer: 0,
         turbo: false,
+        jump: false,
     };
 
     fn drifting(steer: f32) -> CarInput {

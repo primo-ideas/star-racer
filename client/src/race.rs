@@ -52,7 +52,7 @@ impl Plugin for RacePlugin {
             )
             .add_systems(
                 Update,
-                light_thrusters
+                (light_thrusters, stay_on_the_road)
                     .after(RaceUpdate)
                     .run_if(in_state(Screen::Lobby)),
             );
@@ -217,6 +217,19 @@ pub fn spawn_car(
     }
     let resting = car_model::flame_length(0.0, false, 0.0);
     commands.entity(body).with_children(|parts| {
+        // The thruster under the hull: the flame mesh points back along `-x`, so it is turned
+        // to point down at the road. Hidden until the car thrusts; a car outside a race has none.
+        if let Some(id) = car {
+            parts.spawn((
+                LiftFlame(id),
+                Mesh3d(assets.flame.clone()),
+                MeshMaterial3d(assets.added_material.clone()),
+                Transform::from_xyz(0.0, 0.25, 0.0)
+                    .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
+                Visibility::Hidden,
+                NotShadowCaster,
+            ));
+        }
         parts.spawn((
             Mesh3d(livery.hull.clone()),
             MeshMaterial3d(assets.hull_material.clone()),
@@ -244,6 +257,7 @@ pub fn spawn_car(
     // the body sways over it.
     let shadow = commands
         .spawn((
+            OnTheRoad,
             Mesh3d(assets.shadow.clone()),
             MeshMaterial3d(assets.shadow_material.clone()),
             NotShadowCaster,
@@ -251,6 +265,7 @@ pub fn spawn_car(
         .id();
     let glow = commands
         .spawn((
+            OnTheRoad,
             Mesh3d(livery.under_glow.clone()),
             MeshMaterial3d(assets.added_material.clone()),
             NotShadowCaster,
@@ -470,10 +485,69 @@ pub(crate) fn seconds_since_startup(time: &Time<Real>, instant: Instant) -> f64 
 }
 
 /// A car resting on the road: at its height, leaning with its slope, its body turned into a drift.
+/// The car is drawn `altitude` over the road, along the road's own up, in a jump; its shadow and
+/// the light under it stay on the road (see `stay_on_the_road`).
 fn car_transform(car: &Car, surface: Surface) -> Transform {
-    Transform::from_translation(world::position(car.position, surface.height)).with_rotation(
-        world::rotation_on_surface(car.body_heading(), surface.gradient),
+    let rotation = world::rotation_on_surface(car.body_heading(), surface.gradient);
+    Transform::from_translation(
+        world::position(car.position, surface.height) + rotation * Vec3::Y * car.altitude,
     )
+    .with_rotation(rotation)
+}
+
+/// The shadow and the light under a car, which stay on the road while the car flies over it,
+/// smaller and fainter the higher it is.
+#[derive(Component)]
+struct OnTheRoad;
+
+/// The thruster's flame under a car, pointing down at the road while it pushes the car up.
+#[derive(Component)]
+struct LiftFlame(CarId);
+
+/// How fast the shadow and the light under a car shrink with its height: at 4 m, half their size.
+const SHADOW_SHRINK: f32 = 0.25;
+
+/// The flame under a thrusting car, as long as this many meters, about the hull's middle.
+const LIFT_FLAME_LENGTH: f32 = 1.6;
+const LIFT_FLAME_HALF: Vec2 = Vec2::new(0.55, 0.35);
+
+/// Keeps every car's shadow and light on the road under it, scaled to its height, and lights or
+/// puts out the flame of its thruster.
+fn stay_on_the_road(
+    view: Res<RaceView>,
+    time: Res<Time>,
+    cars: Query<(&CarVisual, &Children)>,
+    mut on_road: Query<&mut Transform, (With<OnTheRoad>, Without<LiftFlame>)>,
+    mut lift: Query<(&LiftFlame, &mut Transform, &mut Visibility), Without<OnTheRoad>>,
+) {
+    let car = |id: CarId| view.cars.iter().find(|car| car.id == id).map(|car| car.car);
+    for (visual, children) in &cars {
+        let Some(state) = car(visual.0) else {
+            continue;
+        };
+        let scale = 1.0 / (1.0 + SHADOW_SHRINK * state.altitude);
+        for child in children {
+            if let Ok(mut transform) = on_road.get_mut(*child) {
+                transform.translation = Vec3::NEG_Y * state.altitude;
+                transform.scale = Vec3::new(scale, 1.0, scale);
+            }
+        }
+    }
+    let now = time.elapsed_secs();
+    for (flame, mut transform, mut visibility) in &mut lift {
+        let thrusting = car(flame.0).is_some_and(|car| car.thrusting);
+        *visibility = if thrusting {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
+        let flicker = 1.0 + 0.12 * (now * 37.0 + f32::from(flame.0.0)).sin();
+        transform.scale = Vec3::new(
+            LIFT_FLAME_LENGTH * flicker,
+            LIFT_FLAME_HALF.y,
+            LIFT_FLAME_HALF.x,
+        );
+    }
 }
 
 #[derive(Resource, Default)]
@@ -582,6 +656,9 @@ pub(crate) fn interpolate(from: &Car, to: &Car, t: f32) -> Car {
         boost: lerp(from.boost, to.boost),
         turbo: lerp(from.turbo, to.turbo),
         turbo_boost: lerp(from.turbo_boost, to.turbo_boost),
+        altitude: lerp(from.altitude, to.altitude),
+        climb: lerp(from.climb, to.climb),
+        thrust: lerp(from.thrust, to.thrust),
         ..*to
     }
 }

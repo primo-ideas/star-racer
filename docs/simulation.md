@@ -476,6 +476,37 @@ The rule `shipped_tracks_are_drivable` enforces is what holds whatever the table
 shipped circuit the drifting lap must be the faster one, and a tuning or a road where holding the
 button stops paying fails CI.
 
+### The jump
+
+Since v0.1.48 (protocol 30), the user's request "Rajoute le saut, qui fait faire un léger saut à
+la voiture si on appuie une fois, et si on maintient on a un vrai thruster, comme dans Rocket
+Racing": a press of the jump button lifts the car off the road; held, it becomes a thruster.
+
+The car has an `altitude` over the road and a `climb`, its speed up from it (`Car::fly`). On the
+road, a press sets the climb to `jump_speed` (6 m/s); in the air `air_gravity` (28 m/s², nearly
+three times the road's, so a hop is short and snappy) pulls it back: **a tap hops 0.64 m for
+0.43 s**. Held past `thrust_delay` (0.15 s, so a tap never touches it), the **thruster** pushes up
+at `thrust_acceleration` (46 m/s²), less and less as the car nears `thrust_ceiling` (8 m): the
+push and the pull meet about 3 m up, where the car hovers. It burns a tank of `thrust_seconds`
+(1.5 s), filled again only on the road at `thrust_recharge` (0.75 s a second, two seconds empty to
+full); with the tank empty the car falls, about 2.1 s after it left the road. Letting go in the
+air ends the thrust for that jump: holding the button again before landing does nothing.
+
+The jump changes only the height: the car keeps its speed, its heading and its steering in the
+air, and the walls still hold it (they are high enough to be walls at any altitude the thruster
+reaches). In the air it feels no slope, so a jump off a crest carries its speed instead of losing
+it to the climb, and it touches no speed pad: jumping a pad misses it, which a test checks. It
+lands softly, the climb set to nothing on the road. Everything is in the car, so it is predicted
+and reconciled like the rest; the server checks that `jump_speed`, `air_gravity` and
+`thrust_ceiling` are positive.
+
+On screen the car rises by its altitude along the road's own up while its shadow and the light
+under it stay on the road, shrinking with the height (`stay_on_the_road` in `race.rs`); a flame
+points down from under the hull while the thruster burns; the chase camera rises 0.7 of the
+height with the car, so the car is seen lifting off; and the HUD shows a THRUST gauge, the tank,
+while the car is in the air or the tank is filling. What the jump is for is the next level's to
+say: the skyway was drawn before it, with nothing to jump over.
+
 ### Accelerating, no brake
 
 The game is full speed all the time: there is **no brake and no reverse**, only an accelerate
@@ -493,7 +524,7 @@ graded from S to E (see [Lobbies](lobbies.md#the-start)).
 
 ### Inputs
 
-Inputs are quantized (booleans to accelerate, to drift and to fire the turbo, an `i8` for
+Inputs are quantized (booleans to accelerate, to drift, to fire the turbo and to jump, an `i8` for
 steering) before they reach the simulation. They are a few bytes on the wire, and both sides simulate from the same integers
 instead of floats that could differ in their last bits.
 

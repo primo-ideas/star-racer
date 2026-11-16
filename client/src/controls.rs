@@ -110,7 +110,10 @@ fn send_input(
             (Some(car), Some(track)) => {
                 let seed = current.0.as_ref().map_or(0, |membership| u32::from(membership.car.0));
                 let personality = autopilot::Personality::of(seed);
-                autopilot::drive_in_style_as(style, &personality, &car, &track.0)
+                let held = script
+                    .jump
+                    .is_some_and(|hold| time.elapsed_secs() % crate::settings::JUMP_EVERY < hold);
+                autopilot::drive_in_style_as(style, &personality, &car, &track.0).with_jump(held)
             }
             _ => CarInput::default(),
         }
@@ -163,6 +166,7 @@ fn player_input(
     let mut accelerate = keyboard.any_pressed(bindings.accelerate.keys()) || touch.accelerating();
     let mut drift = keyboard.any_pressed(bindings.drift.keys()) || touch.drifting();
     let mut turbo = keyboard.any_pressed(bindings.turbo.keys()) || touch.firing_turbo();
+    let mut jump = keyboard.any_pressed(bindings.jump.keys()) || touch.jumping();
     let mut steer: f32 = touch.steer();
 
     let mut left = keyboard.any_pressed(bindings.steer_left.keys());
@@ -171,6 +175,7 @@ fn player_input(
         accelerate |= bindings.accelerate.held_on(gamepad);
         drift |= bindings.drift.held_on(gamepad);
         turbo |= bindings.turbo.held_on(gamepad);
+        jump |= bindings.jump.held_on(gamepad);
         steer += stick_steering(gamepad.left_stick().x);
         // The buttons bound to steering say left or right and nothing between, as keys do.
         left |= bindings.steer_left.held_on(gamepad);
@@ -181,6 +186,7 @@ fn player_input(
     CarInput::new(accelerate, steer)
         .with_drift(drift)
         .with_turbo(turbo)
+        .with_jump(jump)
 }
 
 /// A stick resting this far off center does not steer: a worn one rests a little off it.

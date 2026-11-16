@@ -19,7 +19,7 @@ pub mod names;
 pub mod ranked;
 
 /// Bump on every incompatible protocol change.
-pub const PROTOCOL_VERSION: u32 = 29;
+pub const PROTOCOL_VERSION: u32 = 30;
 
 /// Local server port. In production, the reverse proxy terminates TLS and forwards here.
 pub const DEFAULT_PORT: u16 = 8080;
@@ -673,6 +673,12 @@ mod tests {
                     turbo: 1.75,
                     turbo_boost: 1.2,
                     turbo_button: true,
+                    altitude: 2.5,
+                    climb: -1.5,
+                    jump_button: true,
+                    jump_held: 0.4,
+                    thrust: 0.9,
+                    thrusting: true,
                 },
                 progress: 812.5,
                 drift_gauge: 0.4,
@@ -682,7 +688,10 @@ mod tests {
             }],
         });
         let input = ClientMessage::Input {
-            input: CarInput::new(true, -0.5).with_drift(true).with_turbo(true),
+            input: CarInput::new(true, -0.5)
+                .with_drift(true)
+                .with_turbo(true)
+                .with_jump(true),
             tick: 1231,
             seq: 42,
         };

@@ -143,6 +143,21 @@
     turbo_top_speed: 87.0,
     turbo_acceleration: 80.0,
 
+    // The jump, as in Rocket Racing (docs/simulation.md#the-jump). A press lifts the car off the
+    // road at jump_speed (m/s); air_gravity (m/s²) brings it back, stronger than the road's
+    // gravity so a hop is short: at 6 and 28, 0.64 m up and 0.43 s in the air. Held past
+    // thrust_delay (s), the thruster pushes up at thrust_acceleration (m/s²), less and less
+    // toward thrust_ceiling (m), so the car climbs and hovers where push and pull meet (about
+    // 3 m at 46 and 8), for as long as the tank holds: thrust_seconds, filled again on the road at
+    // thrust_recharge seconds per second. In the air the car feels no slope and touches no pad.
+    jump_speed: 6.0,
+    air_gravity: 28.0,
+    thrust_delay: 0.15,
+    thrust_acceleration: 46.0,
+    thrust_ceiling: 8.0,
+    thrust_seconds: 1.5,
+    thrust_recharge: 0.75,
+
     // Walls. The bounce is the share of the impact speed that comes back, from 0 to 1. The impact
     // friction is the speed along the wall a hit takes, per m/s it takes into it: a graze costs
     // little, a blow at an angle a lot. The friction slows a car scraping along a wall, per second.

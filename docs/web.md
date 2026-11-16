@@ -72,6 +72,7 @@ With no command line, the web client reads its settings from the page address:
 | `identity=…` | `--identity` | the browser's main identity |
 | `autopilot` | `--autopilot` | off |
 | `autopilot_drift` | `--autopilot-drift` | off |
+| `jump=S` | `--jump` | the autopilot never jumps |
 | `touch` | `--touch` | whether the browser says the pointer is coarse |
 | `safe_area=T,R,B,L` | `--safe-area` | what the browser says a notch takes (see [Interface](ui.md#on-a-touchscreen)) |
 | `latency` | `--latency` | off; F3 shows the figures anyway (see [Latency](latency.md)) |
