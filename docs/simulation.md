@@ -485,7 +485,8 @@ Racing": a press of the jump button lifts the car off the road; held, it becomes
 The car has an `altitude` over the road and a `climb`, its speed up from it (`Car::fly`). On the
 road, a press sets the climb to `jump_speed` (6 m/s); in the air `air_gravity` (28 m/s², nearly
 three times the road's, so a hop is short and snappy) pulls it back: **a tap hops 0.64 m for
-0.43 s**. Held past `thrust_delay` (0.15 s, so a tap never touches it), the **thruster** pushes up
+0.43 s** (1 m for 0.4 s since v0.1.50, see [Snappier](#snappier); the figures here are those of
+v0.1.48). Held past `thrust_delay` (0.15 s, so a tap never touches it), the **thruster** pushes up
 at `thrust_acceleration` (46 m/s²), less and less as the car nears `thrust_ceiling` (8 m): the
 push and the pull meet about 3 m up, where the car hovers. It burns a tank of `thrust_seconds`
 (1.5 s), filled again only on the road at `thrust_recharge` (0.75 s a second, two seconds empty to
@@ -493,8 +494,8 @@ full); with the tank empty the car falls, about 2.1 s after it left the road. Le
 air ends the thrust for that jump: holding the button again before landing does nothing.
 
 The jump changes only the height: the car keeps its speed, its heading and its steering in the
-air, and the walls still hold it (they are high enough to be walls at any altitude the thruster
-reaches). In the air it feels no slope, so a jump off a crest carries its speed instead of losing
+air. Until v0.1.49 the walls held it at any altitude; since v0.1.50 they hold it only as high as
+they stand (see [Off the road](#off-the-road)). In the air it feels no slope, so a jump off a crest carries its speed instead of losing
 it to the climb, and it touches no speed pad: jumping a pad misses it, which a test checks. It
 lands softly, the climb set to nothing on the road. Everything is in the car, so it is predicted
 and reconciled like the rest; the server checks that `jump_speed`, `air_gravity` and
@@ -507,22 +508,62 @@ height with the car, so the car is seen lifting off; and the HUD shows a THRUST 
 while the car is in the air or the tank is filling. What the jump is for, the rift says
 (v0.1.49): its road is missing in four places (see [Tracks](tracks.md#gaps)).
 
-### Falling, and coming back
+### Snappier
 
-Over a [gap](tracks.md#gaps) there is no road to come down onto. A car that reaches one on the
-road, or comes down over one, falls: `air_gravity` pulls it under the road, and once it has sunk
-past `LIP` (0.6 m) it can no longer land, even if it gets back over road. A jump that barely makes
-it lands; one under the slab has missed. Under `FALL_DEPTH` (30 m, about 1.5 s of falling) the car
-is brought back to the last [checkpoint](tracks.md#checkpoints) it passed (`Car::checkpoint`), on
-the centerline, heading down the road at `RESPAWN_SPEED_SHARE` (0.6) of top speed, with its turbo
-meter and a full tank, and nothing else of what it was doing. `Car::respawns` counts the times, so
-the server's progress knows the car was moved rather than driven. It is all in the car, so a fall
-is predicted like the rest; the camera follows it 4 m down and watches it drop away, the drift's
-arc is not painted while the car is off the road, and the HUD says BACK ON TRACK.
+In v0.1.50, the user's word "Arrange le saut, pour qu'il saute plus vif": the hop leaves the road
+at 10 m/s instead of 6 and is pulled back at 50 m/s² instead of 28, so it rises **1 m in 0.2 s**
+and is down again 0.4 s after the press, where it rose 0.64 m in 0.21 s and took 0.43 s. It goes
+half as high again in the same time, and no longer hangs at the top. The thruster comes in after
+0.1 s instead of 0.15 and pushes at 95 m/s² instead of 46, a net 45 m/s² off the road instead of
+18: the car is about 2 m up a quarter of a second after the press, 3 m after 0.4 s, and hovers
+about 3.8 m up. A hop clears a little
+less road than it did, 23 m at top speed against 25. The hop stays under the walls (1 m against
+1.4): only the thruster lifts a car over them.
+
+### Off the road
+
+Since v0.1.50, the user's word "Il ne faut pas de mur invisible mais on doit détecter quand le
+joueur part trop en sucette pour le faire respawn après un petit compte à rebours".
+
+**The walls hold a car no higher than they are.** `WALL_HEIGHT` is 1.4 m, the height the client
+draws them, and a car collides with them while its altitude is under 1.2 m, its hull riding a
+little over the road. Higher, it flies over, and beyond the walls it has left the road. So has a
+car that drives through a [breach](tracks.md#breaches), where a wall is missing, or onto a
+[gap](tracks.md#gaps).
+
+**Where there is no road there is nothing to come down onto.** `air_gravity` pulls the car down,
+past the level of the road if nothing stops it, and once it has sunk past `LIP` (0.6 m) under a
+road it can no longer land on it. Over the road a car in the air rides the relief, its altitude
+measured from the road under it; beside the road it keeps its own height: its altitude is still
+written from the nearest road's edge, and is corrected by however much that reference moves, so
+the car's real height never jumps when another part of the lap becomes the nearest. The thruster
+still works out there, pushing toward its ceiling over whichever road is nearest, so a car can
+climb toward a road that stands higher; only between the walls, under the road or in a gap, is a
+sunk car beyond its help. The car lands on any road it is over and no higher than, whatever its
+speed down: only a car already under the lip has missed.
+
+**Off its course, a car is counted out.** A car is on its course when it is between the walls,
+not sunk under the road, and on the stretch of the lap between the last gate it passed and the
+next (`Track::on_course`; over a gap it is jumping counts). Otherwise `Car::astray` counts the
+seconds, and at `ASTRAY_SECONDS` (2.4) the car is brought back to the last
+[checkpoint](tracks.md#checkpoints) it passed (`Car::checkpoint`), on the centerline, heading
+down the road at `RESPAWN_SPEED_SHARE` (0.6) of top speed, with its turbo meter and a full tank,
+and nothing else of what it was doing. Back on its course before that, the count is forgotten:
+2.4 s is long enough to fly a [shortcut](tracks.md#shortcuts), 140 m at top speed, and short
+enough that nobody waits for a car gone for good. A car that has fallen `FALL_BELOW` (15 m) under
+the lowest road of the track is brought back at once, there being nothing left under it.
+`Car::respawns` counts the times, so the server's progress knows the car was moved rather than
+driven.
+
+It is all in the car, so it is predicted like the rest. The HUD counts it down, 3, 2, 1, over
+OFF TRACK, or MISSED CHECKPOINT for a car on a part of the road its lap does not have it on yet,
+then says BACK ON TRACK; the camera goes with a car beside the road all the way up or down, and
+still watches one falling through a gap drop away from 4 m under the road; the shadow and the
+light under the car are drawn only where there is road to throw them on.
 
 A car passes the next gate of the lap, and only the next, when a tick carries it across forward by
-less than `MAX_STEP`: gates are passed in order or not at all. The HUD names each one passed:
-CHECKPOINT 2/5.
+less than `MAX_STEP`, over the road: gates are passed in order or not at all, and never from
+beside the road. The HUD names each one passed: CHECKPOINT 2/11.
 
 ### Accelerating, no brake
 

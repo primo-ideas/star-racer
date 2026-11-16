@@ -150,10 +150,10 @@
     // toward thrust_ceiling (m), so the car climbs and hovers where push and pull meet (about
     // 3 m at 46 and 8), for as long as the tank holds: thrust_seconds, filled again on the road at
     // thrust_recharge seconds per second. In the air the car feels no slope and touches no pad.
-    jump_speed: 6.0,
-    air_gravity: 28.0,
-    thrust_delay: 0.15,
-    thrust_acceleration: 46.0,
+    jump_speed: 10.0,
+    air_gravity: 50.0,
+    thrust_delay: 0.1,
+    thrust_acceleration: 95.0,
     thrust_ceiling: 8.0,
     thrust_seconds: 1.5,
     thrust_recharge: 0.75,

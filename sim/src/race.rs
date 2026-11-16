@@ -7,7 +7,7 @@ use bitcode::{Decode, Encode};
 use glam::Vec2;
 
 use super::TICK_SECONDS;
-use super::car::{Car, CarInput, CarTuning, MAX_STEP};
+use super::car::{Car, CarInput, CarTuning};
 use super::track::Track;
 
 /// The start lights shown over the grid: one more lights up every second, and the last one lights
@@ -36,11 +36,12 @@ pub fn start_lights(until_start: f32) -> (u32, f32) {
 /// later is at the track length.
 ///
 /// Measured from changes of the car's projection on the centerline, so driving backward counts
-/// against it and nothing can be gained by crossing the start line back and forth. It cannot be
-/// cheated either (docs/tracks.md#checkpoints): it grows by no more than a car can drive in a
-/// tick, so a car that gets from one part of the road to another without driving the road between
-/// gains nothing; and it does not cross the start line until the car has passed every checkpoint
-/// of the lap in order, so a lap that skips one does not count, and the car has to drive another.
+/// against it and nothing can be gained by crossing the start line back and forth. A shortcut
+/// counts in full: a car that flies from one part of the road to another has got there. It cannot
+/// be cheated for all that (docs/tracks.md#checkpoints): nothing counts while the car is off its
+/// course ([`Car::is_astray`]), which it is anywhere past the next checkpoint it has yet to pass,
+/// and it does not cross the start line until the car has passed every checkpoint of the lap in
+/// order.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Progress {
     /// Distance along the centerline at the last update, in `[0, length)`.
@@ -91,7 +92,12 @@ impl Progress {
             }
             return;
         }
-        let step = wrapped_delta(distance - self.distance, length).clamp(-MAX_STEP, MAX_STEP);
+        if car.is_astray() {
+            // Off its course, wherever the nearest road is: nothing counts until it is back on
+            // it, or brought back.
+            return;
+        }
+        let step = wrapped_delta(distance - self.distance, length);
         let mut total = self.total + step;
         // Crossing the line: only once every checkpoint of the lap has been passed, which leaves
         // the car's last gate at the line itself.
@@ -464,14 +470,19 @@ mod tests {
         assert!(progress.total() > length - 1.0, "{progress:?}");
     }
 
-    /// Getting from one part of the road to another without driving between them gains no more
-    /// than a tick's driving.
+    /// A shortcut counts in full: a car that gets from one part of the road to another between
+    /// the same two gates has made that much progress. A car off its course makes none.
     #[test]
-    fn progress_cannot_jump_ahead() {
+    fn a_shortcut_counts_and_a_car_off_its_course_gains_nothing() {
         let track = Track::build(&oval(100.0, 40.0, 20.0)).unwrap();
         let mut progress = Progress::new(&track, track.point_at(10.0).position);
-        progress.update(&track, &Car::new(track.point_at(200.0).position, 0.0));
-        assert!(progress.total() <= 10.0 + MAX_STEP + 0.1, "{progress:?}");
+        progress.update(&track, &Car::new(track.point_at(120.0).position, 0.0));
+        assert!((progress.total() - 120.0).abs() < 0.5, "{progress:?}");
+
+        let mut car = Car::new(track.point_at(200.0).position, 0.0);
+        car.astray = 0.5;
+        progress.update(&track, &car);
+        assert!((progress.total() - 120.0).abs() < 0.5, "{progress:?}");
     }
 
     /// A car brought back to its last gate goes back to the progress it had there.

@@ -526,10 +526,11 @@ fn stay_on_the_road(
         let Some(state) = car(visual.0) else {
             continue;
         };
-        // Over a gap, or falling through one, there is no road under the car to throw them on.
+        // Over a gap, beside the road or falling, there is no road under the car to throw them
+        // on.
         let over_gap = track
             .as_ref()
-            .is_some_and(|track| track.0.in_gap(track.0.project(state.position).distance));
+            .is_some_and(|track| !track.0.over_road(&track.0.project(state.position)));
         let scale = if state.altitude < 0.0 || over_gap {
             0.0
         } else {

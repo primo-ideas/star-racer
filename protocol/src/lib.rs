@@ -19,7 +19,7 @@ pub mod names;
 pub mod ranked;
 
 /// Bump on every incompatible protocol change.
-pub const PROTOCOL_VERSION: u32 = 30;
+pub const PROTOCOL_VERSION: u32 = 31;
 
 /// Local server port. In production, the reverse proxy terminates TLS and forwards here.
 pub const DEFAULT_PORT: u16 = 8080;
@@ -618,6 +618,7 @@ mod tests {
                         length: 24.0,
                     }],
                     checkpoints: vec![90.0, 300.0],
+                    breaches: Vec::new(),
                 },
             }],
             identity: Identity {
@@ -686,6 +687,7 @@ mod tests {
                     thrusting: true,
                     checkpoint: 2,
                     respawns: 3,
+                    astray: 0.7,
                 },
                 progress: 812.5,
                 drift_gauge: 0.4,
@@ -755,7 +757,7 @@ mod tests {
     fn lobby_settings_validation() {
         let settings = LobbySettings {
             name: "Friday night".into(),
-            track: "skyway".into(),
+            track: "odyssey".into(),
             laps: 3,
             min_players: 2,
             max_players: 8,

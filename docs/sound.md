@@ -44,11 +44,12 @@ they should move to a file the client reads, the way the car tuning does.
 there is a car to hear. It has three voices, each following a number the game sets every frame
 (`Drive`):
 
-- **Thrusters.** A hum from 55 Hz standing still to 130 Hz at top speed, with two harmonics so a
-  laptop or a phone can say it at all, and a thin whine seven times higher that comes in with the
-  speed. A boost raises all of it, the turbo by nearly a fifth.
-- **Wind.** Noise under a filter that opens with the square of the speed: nothing on the grid, a
-  low rush at top speed, a roar on a boost.
+- **Thrusters.** A low chord: two voices a hair apart, from 46 Hz standing still to 98 Hz at top
+  speed, beating slowly against each other so the hum breathes, a fifth above them, and an
+  octave so a laptop or a phone can say it at all, pushed gently into saturation. A boost raises
+  all of it, and only then is a whine heard over it, five times higher and quiet.
+- **Wind.** Noise under a filter that stays low (110 Hz on the grid, 530 at top speed), kept
+  well under the hum and rising and falling in slow gusts; it opens up and roars only on a boost.
 - **The drift.** A narrow band of noise, scrubbing 23 times a second, while the car drifts. Its
   band rises from 1.5 to 2.8 kHz as the drift charges, so a drift worth letting go of is heard as
   well as seen.
@@ -58,10 +59,15 @@ voice glides to what was asked over 60 ms, so nothing crackles at 60 frames a se
 appearing fades in rather than clicking.
 
 This is not the engine of v0.1.6, a knock on every firing rung through three resonances, which the
-user had taken out in v0.1.8 ("We'll do better"). The car has since become a hovercraft on
-thrusters, and this is a turbine under wind: nothing in it fires or knocks. It is the next
-attempt, and the user's to judge. It is quiet on purpose, a fifth of full scale at most where a
-tone reaches a third, since it never stops.
+user had taken out in v0.1.8 ("We'll do better"). Nor is it the turbine of v0.1.23 to v0.1.49: a
+steady hum under a thin whine seven times higher (900 Hz at top speed) and a rush of air whose
+filter opened to 2 kHz, which the user heard for what it was ("Arrange le son, que ca fasse moins
+aspirateur", v0.1.50): a steady whine over steady broadband noise is a vacuum cleaner. Since
+v0.1.50 nothing whines without a boost, the wind is dark and comes in gusts, and the hum moves.
+A test measures it: at top speed with no boost, the energy of the change from one sample to the
+next is 0.0003 of the sound's, where white noise gives 2 and a tone of 1 kHz 0.02. It is quiet
+on purpose, a fifth of full scale at most where a tone reaches a third, since it never stops.
+Claude has not heard it: whether it is pleasant over a whole race is the user's to judge.
 
 ## What plays when
 

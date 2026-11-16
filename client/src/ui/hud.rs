@@ -17,6 +17,7 @@ use bevy::ui_widgets::Activate;
 use star_racer_protocol::ranked::Tier;
 use star_racer_protocol::{CarId, LobbyPhase, PlayerStatus};
 use star_racer_sim::TICK_RATE;
+use star_racer_sim::car::ASTRAY_SECONDS;
 use star_racer_sim::race::{self, RaceStanding, StartGrade};
 
 use super::navigation::MenuInput;
@@ -845,7 +846,21 @@ fn update_hud(
         }
         flash.seen = Some(state);
         let checkpoints = track.0.gates().len().saturating_sub(1);
-        if let Some((since, fell)) = flash.since
+        if car.is_astray() {
+            // Off its course: the seconds left before the car is brought back, counted down
+            // from three, and why. On the road, it is on a part of it its lap does not have it
+            // on yet: it flew past a checkpoint.
+            let left = (ASTRAY_SECONDS - car.astray).max(0.0);
+            let count = (left / (ASTRAY_SECONDS / 3.0)).ceil().clamp(1.0, 3.0);
+            let label = if car.is_airborne() {
+                "OFF TRACK"
+            } else {
+                "MISSED CHECKPOINT"
+            };
+            model.shown.insert(Block::StartGrade);
+            model.text(Slot::StartGrade, format!("{count:.0}"), theme::MAGENTA);
+            model.text(Slot::StartLabel, label, theme::MAGENTA);
+        } else if let Some((since, fell)) = flash.since
             && now - since < GATE_FLASH_SECONDS
             && checkpoints > 0
             && !model.shown.contains(&Block::StartGrade)

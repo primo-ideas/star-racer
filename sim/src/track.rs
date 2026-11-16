@@ -18,7 +18,7 @@ use serde::Deserialize;
 
 pub mod scenery;
 
-use self::scenery::Prop;
+use self::scenery::{Prop, Side};
 
 /// Upper bound on the distance between two consecutive centerline points, in meters.
 const MAX_POINT_SPACING: f64 = 1.0;
@@ -81,6 +81,9 @@ pub struct TrackDescription {
     /// docs/tracks.md#checkpoints). The start line is the first gate without being listed.
     #[serde(default)]
     pub checkpoints: Vec<f32>,
+    /// Stretches where one of the two walls is missing (see [`Breach`]).
+    #[serde(default)]
+    pub breaches: Vec<Breach>,
 }
 
 /// A gap: a stretch where the road is missing, from wall to wall. The walls carry on over it, as
@@ -108,6 +111,11 @@ const GAP_CLEAR_AFTER_LINE: f32 = 40.0;
 /// The closest two gates may be, and the most road a checkpoint must leave a car coming back to
 /// it before the next gap begins.
 const MIN_GATE_SPACING: f32 = 40.0;
+
+/// How far behind the last gate it passed a car is still on its course, in meters: the grid
+/// stands behind the line, and a car may be knocked back a little.
+const BEHIND_GATE: f32 = 120.0;
+
 const CHECKPOINT_RUN_UP: f32 = 40.0;
 
 impl Gap {
@@ -127,6 +135,39 @@ impl Gap {
         let end = self.at + self.length;
         if end > length - GAP_CLEAR_BEHIND_LINE || start < GAP_CLEAR_AFTER_LINE {
             return Err("a gap must keep 60 m clear behind the start line and 40 m after it");
+        }
+        Ok(())
+    }
+}
+
+/// A breach: a stretch where the wall on one side of the road is missing. Nothing holds a car
+/// in there: it drives off the edge of the road and falls, onto another part of the road if one
+/// lies below and ahead, which is what a shortcut is, or into the dark.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Encode, Decode)]
+#[serde(deny_unknown_fields)]
+pub struct Breach {
+    /// Meters along the lap from the start line where the wall stops.
+    pub at: f32,
+    /// How long the stretch without wall is, in meters.
+    pub length: f32,
+    /// Which wall is missing, looking along the driving direction.
+    pub side: Side,
+}
+
+impl Breach {
+    /// Whether the wall on the side of `lateral` (positive on the left) is missing `distance`
+    /// meters along a lap `length` meters round.
+    pub fn covers(&self, distance: f32, lateral: f32, length: f32) -> bool {
+        (lateral > 0.0) == (self.side == Side::Left)
+            && (distance - self.at).rem_euclid(length) < self.length
+    }
+
+    fn validate(&self, length: f32) -> Result<(), &'static str> {
+        if !(self.at.is_finite() && (0.0..length).contains(&self.at)) {
+            return Err("the distance along the track must be between zero and its length");
+        }
+        if !(self.length.is_finite() && self.length >= 4.0 && self.length < length) {
+            return Err("the length must be at least 4 meters and shorter than the lap");
         }
         Ok(())
     }
@@ -453,6 +494,11 @@ pub enum TrackError {
         index: usize,
         reason: &'static str,
     },
+    /// A breach cannot be placed as written.
+    InvalidBreach {
+        index: usize,
+        reason: &'static str,
+    },
     /// A checkpoint cannot be placed as written.
     InvalidCheckpoint {
         index: usize,
@@ -486,6 +532,7 @@ impl fmt::Display for TrackError {
             Self::InvalidNarrows { index, reason } => write!(f, "narrows {index}: {reason}"),
             Self::InvalidPad { index, reason } => write!(f, "pad {index}: {reason}"),
             Self::InvalidGap { index, reason } => write!(f, "gap {index}: {reason}"),
+            Self::InvalidBreach { index, reason } => write!(f, "breach {index}: {reason}"),
             Self::InvalidCheckpoint { index, reason } => {
                 write!(f, "checkpoint {index}: {reason}")
             }
@@ -562,6 +609,9 @@ pub struct Track {
     gaps: Vec<Gap>,
     /// Meters along the lap of every gate, the start line first.
     gates: Vec<f32>,
+    breaches: Vec<Breach>,
+    /// The lowest the road ever lies, in meters.
+    lowest: f32,
 }
 
 impl Track {
@@ -668,11 +718,20 @@ impl Track {
             }
             previous = at;
         }
+        for (index, breach) in description.breaches.iter().enumerate() {
+            breach
+                .validate(lap)
+                .map_err(|reason| TrackError::InvalidBreach { index, reason })?;
+        }
         for (index, prop) in description.scenery.iter().enumerate() {
             prop.validate(length as f32)
                 .map_err(|reason| TrackError::InvalidProp { index, reason })?;
         }
 
+        let lowest = points
+            .iter()
+            .map(|point| point.height)
+            .fold(f32::INFINITY, f32::min);
         let narrowest_half_width = points
             .iter()
             .map(|point| point.half_width)
@@ -687,6 +746,8 @@ impl Track {
             points,
             pads: description.pads.clone(),
             gaps: description.gaps.clone(),
+            breaches: description.breaches.clone(),
+            lowest,
             gates: std::iter::once(0.0)
                 .chain(description.checkpoints.iter().copied())
                 .collect(),
@@ -710,6 +771,54 @@ impl Track {
     /// Whether the road is missing `distance` meters along the lap.
     pub fn in_gap(&self, distance: f32) -> bool {
         self.gaps.iter().any(|gap| gap.covers(distance, self.length))
+    }
+
+    /// The stretches where a wall is missing, in the order the file gives them.
+    pub fn breaches(&self) -> &[Breach] {
+        &self.breaches
+    }
+
+    /// Whether the wall on the side of `lateral` (positive on the left) is missing `distance`
+    /// meters along the lap.
+    pub fn breached(&self, distance: f32, lateral: f32) -> bool {
+        self.breaches
+            .iter()
+            .any(|breach| breach.covers(distance, lateral, self.length))
+    }
+
+    /// The lowest the road ever lies, in meters: under it there is nothing to land on.
+    pub fn lowest(&self) -> f32 {
+        self.lowest
+    }
+
+    /// Whether `projection` lies between the walls, over the road or over a gap in it.
+    pub fn within_walls(&self, projection: &TrackProjection) -> bool {
+        projection.lateral.abs() <= self.half_width_at(projection.distance)
+    }
+
+    /// Whether there is road under `projection`: between the walls, and not over a gap.
+    pub fn over_road(&self, projection: &TrackProjection) -> bool {
+        self.within_walls(projection) && !self.in_gap(projection.distance)
+    }
+
+    /// The height that heights are measured from at `projection`: the road's, and beside the
+    /// road the height of its nearest edge.
+    pub fn height_at(&self, projection: &TrackProjection) -> f32 {
+        self.height_beside(&self.point_at(projection.distance), projection.lateral)
+    }
+
+    /// Whether a car whose last gate is `checkpoint` is where its lap has it, `distance` meters
+    /// along the lap: between that gate and the next, or a little way behind it. Further on, it
+    /// has missed a gate; further back, it has gone the wrong way.
+    pub fn on_course(&self, checkpoint: u8, distance: f32) -> bool {
+        let last = usize::from(checkpoint).min(self.gates.len() - 1);
+        let next = (last + 1) % self.gates.len();
+        let span = match (self.gates[next] - self.gates[last]).rem_euclid(self.length) {
+            span if span > 0.0 => span,
+            _ => self.length,
+        };
+        let ahead = (distance - self.gates[last]).rem_euclid(self.length);
+        ahead <= span || ahead >= self.length - BEHIND_GATE.min(self.length / 4.0)
     }
 
     /// Meters along the lap of every gate a lap passes, in order: the start line, at 0, then each

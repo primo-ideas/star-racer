@@ -218,6 +218,61 @@ mod tests {
         }
     }
 
+    /// Where a car set straight down the road `at` meters along the Odyssey, `lateral` from its
+    /// centerline, is three seconds later, the jump held for `hold` seconds: how far along the
+    /// lap it has got, or nothing if it was brought back to a checkpoint on the way.
+    fn straight_on(at: f32, lateral: f32, speed: f32, hold: f32) -> Option<f32> {
+        use star_racer_sim::car::{Car, CarInput};
+        use star_racer_sim::{TICK_RATE, TICK_SECONDS};
+        let tracks = load_tracks(&data_dir()).unwrap();
+        let tuning = load_car_tuning(&data_dir().join(CAR_TUNING_FILE), &tracks).unwrap();
+        let track = &tracks["odyssey"].track;
+        let point = track.point_at(at);
+        let mut car = Car::new(
+            point.position + point.direction.perp() * lateral,
+            point.direction.to_angle(),
+        );
+        car.velocity = point.direction * speed;
+        car.thrust = tuning.thrust_seconds;
+        car.checkpoint = track.gates().iter().rposition(|gate| *gate <= at).unwrap() as u8;
+        // Faster than the car goes by itself: on a boost, or on the turbo.
+        car.boost = if speed > tuning.top_speed { 3.0 } else { 0.0 };
+        car.turbo_boost = if speed > tuning.boost_top_speed { 3.0 } else { 0.0 };
+        for tick in 0..3 * TICK_RATE {
+            let held = (tick as f32 * TICK_SECONDS) < hold;
+            car.step(CarInput::new(true, 0.0).with_jump(held), &tuning, track);
+            if car.respawns > 0 {
+                return None;
+            }
+            if tick > TICK_RATE && !car.is_airborne() && !car.is_astray() {
+                return Some(track.project(car.position).distance - at);
+            }
+        }
+        None
+    }
+
+    /// The Odyssey's three shortcuts are there to be found, and cost what they should
+    /// (docs/tracks.md#shortcuts): the keyhole is flown on the thruster, from a little over top
+    /// speed; the balcony is driven off through its breach, with nothing pressed; and the long
+    /// way round is flown on the turbo, and is too far at top speed. Each skips hundreds of
+    /// meters of road. A change to the track or to the car that closes one, or opens the last to
+    /// everyone, fails here.
+    #[test]
+    fn the_shortcuts_of_the_odyssey_are_there() {
+        let keyhole = straight_on(644.0, 0.0, 62.0, 1.6);
+        assert!(keyhole.is_some_and(|gained| gained > 400.0), "keyhole: {keyhole:?}");
+        // Without flying, the wall holds the car on the road.
+        let held = straight_on(644.0, 0.0, 58.0, 0.0);
+        assert!(held.is_some_and(|gained| gained < 200.0), "keyhole, on the road: {held:?}");
+
+        let balcony = straight_on(1912.0, 9.0, 58.0, 0.0);
+        assert!(balcony.is_some_and(|gained| gained > 350.0), "balcony: {balcony:?}");
+
+        let long_way = straight_on(4177.0, 0.0, 87.0, 1.6);
+        assert!(long_way.is_some_and(|gained| gained > 400.0), "long way round: {long_way:?}");
+        assert_eq!(straight_on(4177.0, 0.0, 58.0, 1.6), None, "the long way round at top speed");
+    }
+
     /// Scenery is decoration, so building a track only checks that a prop stands off the road where
     /// it is placed. A circuit doubles back on itself, though, so a stand or a slab put far out on
     /// one turn can land on another part of the lap: every shipped prop is checked against the whole

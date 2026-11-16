@@ -63,7 +63,7 @@ With no command line, the web client reads its settings from the page address:
 | `guest` | `--guest` | off: the first screen |
 | `account=…&password=…`, `create` | `--account`, `--password`, `--create` | none; for local checks only, a password in an address being written in the browser's history |
 | `lobby=…` | `--lobby` | none: the lobby list |
-| `track=…` | `--track` | the skyway |
+| `track=…` | `--track` | the Odyssey |
 | `laps=…`, `min_players=…` | `--laps`, `--min-players` | 3, 2 |
 | `create_dialog` | `--create-dialog` | off |
 | `settings` | `--settings` | off; opens the settings over the first screen |
