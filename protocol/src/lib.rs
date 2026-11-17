@@ -20,7 +20,7 @@ pub mod ranked;
 pub mod rewards;
 
 /// Bump on every incompatible protocol change.
-pub const PROTOCOL_VERSION: u32 = 38;
+pub const PROTOCOL_VERSION: u32 = 39;
 
 /// Local server port. In production, the reverse proxy terminates TLS and forwards here.
 pub const DEFAULT_PORT: u16 = 8080;
@@ -80,6 +80,9 @@ pub enum ClientMessage {
     /// Enters the ranked queue. The server pulls the player into a match when it has one for
     /// them. Only while browsing lobbies; entering a lobby leaves the queue.
     QueueRanked,
+    /// Gives up the race the player is in: they did not finish, and their car drives itself (since
+    /// v0.1.70). Only in a lobby, while racing after the start.
+    Abandon,
     /// Leaves the ranked queue.
     LeaveQueue,
     /// Back to browsing lobbies. Only while in a lobby.
@@ -435,6 +438,9 @@ pub enum PlayerStatus {
     Finished {
         time_ms: u32,
     },
+    /// Gave the race up (since v0.1.70): did not finish, and the car drives itself, as a finished
+    /// one does, until the next race lines up.
+    Retired,
     /// Joined during a race: has no car, watches, and races in the next one.
     Spectating,
 }
@@ -746,6 +752,18 @@ mod tests {
                     respawns: 3,
                     kick: -0.5,
                     astray: 0.7,
+                    dash: 0.1,
+                    dash_side: -1,
+                    dash_wait: 0.6,
+                    dash_button: true,
+                    roll: 0.3,
+                    roll_side: 1,
+                    passed: Some(star_racer_sim::car::Passed {
+                        position: Vec2::new(4.0, 5.0),
+                        velocity: Vec2::new(40.0, -1.0),
+                        heading: 0.2,
+                    }),
+                    reset_button: true,
                 },
                 progress: 812.5,
                 drift_gauge: 0.4,
@@ -760,7 +778,10 @@ mod tests {
                 .with_drift(true)
                 .with_turbo(true)
                 .with_jump(true)
-                .with_thrust(true),
+                .with_thrust(true)
+                .with_dash(true)
+                .with_air_roll(true, -0.4)
+                .with_reset(star_racer_sim::car::Reset::AsPassed),
             tick: 1231,
             seq: 42,
         };
@@ -799,6 +820,7 @@ mod tests {
             ClientMessage::QueueRanked,
             ClientMessage::LeaveQueue,
             ClientMessage::Honk,
+            ClientMessage::Abandon,
         ] {
             assert_eq!(decode::<ClientMessage>(&encode(&message)).unwrap(), message);
         }

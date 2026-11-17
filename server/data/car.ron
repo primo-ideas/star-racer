@@ -158,6 +158,23 @@
     air_grip: 5.0,
     air_steering: 0.9,
 
+    // The Star Dash (since v0.1.70): a press with the stick to a side throws the car at the wall on
+    // that side at dash_speed (m/s) for dash_time (s); with the stick at rest it does a barrel roll
+    // of roll_time (s), drawn only. Another waits dash_wait (s).
+    dash_speed: 30.0,
+    dash_time: 0.3,
+    dash_wait: 0.8,
+    roll_time: 0.6,
+
+    // The Air Roll (since v0.1.70), held in the air: the nose turns at air_roll_steering of what the
+    // stick asks on the road and the travel follows it at air_roll_grip per second; the stick
+    // pushed forward dives at air_roll_dive (m/s²), pulled back holds the car up at air_roll_lift
+    // (m/s², under air_gravity: it glides, the thruster alone climbs).
+    air_roll_steering: 1.0,
+    air_roll_grip: 10.0,
+    air_roll_dive: 30.0,
+    air_roll_lift: 35.0,
+
     // Out of a drift (since v0.1.53): this share of the body's angle across the travel becomes a
     // real slide the grip takes up, so the travel comes round toward the nose as the drift ends,
     // as a car does coming out of a slide, instead of running on straight while the body alone

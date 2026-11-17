@@ -552,6 +552,27 @@ pays out, holding the button brakes nothing, and no new drift starts there. On t
 carries on, and ends as any drift does, paying its boost when the stick lets it come back into
 line. So a drift is charged, flown across a gap, and let go of on landing.
 
+### Star Dash, barrel roll, Air Roll and resets
+
+Since v0.1.70, the user's list after Rocket Racing (docs/ui.md#settings for the buttons):
+
+- **Star Dash** (`CarInput::dash`): a press with the stick a third or more to a side throws the car
+  across the road toward the wall on that side, its sideways speed kept up to `dash_speed` (30 m/s)
+  for `dash_time` (0.3 s), so it is pinned against the wall in a fraction of a second; the wall stops
+  it as it stops any car. With the stick at rest, a **barrel roll**: `Car::roll` counts `roll_time`
+  (0.6 s) down and the client turns the body once round its length about its middle
+  (`weight.rs`), the car going on as it was. Another dash or roll waits `dash_wait` (0.8 s).
+- **Air Roll** (`CarInput::air_roll`, `pitch`): held in the air, the nose turns at
+  `air_roll_steering` (1, as on the road) of what the stick asks and the travel follows it at
+  `air_roll_grip` (10 per second, against `air_grip` 5): the car really steers in the air. The stick
+  pushed forward dives at `air_roll_dive` (30 m/s²) on top of gravity, pulled back holds the car up
+  at `air_roll_lift` (35 m/s², under `air_gravity` 50): it glides, and only the thruster climbs.
+- **Resets** (`CarInput::reset`): on its press, `Reset::AsPassed` puts the car back as it was when
+  it crossed its last gate, where, how fast and which way (`Car::passed`), as Trackmania does;
+  `Reset::Standing` puts it standing still on the gate, pointing down the road. Either keeps the
+  turbo meter, fills the tank, and counts as a respawn for race progress. The client sends it only
+  once its button has been held 1.5 s.
+
 ### Higher, and steered in the air
 
 In v0.1.69, the user's word "Fais qu'on puisse voler plus haut, et davantage se diriger dans les

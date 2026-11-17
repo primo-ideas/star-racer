@@ -137,20 +137,34 @@ SETTINGS, on the first screen, opens a dialog over it (`ui/settings.rs`; `--sett
 once). What it holds is stored with the other choices, written out as it changes, and in force
 from the next lobby entered.
 
-**With keys and a gamepad**, it is the table of bindings (`client/src/bindings.rs`): eight actions
--- accelerate, steer left, steer right, drift, turbo, jump, thrust, horn -- each with two keys and one
-gamepad button.
+**With keys and a gamepad**, it is the table of bindings (`client/src/bindings.rs`), in two
+columns since v0.1.70: fifteen actions, each with two keys and one gamepad button. Since v0.1.70
+they bear the names of Rocket Racing, which the game takes after openly, and the gamepad is laid
+out as it was (the user's word: "Le drift est le \"Star Drift\", defaut manette sur R2, quand on en
+sort, ca produit un \"Star Boost\" [...]").
 
 | Action | Key | Or | Gamepad |
 | --- | --- | --- | --- |
-| Accelerate | W | up arrow | R (right bumper) |
+| Accelerate | W | up arrow | R1 (right bumper) |
 | Steer left | A | left arrow | D-pad left |
 | Steer right | D | right arrow | D-pad right |
-| Drift | Shift | right Shift | RT (right trigger) |
-| Turbo | E | down arrow | Y (top face button) |
-| Jump | Space | Q | A (bottom face button) |
-| Thrust | Space | Q | A (bottom face button) |
-| Horn (since v0.1.69) | H | -- | X (left face button) |
+| Star Drift (its release pays the Star Boost) | Shift | right Shift | R2 (right trigger) |
+| Star Turbo | E | down arrow | square / X |
+| Star Jump | Space | Q | circle / B |
+| Star Fly (the thruster) | Space | Q | cross / A |
+| Star Dash | F | -- | L1 |
+| Air Roll | X | -- | L2 |
+| Rear view | C | -- | triangle / Y |
+| Horn | H | -- | R3 |
+| Back to checkpoint, held 1.5 s | R | -- | D-pad down |
+| Restart checkpoint, held 1.5 s | T | -- | D-pad up |
+| Give up, held 2 s | G | -- | L3 |
+| Standings, shown or hidden | L | -- | Select |
+
+Start and Escape open the menu, and cannot be bound. A held action fills in the HUD where the start
+grade shows, in percent, under its name. Bindings saved before v0.1.70 are given the new gamepad
+buttons and keep their keys (`Bindings::migrated`, by the `version` stored with them). On the
+keyboard the Air Roll pitches with the accelerator (dive) and S (hold up).
 
 Those are the defaults, the gamepad's drift and turbo being the user's choice of 2026-11-11. The
 jump (v0.1.48) took Space and A, Rocket Racing's, and the drift's second key became the right
@@ -158,7 +172,7 @@ Shift; choices saved before it had Space on the drift, and are given the new arr
 (`Bindings::with_jump_free`). The thrust (v0.1.52) is the one action that shares its keys and
 button with another, the jump's, as the user asked: a press hops and a hold flies. Binding either
 never takes its key from the other, though anything else bound to that key still lets go of it
-(`Action::shares_with`), and the hints over a race say "Jump, hold to fly" while the two agree. The
+(`Action::shares_with`); since v0.1.70 they share their keys but not their gamepad button. The
 left stick always steers and is not in the table. A place is changed by picking it and pressing
 the key or the button it should be: the dialog *listens* for the next press, and while it does the
 menus do not answer and nothing has the focus, which is what lets the arrows, Space and the

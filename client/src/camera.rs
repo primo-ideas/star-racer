@@ -264,6 +264,7 @@ fn follow_car(
     roofs: Option<Res<Roofs>>,
     push: Res<FollowedPush>,
     time: Res<Time>,
+    held: Res<crate::controls::HeldActions>,
     mut cameras: Query<(&mut Transform, &mut Projection, &mut ChaseCamera)>,
 ) {
     let Some((_, car)) = view.followed else {
@@ -273,7 +274,10 @@ fn follow_car(
         return;
     };
     let finished = current.0.as_ref().is_some_and(|membership| {
-        matches!(membership.own_status(), Some(PlayerStatus::Finished { .. }))
+        matches!(
+            membership.own_status(),
+            Some(PlayerStatus::Finished { .. } | PlayerStatus::Retired)
+        )
     });
 
     let track = track.map(|track| Arc::clone(&track.0));
@@ -322,6 +326,19 @@ fn follow_car(
             &time,
         )
     };
+    // The rear view, while its button is held: the chase camera turned round, in front of the car
+    // looking back at it and at whoever follows.
+    if held.rear_view
+        && !finished
+        && let Some(heading) = chase.heading
+    {
+        let forward = along_the_road(heading, chase.grade.unwrap_or(0.0));
+        transform.translation = ground.frame(car_position + forward * DISTANCE + Vec3::Y * HEIGHT);
+        transform.look_at(
+            car_position - forward * LOOK_AHEAD + Vec3::Y * LOOK_HEIGHT,
+            Vec3::Y,
+        );
+    }
 
     if let Projection::Perspective(perspective) = projection.as_mut() {
         perspective.fov = fov;

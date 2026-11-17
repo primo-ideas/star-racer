@@ -109,6 +109,30 @@ pub struct Car {
     /// its lap does not have it on yet. Past [`ASTRAY_SECONDS`] it is brought back to its last
     /// checkpoint; back on its course, the count is forgotten.
     pub astray: f32,
+    /// Seconds left of a Star Dash throwing the car sideways, and the side: -1 left, 1 right.
+    pub dash: f32,
+    pub dash_side: i8,
+    /// Seconds before another Star Dash or barrel roll can be made.
+    pub dash_wait: f32,
+    /// Whether the dash button was down on the last tick, so a press is told apart from a hold.
+    pub dash_button: bool,
+    /// Seconds left of a barrel roll, made by a Star Dash with the stick at rest: drawn, never
+    /// steering the car. Its side, as the dash's.
+    pub roll: f32,
+    pub roll_side: i8,
+    /// How the car was as it passed its last gate, for a reset that puts it back as it was then.
+    /// `None` until it has passed one.
+    pub passed: Option<Passed>,
+    /// Whether a reset was asked on the last tick, so a press is told apart from a hold.
+    pub reset_button: bool,
+}
+
+/// A car as it crossed a gate: what a reset "as passed" puts back.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Encode, Decode)]
+pub struct Passed {
+    pub position: Vec2,
+    pub velocity: Vec2,
+    pub heading: f32,
 }
 
 /// How far under the lowest road of the track a car falls before it comes back at its last
@@ -119,6 +143,8 @@ pub const FALL_BELOW: f32 = 15.0;
 /// count the player is shown. Long enough to fly a shortcut from one part of the road to
 /// another, short enough that a car gone for good is not waited for.
 pub const ASTRAY_SECONDS: f32 = 2.4;
+/// How far to a side the stick must be for a Star Dash to throw the car that way rather than roll it.
+const DASH_STICK: f32 = 0.3;
 
 /// How high the walls stand over the road, in meters. They hold a car only as high as they
 /// are: nothing invisible stands on top of them, and a car that flies over one has left the road.
@@ -188,6 +214,28 @@ pub struct CarInput {
     /// the jump's own button: pressed, the car hops; held, the thruster lights at the top of the
     /// hop. Two inputs so each can be bound on its own (since v0.1.52).
     pub thrust: bool,
+    /// Pressed for the Star Dash (since v0.1.70): with the stick to a side, the car is thrown at the
+    /// wall on that side; with the stick at rest, it does a barrel roll.
+    pub dash: bool,
+    /// Held in the air for the Air Roll (since v0.1.70): the stick turns the car finely, its
+    /// travel following, and [`CarInput::pitch`] dives or holds it up.
+    pub air_roll: bool,
+    /// The stick up and down, from -127 (pulled back) to 127 (pushed forward): in an Air Roll,
+    /// pushed forward dives and pulled back holds the car up, as on a plane.
+    pub pitch: i8,
+    /// Held to come back to the last checkpoint (since v0.1.70); its press does it.
+    pub reset: Reset,
+}
+
+/// How a car asks to come back to its last checkpoint.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Encode, Decode)]
+pub enum Reset {
+    #[default]
+    None,
+    /// As it passed it: where, how fast and which way, as Trackmania does.
+    AsPassed,
+    /// Standing still on it, pointing down the road.
+    Standing,
 }
 
 impl CarInput {
@@ -200,7 +248,33 @@ impl CarInput {
             turbo: false,
             jump: false,
             thrust: false,
+            dash: false,
+            air_roll: false,
+            pitch: 0,
+            reset: Reset::None,
         }
+    }
+
+    pub fn with_dash(self, dash: bool) -> Self {
+        Self { dash, ..self }
+    }
+
+    /// The Air Roll held or not, and the stick's `pitch` in `[-1, 1]`, forward positive.
+    pub fn with_air_roll(self, air_roll: bool, pitch: f32) -> Self {
+        Self {
+            air_roll,
+            pitch: (pitch.clamp(-1.0, 1.0) * 127.0).round() as i8,
+            ..self
+        }
+    }
+
+    pub fn with_reset(self, reset: Reset) -> Self {
+        Self { reset, ..self }
+    }
+
+    /// In `[-1, 1]`, forward positive. A peer may send -128, which counts as full back.
+    pub fn pitch(self) -> f32 {
+        (f32::from(self.pitch) / 127.0).max(-1.0)
     }
 
     pub fn with_drift(self, drift: bool) -> Self {
@@ -362,6 +436,21 @@ pub struct CarTuning {
     /// same way. Since v0.1.53; before it the car steered in the air as on the road.
     pub air_grip: f32,
     pub air_steering: f32,
+    /// The Star Dash (since v0.1.70): how fast it throws the car sideways at the wall, in m/s, for
+    /// how long, in seconds, and how long before another dash or roll, in seconds.
+    pub dash_speed: f32,
+    pub dash_time: f32,
+    pub dash_wait: f32,
+    /// How long a barrel roll takes, in seconds: a Star Dash with the stick at rest.
+    pub roll_time: f32,
+    /// The Air Roll (since v0.1.70): how much of what the stick asks on the road the nose turns, how
+    /// fast the travel follows it, per second, how hard the stick pushed forward dives, and how
+    /// hard pulled back it holds the car up, in m/s² (less than `air_gravity`, so it glides but
+    /// never climbs without the thruster).
+    pub air_roll_steering: f32,
+    pub air_roll_grip: f32,
+    pub air_roll_dive: f32,
+    pub air_roll_lift: f32,
     /// As a drift's body swings back into line, the travel turns to meet it by this share of the
     /// way the body closes, and when the drift ends this share of what is left becomes a slide
     /// the grip takes up: the car comes out of its slide on a curve, as a real one does, instead
@@ -446,6 +535,14 @@ impl CarTuning {
             ("thrust_damping", self.thrust_damping),
             ("air_grip", self.air_grip),
             ("air_steering", self.air_steering),
+            ("dash_speed", self.dash_speed),
+            ("dash_time", self.dash_time),
+            ("dash_wait", self.dash_wait),
+            ("roll_time", self.roll_time),
+            ("air_roll_steering", self.air_roll_steering),
+            ("air_roll_grip", self.air_roll_grip),
+            ("air_roll_dive", self.air_roll_dive),
+            ("air_roll_lift", self.air_roll_lift),
             ("drift_exit_share", self.drift_exit_share),
             ("drift_kick_time", self.drift_kick_time),
             ("drift_kick_swing", self.drift_kick_swing),
@@ -586,12 +683,88 @@ impl Car {
             thrust: tuning.thrust_seconds,
             checkpoint: self.checkpoint,
             respawns: self.respawns.wrapping_add(1),
+            passed: self.passed,
             // Held through the fall, the buttons must be let go before they count again.
             drift_button: self.drift_button,
             turbo_button: self.turbo_button,
             jump_button: self.jump_button,
+            dash_button: self.dash_button,
+            reset_button: self.reset_button,
             ..Self::default()
         };
+    }
+
+    /// Brings the car back to its last gate because its driver asked: as it was when it passed it
+    /// (`Reset::AsPassed`), or standing still on it pointing down the road (`Reset::Standing`, and
+    /// "as passed" before it has passed any). It keeps its turbo meter, and its tank is full.
+    fn reset_to(&mut self, kind: Reset, tuning: &CarTuning, track: &Track) {
+        let gate = track.gates()[usize::from(self.checkpoint).min(track.gates().len() - 1)];
+        let point = track.point_at(gate);
+        let (position, velocity, heading) = match (kind, self.passed) {
+            (Reset::AsPassed, Some(passed)) => (passed.position, passed.velocity, passed.heading),
+            _ => (point.position, Vec2::ZERO, point.direction.to_angle()),
+        };
+        *self = Self {
+            position,
+            velocity,
+            heading,
+            turbo: self.turbo,
+            thrust: tuning.thrust_seconds,
+            checkpoint: self.checkpoint,
+            respawns: self.respawns.wrapping_add(1),
+            passed: self.passed,
+            drift_button: self.drift_button,
+            turbo_button: self.turbo_button,
+            jump_button: self.jump_button,
+            dash_button: self.dash_button,
+            reset_button: true,
+            ..Self::default()
+        };
+    }
+
+    /// A press of the dash button, once the last dash or roll has had `dash_wait`: with the stick
+    /// to a side, `dash_time` of being thrown at the wall on that side; with the stick at rest, a
+    /// barrel roll.
+    fn start_dash(&mut self, input: CarInput, tuning: &CarTuning, dt: f32) {
+        self.dash = (self.dash - dt).max(0.0);
+        self.roll = (self.roll - dt).max(0.0);
+        self.dash_wait = (self.dash_wait - dt).max(0.0);
+        let pressed = input.dash && !self.dash_button;
+        self.dash_button = input.dash;
+        if !pressed || self.dash_wait > 0.0 {
+            return;
+        }
+        self.dash_wait = tuning.dash_wait;
+        let steer = input.steer();
+        if steer.abs() >= DASH_STICK {
+            self.dash = tuning.dash_time;
+            self.dash_side = if steer > 0.0 { 1 } else { -1 };
+        } else {
+            self.roll = tuning.roll_time;
+            self.roll_side = if self.yaw_rate > 0.0 { -1 } else { 1 };
+        }
+    }
+
+    /// While a dash lasts, the car's sideways speed toward its side is kept up to `dash_speed`:
+    /// it is thrown across the road until the wall stops it.
+    fn dash_across(&mut self, tuning: &CarTuning) {
+        if self.dash <= 0.0 {
+            return;
+        }
+        let right = -self.forward().perp();
+        let side = f32::from(self.dash_side);
+        let toward = self.velocity.dot(right) * side;
+        if toward < tuning.dash_speed {
+            self.velocity += right * side * (tuning.dash_speed - toward);
+        }
+    }
+
+    /// How far round a barrel roll is, from 0 to 1, and its side, for drawing it.
+    pub fn roll_share(&self, tuning: &CarTuning) -> (f32, f32) {
+        if self.roll <= 0.0 || tuning.roll_time <= 0.0 {
+            return (0.0, 0.0);
+        }
+        (1.0 - self.roll / tuning.roll_time, f32::from(self.roll_side))
     }
 
     /// Moves the car's last gate on when it drives across the next one, from `before` to `after`
@@ -608,6 +781,11 @@ impl Car {
             && (gates[next] - before).rem_euclid(track.length()) < step
         {
             self.checkpoint = next as u8;
+            self.passed = Some(Passed {
+                position: self.position,
+                velocity: self.velocity,
+                heading: self.heading,
+            });
         }
     }
 
@@ -655,6 +833,15 @@ impl Car {
         }
         self.airtime += dt;
         let mut lift = -tuning.air_gravity;
+        if input.air_roll && self.is_airborne() {
+            // The Air Roll: the stick pushed forward dives, pulled back holds the car up.
+            let pitch = input.pitch();
+            lift += if pitch > 0.0 {
+                -tuning.air_roll_dive * pitch
+            } else {
+                -tuning.air_roll_lift * pitch
+            };
+        }
         let sunk = inside && self.is_falling();
         if input.thrust && self.airtime > tuning.thrust_delay && self.thrust > 0.0 && !sunk {
             if !self.ignited {
@@ -693,6 +880,14 @@ impl Car {
     /// Advances the car by one tick.
     pub fn step(&mut self, input: CarInput, tuning: &CarTuning, track: &Track) {
         let dt = TICK_SECONDS;
+        // A reset, on its press, puts the car back at its last gate before anything else.
+        let resetting = input.reset != Reset::None;
+        if resetting && !self.reset_button {
+            self.reset_to(input.reset, tuning, track);
+            return;
+        }
+        self.reset_button = resetting;
+        self.start_dash(input, tuning, dt);
         let before = track.project(self.position);
         let was_inside = track.within_walls(&before);
         let height_before = track.height_at(&before);
@@ -717,6 +912,7 @@ impl Car {
         } else {
             self.grip(input, tuning, dt);
         }
+        self.dash_across(tuning);
         self.position += self.velocity * dt;
         let here = track.project(self.position);
         let inside = track.within_walls(&here);
@@ -984,6 +1180,15 @@ impl Car {
         (-self.body * f32::from(self.drift) / tuning.drift_angle.to_radians()).clamp(0.0, 1.0)
     }
 
+    /// How fast the travel follows the nose in the air: faster in an Air Roll.
+    fn air_grip(&self, input: CarInput, tuning: &CarTuning) -> f32 {
+        if input.air_roll {
+            tuning.air_roll_grip
+        } else {
+            tuning.air_grip
+        }
+    }
+
     fn steer(&mut self, input: CarInput, tuning: &CarTuning, dt: f32) {
         let steering_speed = self.forward_speed().max(tuning.min_steering_speed);
         // The curvature at full lock of a car that grips, on a radius that widens with speed.
@@ -1010,7 +1215,11 @@ impl Car {
         };
         // Steering right turns clockwise, a negative yaw rate. In the air the nose turns less.
         let air = if self.is_airborne() {
-            tuning.air_steering
+            if input.air_roll {
+                tuning.air_roll_steering
+            } else {
+                tuning.air_steering
+            }
         } else {
             1.0
         };
@@ -1036,7 +1245,7 @@ impl Car {
         let forward_speed = self.drive(self.velocity.dot(forward), speed, input, tuning, dt);
         // Nothing grips in the air: the travel follows the nose only slowly.
         let grip = if self.is_airborne() {
-            tuning.air_grip
+            self.air_grip(input, tuning)
         } else {
             tuning.grip
         };
@@ -1058,7 +1267,7 @@ impl Car {
         if self.is_airborne() && speed > 1e-3 {
             // In the air the travel keeps its direction, following the turn only as slowly as a
             // gripping car's follows its nose there.
-            let turned = wrap_angle(self.heading - travel) * (1.0 - decay(tuning.air_grip, dt));
+            let turned = wrap_angle(self.heading - travel) * (1.0 - decay(self.air_grip(input, tuning), dt));
             self.velocity = Vec2::from_angle(travel + turned) * speed;
             return;
         }
@@ -1768,10 +1977,108 @@ mod tests {
         turbo: false,
         jump: false,
         thrust: false,
+        dash: false,
+        air_roll: false,
+        pitch: 0,
+        reset: Reset::None,
     };
 
     fn drifting(steer: f32) -> CarInput {
         CarInput::new(true, steer).with_drift(true)
+    }
+
+    /// A Star Dash with the stick to a side throws the car that way across the road, fast, and the
+    /// next one waits; with the stick at rest it rolls the car over without moving it sideways.
+    #[test]
+    fn a_star_dash_throws_the_car_at_a_wall_and_at_rest_rolls_it() {
+        let track = Track::build(&open_track()).unwrap();
+        let tuning = tuning();
+        let mut car = at_top_speed(&track);
+        let start = car.position;
+        let right = -car.forward().perp();
+        car.step(CarInput::new(true, 1.0).with_dash(true), &tuning, &track);
+        assert!(car.dash > 0.0 && car.roll == 0.0);
+        for _ in 0..ticks(0.2) {
+            car.step(ACCELERATE.with_dash(true), &tuning, &track);
+        }
+        let across = (car.position - start).dot(right);
+        assert!(across > 4.0, "thrown {across} m right");
+        assert!(car.velocity.dot(right) > 20.0, "{:?}", car.velocity);
+        // Held, the button does not dash again, and a new press waits.
+        assert!(car.dash_wait > 0.0);
+
+        let mut car = at_top_speed(&track);
+        let start = car.position;
+        let right = -car.forward().perp();
+        car.step(ACCELERATE.with_dash(true), &tuning, &track);
+        assert!(car.roll > 0.0 && car.dash == 0.0);
+        let (share, side) = car.roll_share(&tuning);
+        assert!(share < 0.1 && side != 0.0);
+        run(&mut car, ACCELERATE, tuning.roll_time, &track);
+        assert_eq!(car.roll_share(&tuning).0, 0.0, "the roll ends");
+        assert!((car.position - start).dot(right).abs() < 0.5);
+    }
+
+    /// In the air, the Air Roll dives with the stick forward and glides with it back, and turns the
+    /// travel more than the air otherwise lets it.
+    #[test]
+    fn the_air_roll_dives_glides_and_steers() {
+        let track = Track::build(&open_track()).unwrap();
+        let tuning = tuning();
+        let flight = |input: CarInput| {
+            let mut car = at_top_speed(&track);
+            // Up on the thruster, then let go with the Air Roll held.
+            for _ in 0..ticks(1.0) {
+                car.step(ACCELERATE.with_jump(true).with_thrust(true), &tuning, &track);
+            }
+            let (altitude, travel) = (car.altitude, car.velocity.to_angle());
+            for _ in 0..ticks(0.2) {
+                car.step(input, &tuning, &track);
+            }
+            (
+                altitude - car.altitude,
+                wrap_angle(car.velocity.to_angle() - travel).abs(),
+            )
+        };
+        let (fallen, _) = flight(ACCELERATE);
+        let (dived, _) = flight(ACCELERATE.with_air_roll(true, 1.0));
+        let (glided, _) = flight(ACCELERATE.with_air_roll(true, -1.0));
+        assert!(dived > fallen + 0.3, "{dived} {fallen}");
+        assert!(glided < fallen - 0.3, "{glided} {fallen}");
+        let (_, turned) = flight(CarInput::new(true, 1.0));
+        let (_, rolled) = flight(CarInput::new(true, 1.0).with_air_roll(true, 0.0));
+        assert!(rolled > 1.5 * turned, "{rolled} {turned}");
+    }
+
+    /// A reset puts the car back at its last gate, as it passed it or standing still on it, keeps
+    /// its turbo and counts as a respawn; held, it does it once.
+    #[test]
+    fn a_reset_puts_the_car_back_at_its_checkpoint() {
+        let mut description = open_track();
+        description.checkpoints = vec![100.0];
+        let track = Track::build(&description).unwrap();
+        let tuning = tuning();
+        let mut car = Car::new(Vec2::ZERO, 0.0);
+        run(&mut car, ACCELERATE, 6.0, &track);
+        assert_eq!(car.checkpoint, 1);
+        let passed = car.passed.expect("remembered as it passed");
+        car.turbo = 2.0;
+        run(&mut car, CarInput::new(true, 0.6), 2.0, &track);
+
+        let mut as_passed = car;
+        as_passed.step(ACCELERATE.with_reset(Reset::AsPassed), &tuning, &track);
+        assert_eq!(as_passed.position, passed.position);
+        assert_eq!(as_passed.velocity, passed.velocity);
+        assert_eq!(as_passed.turbo, 2.0);
+        assert_eq!(as_passed.respawns, car.respawns + 1);
+        // Held, it drives on from there.
+        as_passed.step(ACCELERATE.with_reset(Reset::AsPassed), &tuning, &track);
+        assert_ne!(as_passed.position, passed.position);
+
+        let mut standing = car;
+        standing.step(ACCELERATE.with_reset(Reset::Standing), &tuning, &track);
+        assert_eq!(standing.velocity, Vec2::ZERO);
+        assert!((standing.position - track.point_at(100.0).position).length() < 1e-3);
     }
 
     /// A car at top speed in the middle of a track too wide to meet a wall.

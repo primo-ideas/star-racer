@@ -355,7 +355,7 @@ fn spawn_dialog(
     let card = commands
         .spawn((
             Node {
-                width: px(pick(620.0, 470.0)),
+                width: px(pick(1220.0, 470.0)),
                 flex_direction: FlexDirection::Column,
                 padding: px(pick(24.0, 12.0)).all(),
                 row_gap: px(pick(6.0, 5.0)),
@@ -401,66 +401,87 @@ fn spawn_dialog(
                 Node { width, ..default() },
             )
         };
-        commands.entity(card).with_children(|card| {
-            card.spawn(Node {
-                column_gap: px(8),
-                align_items: AlignItems::End,
+        // Fifteen actions since v0.1.70: two columns of them, driving on the left, the rest on the
+        // right, so the dialog fits a screen 720 high.
+        let columns = commands
+            .spawn(Node {
+                column_gap: px(28),
                 ..default()
             })
-            .with_children(|header| {
-                header.spawn((
-                    Text::new("CONTROLS"),
-                    fonts.caption(12.5),
-                    theme::CAPTION_SPACING,
-                    TextColor(theme::TEXT_FAINT),
-                    Node {
-                        flex_grow: 1.0,
-                        ..default()
-                    },
-                ));
-                header.spawn(caption("KEY", px(BIND_WIDTH)));
-                header.spawn(caption("OR", px(BIND_WIDTH)));
-                header.spawn(caption("GAMEPAD", px(BIND_WIDTH)));
-            });
-        });
-        for action in Action::ALL {
-            let row = commands
+            .id();
+        commands.entity(card).add_child(columns);
+        let (driving, rest) = Action::ALL.split_at(COLUMN_SPLIT);
+        for (title, actions) in [("CONTROLS", driving), ("MORE", rest)] {
+            let column = commands
                 .spawn(Node {
-                    column_gap: px(8),
-                    align_items: AlignItems::Center,
+                    flex_direction: FlexDirection::Column,
+                    row_gap: px(5),
                     ..default()
                 })
                 .id();
-            commands.entity(row).with_child((
-                Text::new(action.label()),
-                fonts.text(16.5, 600),
-                TextColor(theme::TEXT),
-                Node {
-                    flex_grow: 1.0,
-                    ..default()
-                },
-            ));
-            for input in Input::ALL {
-                let bind = commands
-                    .spawn((
-                        BindButton { action, input },
-                        button(fonts, ButtonKind::Secondary, ""),
-                    ))
-                    .insert(Node {
-                        width: px(BIND_WIDTH),
-                        height: px(36),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        border: px(1.5).all(),
-                        border_radius: BorderRadius::all(px(theme::RADIUS_SMALL)),
+            commands.entity(columns).add_child(column);
+            commands.entity(column).with_children(|column| {
+                column
+                    .spawn(Node {
+                        column_gap: px(6),
+                        align_items: AlignItems::End,
                         ..default()
                     })
-                    .observe(start_listening)
+                    .with_children(|header| {
+                        header.spawn((
+                            Text::new(title),
+                            fonts.caption(12.5),
+                            theme::CAPTION_SPACING,
+                            TextColor(theme::TEXT_FAINT),
+                            Node {
+                                width: px(LABEL_WIDTH),
+                                ..default()
+                            },
+                        ));
+                        header.spawn(caption("KEY", px(BIND_WIDTH)));
+                        header.spawn(caption("OR", px(BIND_WIDTH)));
+                        header.spawn(caption("GAMEPAD", px(BIND_WIDTH)));
+                    });
+            });
+            for &action in actions {
+                let row = commands
+                    .spawn(Node {
+                        column_gap: px(6),
+                        align_items: AlignItems::Center,
+                        ..default()
+                    })
                     .id();
-                first.get_or_insert(bind);
-                commands.entity(row).add_child(bind);
+                commands.entity(row).with_child((
+                    Text::new(action.label()),
+                    fonts.text(15.0, 600),
+                    TextColor(theme::TEXT),
+                    Node {
+                        width: px(LABEL_WIDTH),
+                        ..default()
+                    },
+                ));
+                for input in Input::ALL {
+                    let bind = commands
+                        .spawn((
+                            BindButton { action, input },
+                            button(fonts, ButtonKind::Secondary, ""),
+                        ))
+                        .insert(Node {
+                            width: px(BIND_WIDTH),
+                            height: px(32),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            border: px(1.5).all(),
+                            border_radius: BorderRadius::all(px(theme::RADIUS_SMALL)),
+                            ..default()
+                        })
+                        .observe(start_listening)
+                        .id();
+                    first.get_or_insert(bind);
+                    commands.entity(row).add_child(bind);
+                }
+                commands.entity(column).add_child(row);
             }
-            commands.entity(card).add_child(row);
         }
         commands.entity(card).with_children(|card| {
             // In a box of its own height, so the card does not jump as the line changes.
@@ -564,7 +585,10 @@ fn spawn_dialog(
 }
 
 /// How wide a place in the table of bindings is: "D-pad" and its arrow fit.
-const BIND_WIDTH: f32 = 118.0;
+const BIND_WIDTH: f32 = 104.0;
+/// How wide an action's name is in the table, and how many actions the first column holds.
+const LABEL_WIDTH: f32 = 168.0;
+const COLUMN_SPLIT: usize = 8;
 
 /// A row naming a choice, with the button that shows its value and steps it. Returns the row and
 /// its button.

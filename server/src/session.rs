@@ -322,7 +322,10 @@ async fn connected(
                 }
                 // Sent before the client knew it was out of its lobby.
                 Ok(Some(
-                    ClientMessage::Input { .. } | ClientMessage::LeaveLobby | ClientMessage::Honk,
+                    ClientMessage::Input { .. }
+                        | ClientMessage::LeaveLobby
+                        | ClientMessage::Honk
+                        | ClientMessage::Abandon,
                 )) => continue,
                 Ok(Some(_)) => return "unexpected message".into(),
                 Ok(None) => return "connection closed".into(),
@@ -445,6 +448,7 @@ async fn play(socket: &mut WebSocket, membership: Membership, replaced: &mut Rep
                     }
                 }
                 Ok(Some(ClientMessage::Honk)) => lobby.honk(car).await,
+                Ok(Some(ClientMessage::Abandon)) => lobby.abandon(car).await,
                 Ok(Some(ClientMessage::LeaveLobby)) => break Ending::Left,
                 // Sent before the client knew it was in a match: it was in the queue a moment ago.
                 Ok(Some(ClientMessage::LeaveQueue | ClientMessage::QueueRanked)) => {}

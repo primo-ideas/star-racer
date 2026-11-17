@@ -206,6 +206,10 @@ impl Oscillator {
     }
 }
 
+/// How high over the road a barrel roll turns the car about, in meters: about the middle of its
+/// body.
+const ROLL_AXIS_HEIGHT: f32 = 0.6;
+
 /// Sways every car's body with how it is pushed, and tells the camera how its car is.
 pub(crate) fn sway(
     time: Res<Time>,
@@ -214,8 +218,14 @@ pub(crate) fn sway(
     mut followed: ResMut<FollowedPush>,
     mut cars: Query<(&CarVisual, &Transform, &mut Sway, &Children)>,
     mut bodies: Query<&mut Transform, (With<CarBody>, Without<CarVisual>)>,
+    current: Res<crate::lobby::CurrentLobby>,
 ) {
     let seconds = time.delta_secs();
+    let tuning = current
+        .0
+        .as_ref()
+        .and_then(|membership| membership.state.as_ref())
+        .map(|state| &state.tuning);
     followed.0 = None;
     for (visual, place, mut sway, children) in &mut cars {
         let Some(car) = view
@@ -242,7 +252,21 @@ pub(crate) fn sway(
             // A car seen for the first time, or put somewhere else: its body starts at rest.
             sway.rest();
         }
-        let body = sway.settle(push, place.rotation, seconds);
+        let mut body = sway.settle(push, place.rotation, seconds);
+        // A barrel roll (a Star Dash with the stick at rest): once round along the car's length,
+        // about its middle, easing in and out.
+        if let Some(tuning) = tuning {
+            let (share, side) = car.roll_share(tuning);
+            if share > 0.0 {
+                let eased = share * share * (3.0 - 2.0 * share);
+                let axis = Vec3::Y * ROLL_AXIS_HEIGHT;
+                let roll = Quat::from_rotation_x(side * std::f32::consts::TAU * eased);
+                body = body
+                    * Transform::from_translation(axis)
+                    * Transform::from_rotation(roll)
+                    * Transform::from_translation(-axis);
+            }
+        }
         for child in children.iter() {
             if let Ok(mut transform) = bodies.get_mut(child) {
                 *transform = body;

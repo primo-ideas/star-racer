@@ -35,9 +35,9 @@ use bevy::platform::time::Instant;
 use bevy::prelude::*;
 use star_racer_protocol::{ClientMessage, LobbyPhase};
 use star_racer_sim::autopilot;
-use star_racer_sim::car::CarInput;
+use star_racer_sim::car::{CarInput, Reset};
 
-use crate::bindings::Bindings;
+use crate::bindings::{Action, Bindings};
 use crate::latency::Latency;
 use crate::lobby::CurrentLobby;
 use crate::net::Network;
@@ -59,12 +59,14 @@ impl Plugin for ControlsPlugin {
             .add_systems(OnEnter(Screen::Lobby), reset_last_sent)
             .add_systems(
                 Update,
-                send_input
+                (held_actions, send_input)
+                    .chain()
                     .after(RaceUpdate)
                     .after(TouchUpdate)
                     .run_if(in_state(Screen::Lobby)),
             )
             .init_resource::<OwnHonk>()
+            .init_resource::<HeldActions>()
             .add_systems(
                 Update,
                 honk.after(RaceUpdate)
@@ -105,6 +107,7 @@ fn send_input(
     mut last_sent: ResMut<LastSent>,
     mut latency: ResMut<Latency>,
     mut prediction: ResMut<Prediction>,
+    held: Res<HeldActions>,
 ) {
     let input = if leave_dialog.open || view.own_car.is_none() {
         // Asking whether to leave, or spectating: the car lets go.
@@ -135,6 +138,7 @@ fn send_input(
             &mut digital,
             time.delta_secs(),
         )
+        .with_reset(held.reset)
     };
 
     if last_sent.input != input {
@@ -145,6 +149,106 @@ fn send_input(
         network.send(ClientMessage::Input { input, tick, seq });
         latency.input_sent(seq, Instant::now(), tick);
         *last_sent = LastSent { input, seq };
+    }
+}
+
+/// What the actions held for a while, or toggled, have come to (since v0.1.70): a reset once
+/// its button has been held long enough, the camera looking back while its button is held, and
+/// whether the standings show.
+#[derive(Resource)]
+pub struct HeldActions {
+    pub reset: Reset,
+    pub rear_view: bool,
+    pub standings: bool,
+    /// How long each held action has been held, in seconds, and whether giving up was sent.
+    held: [f32; 3],
+    gave_up: bool,
+}
+
+impl Default for HeldActions {
+    fn default() -> Self {
+        Self {
+            reset: Reset::None,
+            rear_view: false,
+            standings: true,
+            held: [0.0; 3],
+            gave_up: false,
+        }
+    }
+}
+
+impl HeldActions {
+    /// How far a held action is to doing its thing, from 0 to 1, for the HUD to show it filling;
+    /// `None` when none is held.
+    pub fn filling(&self) -> Option<(Action, f32)> {
+        [Action::ResetAsPassed, Action::ResetStanding, Action::GiveUp]
+            .into_iter()
+            .zip(self.held)
+            .filter(|(_, held)| *held > 0.0)
+            .map(|(action, held)| (action, (held / action.hold()).min(1.0)))
+            .max_by(|a, b| a.1.total_cmp(&b.1))
+    }
+}
+
+/// Times the resets and giving up as they are held, sends the give-up once it has been held long
+/// enough, and follows the rear view and the standings' switch. The menu itself is Start or
+/// Escape, which are not bindable (see `ui/hud.rs`).
+#[allow(clippy::too_many_arguments)]
+fn held_actions(
+    view: Res<RaceView>,
+    leave_dialog: Res<LeaveDialog>,
+    gamepads: Query<&Gamepad>,
+    keyboard: Res<ButtonInput<KeyCode>>,
+    preferences: Res<StoredPreferences>,
+    time: Res<Time>,
+    network: Res<Network>,
+    mut held: ResMut<HeldActions>,
+) {
+    let bindings = &preferences.get().controls;
+    let down = |action: Action| {
+        let binding = bindings.of(action);
+        keyboard.any_pressed(binding.keys()) || gamepads.iter().any(|pad| binding.held_on(pad))
+    };
+    let pressed = |action: Action| {
+        let binding = bindings.of(action);
+        keyboard.any_just_pressed(binding.keys())
+            || gamepads.iter().any(|pad| {
+                binding
+                    .gamepad
+                    .0
+                    .is_some_and(|button| pad.just_pressed(button))
+            })
+    };
+    if pressed(Action::Standings) {
+        held.standings = !held.standings;
+    }
+    let driving = !leave_dialog.open && view.own_car.is_some();
+    held.rear_view = driving && down(Action::RearView);
+    let seconds = time.delta_secs();
+    for (index, action) in [Action::ResetAsPassed, Action::ResetStanding, Action::GiveUp]
+        .into_iter()
+        .enumerate()
+    {
+        held.held[index] = if driving && down(action) {
+            held.held[index] + seconds
+        } else {
+            0.0
+        };
+    }
+    held.reset = if held.held[0] >= Action::ResetAsPassed.hold() {
+        Reset::AsPassed
+    } else if held.held[1] >= Action::ResetStanding.hold() {
+        Reset::Standing
+    } else {
+        Reset::None
+    };
+    if held.held[2] >= Action::GiveUp.hold() {
+        if !held.gave_up {
+            held.gave_up = true;
+            network.send(ClientMessage::Abandon);
+        }
+    } else if held.held[2] == 0.0 {
+        held.gave_up = false;
     }
 }
 
@@ -226,9 +330,21 @@ fn player_input(
     let mut thrust = keyboard.any_pressed(bindings.thrust.keys()) || touch.jumping();
     let mut steer: f32 = touch.steer();
 
+    let mut dash = keyboard.any_pressed(bindings.dash.keys());
+    let mut air_roll = keyboard.any_pressed(bindings.air_roll.keys());
+    // On the keyboard the Air Roll dives on the accelerator and holds up on S.
+    let mut pitch = if air_roll {
+        f32::from(u8::from(keyboard.any_pressed(bindings.accelerate.keys())))
+            - f32::from(u8::from(keyboard.pressed(KeyCode::KeyS)))
+    } else {
+        0.0
+    };
     let mut left = keyboard.any_pressed(bindings.steer_left.keys());
     let mut right = keyboard.any_pressed(bindings.steer_right.keys());
     for gamepad in gamepads {
+        dash |= bindings.dash.held_on(gamepad);
+        air_roll |= bindings.air_roll.held_on(gamepad);
+        pitch += stick_steering(gamepad.left_stick().y);
         accelerate |= bindings.accelerate.held_on(gamepad);
         drift |= bindings.drift.held_on(gamepad);
         turbo |= bindings.turbo.held_on(gamepad);
@@ -246,6 +362,8 @@ fn player_input(
         .with_turbo(turbo)
         .with_jump(jump)
         .with_thrust(thrust)
+        .with_dash(dash)
+        .with_air_roll(air_roll, pitch)
 }
 
 /// A stick resting this far off center does not steer: a worn one rests a little off it.

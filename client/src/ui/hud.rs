@@ -612,38 +612,40 @@ fn spawn_hud(
                             &fonts,
                             controls.key_label(Action::Drift),
                             controls.drift.label(Input::Gamepad),
-                            "Drift"
+                            "Star Drift"
                         ),
                         hint(
                             &fonts,
                             controls.key_label(Action::Turbo),
                             controls.turbo.label(Input::Gamepad),
-                            "Turbo"
+                            "Star Turbo"
                         ),
                         hint(
                             &fonts,
                             controls.key_label(Action::Jump),
                             controls.jump.label(Input::Gamepad),
-                            if controls.jump == controls.thrust {
-                                "Jump, hold to fly"
-                            } else {
-                                "Jump"
-                            }
+                            "Star Jump"
                         ),
-                        hint(&fonts, "Esc", "Start", "Leave"),
+                        hint(
+                            &fonts,
+                            controls.key_label(Action::Thrust),
+                            controls.thrust.label(Input::Gamepad),
+                            "Star Fly"
+                        ),
+                        hint(&fonts, "Esc", "Start", "Menu"),
                     ],
                 ));
                 corner.spawn((
                     Block::WatchingHints,
                     hint_row(),
-                    children![hint(&fonts, "Esc", "Start", "Leave")],
+                    children![hint(&fonts, "Esc", "Start", "Menu")],
                 ));
                 corner.spawn((
                     Block::SpectatingHints,
                     hint_row(),
                     children![
                         hint(&fonts, "← →", "D-pad", "Other car"),
-                        hint(&fonts, "Esc", "Start", "Leave"),
+                        hint(&fonts, "Esc", "Start", "Menu"),
                     ],
                 ));
                 corner.spawn(text(
@@ -845,7 +847,12 @@ fn update_hud(
     mut rings: Query<(&mut UiTransform, &mut BorderColor), (With<StartRing>, Without<StartLight>)>,
     mut blocks: Query<(&Block, &mut Node)>,
     mut fills: Query<(&Fill, &mut Node, &mut BackgroundColor), Without<Block>>,
-    (time, mut flash, progress): (Res<Time>, Local<GateFlash>, Res<PlayerProgress>),
+    (time, mut flash, progress, held): (
+        Res<Time>,
+        Local<GateFlash>,
+        Res<PlayerProgress>,
+        Res<crate::controls::HeldActions>,
+    ),
 ) {
     let Some(membership) = &current.0 else {
         return;
@@ -853,6 +860,26 @@ fn update_hud(
     let track_length = track.as_ref().map_or(1.0, |track| track.0.length());
     let mut model = build_model(membership, &view, &tracks, track_length, *touchscreen);
     reward_line(&mut model, membership, &progress);
+    // The standings, shown or hidden with their button.
+    if !held.standings {
+        model.shown.retain(|block| {
+            !matches!(block, Block::Standings | Block::StandingRow(_))
+                || matches!(
+                    membership.state.as_ref().map(|state| &state.phase),
+                    Some(LobbyPhase::Results { .. })
+                )
+        });
+    }
+    // A reset or giving up, held: how far it has come, where the start grade is.
+    if let Some((action, share)) = held.filling() {
+        model.shown.insert(Block::StartGrade);
+        model.text(
+            Slot::StartGrade,
+            format!("{:.0}%", share * 100.0),
+            theme::AMBER,
+        );
+        model.text(Slot::StartLabel, action.label().to_uppercase(), theme::AMBER);
+    }
     // A checkpoint passed, or the car brought back to one after a fall, is announced where the
     // start grade is, once that is gone.
     if let (Some(car), Some(track)) = (view.own_car, track.as_ref()) {
@@ -1328,6 +1355,8 @@ fn standings(membership: &Membership, view: &RaceView) -> Vec<(CarId, RaceStandi
                         .find(|car| car.id == player.car)
                         .map_or(f32::MIN, |car| car.progress),
                 },
+                // Given up: last, whatever it had driven.
+                PlayerStatus::Retired => RaceStanding::Racing { progress: f32::MIN },
                 PlayerStatus::Driving | PlayerStatus::Spectating => return None,
             };
             Some((player.car, standing))
@@ -1364,7 +1393,11 @@ fn race_standings(
             },
         );
         model.text(Slot::StandingName(row), nickname, name_color(own, guest));
+        let retired = membership
+            .player(*car)
+            .is_some_and(|player| player.status == PlayerStatus::Retired);
         let (info, color) = match standing {
+            _ if retired => ("OUT".to_owned(), theme::TEXT_FAINT),
             RaceStanding::Finished { time_ms } => (race_time(*time_ms), theme::GREEN),
             RaceStanding::Racing { progress } => (
                 format!("LAP {}", race::lap(*progress, track_length).clamp(1, laps)),

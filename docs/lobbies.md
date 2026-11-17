@@ -97,6 +97,14 @@ or **racing**, where joining means watching first. The list shows which, with th
 the grid or the leader's lap; the lobby publishes its listing again at the start so the two never
 blur.
 
+## Giving up
+
+Since v0.1.70 a player racing after the start can give the race up (`ClientMessage::Abandon`, its
+button held 2 s, L3 or G by default): their status becomes `PlayerStatus::Retired`, their car
+drives itself on the drifting autopilot as a finished one does, the finish camera takes over, the
+standings list them last as OUT, and the results as not finishing. The race goes on for the others,
+and ends as before when nobody is left racing. Before the start it does nothing.
+
 ## Progress, laps and finishing
 
 `sim::race::Progress` measures how far a car has driven along the track, every lap counted: the

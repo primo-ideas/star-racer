@@ -166,7 +166,7 @@ impl Preferences {
         self.nickname = self.nickname.filter(|nickname| is_valid_nickname(nickname));
         self.account = self.account.filter(|account| is_valid_nickname(account));
         self.lobby.name = self.lobby.name.filter(|name| is_valid_lobby_name(name));
-        self.controls = self.controls.with_jump_free();
+        self.controls = self.controls.with_jump_free().migrated();
         self.host = self
             .host
             .filter(|host| crate::settings::server_url(host).is_some());

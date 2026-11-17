@@ -198,6 +198,9 @@ enum Command {
     Honk {
         car: CarId,
     },
+    Abandon {
+        car: CarId,
+    },
 }
 
 /// A membership, before the handle is attached to it.
@@ -234,6 +237,10 @@ impl LobbyHandle {
                 seq,
             })
             .await;
+    }
+
+    pub async fn abandon(&self, car: CarId) {
+        let _ = self.commands.send(Command::Abandon { car }).await;
     }
 
     pub async fn honk(&self, car: CarId) {
@@ -537,6 +544,7 @@ impl Lobby {
             } => self.input(car, input, tick, seq),
             Command::Leave { car } => self.leave(car),
             Command::Honk { car } => self.honk(car),
+            Command::Abandon { car } => self.abandon(car),
         }
     }
 
@@ -615,6 +623,23 @@ impl Lobby {
         });
     }
 
+    /// Gives up the race for a player racing it after the start: they will not finish, and their
+    /// car drives itself from now on.
+    fn abandon(&mut self, car: CarId) {
+        let Phase::Racing(race) = &self.phase else {
+            return;
+        };
+        let started = self.tick >= race.start_tick;
+        if let Some(member) = self.members.iter_mut().find(|member| member.car_id == car)
+            && member.status == PlayerStatus::Racing
+            && started
+        {
+            member.status = PlayerStatus::Retired;
+            self.changed = true;
+            info!(lobby = %self.id, nickname = %member.player.nickname, "gave the race up");
+        }
+    }
+
     /// Counts a honk, at most one every [`HONK_EVERY_TICKS`], for every snapshot to carry. A
     /// spectator has no car to honk with.
     fn honk(&mut self, car: CarId) {
@@ -647,7 +672,10 @@ impl Lobby {
         // Leaving a ranked race comes last, however it was left: a lost connection counts too,
         // or disconnecting would be the way out of a race going badly.
         let in_play = matches!(self.phase, Phase::Racing(_))
-            && !matches!(member.status, PlayerStatus::Finished { .. });
+            && !matches!(
+                member.status,
+                PlayerStatus::Finished { .. } | PlayerStatus::Retired
+            );
         if in_play && let Some(ranked) = &mut self.ranked {
             ranked.forfeited.push(member.player.id);
         }
@@ -793,7 +821,7 @@ impl Lobby {
         let mut unfinished: Vec<&Member> = self
             .members
             .iter()
-            .filter(|member| member.status == PlayerStatus::Racing)
+            .filter(|member| matches!(member.status, PlayerStatus::Racing | PlayerStatus::Retired))
             .collect();
         unfinished.sort_by(|a, b| {
             RaceStanding::Racing {
@@ -820,7 +848,7 @@ impl Lobby {
         // player finishes, so this is the whole of their finish.
         // Spectators get a car, once the racers are counted as standing where they are.
         for member in &mut self.members {
-            if member.status == PlayerStatus::Racing {
+            if matches!(member.status, PlayerStatus::Racing | PlayerStatus::Retired) {
                 member.status = PlayerStatus::Driving;
             }
         }
@@ -930,7 +958,7 @@ impl Lobby {
     fn hand_cars_back(&mut self) {
         let mut handed = false;
         for member in &mut self.members {
-            if matches!(member.status, PlayerStatus::Finished { .. }) {
+            if matches!(member.status, PlayerStatus::Finished { .. } | PlayerStatus::Retired) {
                 member.status = PlayerStatus::Driving;
                 handed = true;
             }
@@ -963,7 +991,7 @@ impl Lobby {
                     PlayerStatus::Driving if !results => {}
                     // The race is over: every car carries on by itself while the results show,
                     // whether or not it crossed the line.
-                    PlayerStatus::Driving | PlayerStatus::Finished { .. } => {
+                    PlayerStatus::Driving | PlayerStatus::Finished { .. } | PlayerStatus::Retired => {
                         let input = self_driven(member.car_id, &member.car, track);
                         member.car.step(input, &self.tuning, track);
                     }
@@ -1000,7 +1028,7 @@ impl Lobby {
                 // A player who has finished watches their car drive itself home while the others
                 // come in, the way a kart carries on over the line: their last input never leaves
                 // a car parked across the road.
-                PlayerStatus::Finished { .. } => {
+                PlayerStatus::Finished { .. } | PlayerStatus::Retired => {
                     let input = self_driven(member.car_id, &member.car, track);
                     member.car.step(input, &self.tuning, track);
                 }
@@ -1450,6 +1478,40 @@ mod tests {
         assert_eq!(xp, vec![XpGain { car, gained: paid }]);
         let gains = lobby.gains.take().expect("the directory is told");
         assert_eq!(gains, vec![(member(&lobby, car).player.id, paid)]);
+    }
+
+    /// Giving the race up after the start retires the player, whose car drives itself; the race
+    /// goes on for the others, and the retired player is listed as not finishing. Before the start
+    /// it does nothing.
+    #[test]
+    fn a_player_can_give_the_race_up() {
+        let mut lobby = new_lobby(settings(1, 2, 8), quick_timings());
+        let quitter = join(&mut lobby, 1);
+        let racer = join(&mut lobby, 2);
+        tick_until(&mut lobby, 10.0, |lobby| matches!(lobby.phase, Phase::Racing(_)));
+        lobby.abandon(quitter);
+        assert_eq!(member(&lobby, quitter).status, PlayerStatus::Racing, "not before the start");
+        tick_until(&mut lobby, 10.0, |lobby| {
+            matches!(&lobby.phase, Phase::Racing(race) if lobby.tick > race.start_tick + 30)
+        });
+        lobby.abandon(quitter);
+        assert_eq!(member(&lobby, quitter).status, PlayerStatus::Retired);
+        let at = member(&lobby, quitter).car.position;
+        for _ in 0..TICK_RATE {
+            lobby.tick();
+        }
+        assert!(member(&lobby, quitter).car.position.distance(at) > 10.0, "it drives itself");
+        tick_until(&mut lobby, 150.0, |lobby| {
+            autopilot_inputs(lobby);
+            matches!(lobby.phase, Phase::Results { .. })
+        });
+        let LobbyPhase::Results { results, .. } = lobby.state().phase else {
+            unreachable!();
+        };
+        assert_eq!(results[0].car, racer);
+        assert!(results[0].time_ms.is_some());
+        let retired = results.iter().find(|result| result.car == quitter).unwrap();
+        assert_eq!(retired.time_ms, None);
     }
 
     /// A honk is counted and carried by the snapshots, but not twice within a third of a second,

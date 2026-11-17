@@ -166,6 +166,7 @@ Client                                        Server
   |<------------- Snapshot { tick, cars } -------|  every tick, 60 per second
   |-- Input { input, tick, seq } -------------->|  whenever the input changes, for a tick ahead
   |-- Honk ------------------------------------->|  the horn, at most every third of a second
+  |-- Abandon ---------------------------------->|  the race given up (since v0.1.70)
   |-- Ping(n) ---------------------------------->|  twice a second, here and while browsing
   |<------------- Pong(n) -----------------------|  at once
   |-- LeaveLobby ------------------------------->|  back to browsing
