@@ -19,8 +19,8 @@ more players than one more would make is not offered either. If nothing suits, a
 *Quick Play N* opens: 3 laps, 8 places, two players to start.
 
 **A lobby opened by quick play does not wait forever.** Two players pressing the button a minute
-apart should meet, so a lone player is not sent straight into a race nobody can join: they drive
-freely for 15 seconds (`Timings::quick_solo`, sent as `LobbyPhase::Waiting { solo_tick }`, and
+apart should meet, so a lone player is not sent straight into a race nobody can join: their car
+stands on the grid for 5 seconds (`Timings::quick_solo`, 15 s of driving freely before v0.1.65, sent as `LobbyPhase::Waiting { solo_tick }`, and
 counted down on screen), and a second player arriving starts the race at once. Past that it races
 with whoever is there, and waits the same way after each race. A lobby the player created waits
 for its players, as it always did.
@@ -50,7 +50,7 @@ longest waiting, it takes the players closest in rating, up to 4:
 ### The match
 
 One race of 3 laps, on the tracks in turn, among the players the matchmaker chose: the lobby is not
-listed and refuses anyone else. They are put on the grid at once, for 12 seconds rather than the 7
+listed and refuses anyone else. They are put on the grid at once, for 8 seconds rather than the 4
 of a lobby (`Timings::ranked_grid`): nobody chose the moment a match was found, and a browser that
 has not raced yet can hold its page for many seconds compiling the race's shaders, which must not
 cost a start that counts.

@@ -1,10 +1,10 @@
 //! A lobby: players racing together on one track, race after race.
 //!
-//! A lobby cycles through phases. It **waits**, everyone driving freely, until it holds
+//! A lobby cycles through phases. It **waits**, every car held on the grid, until it holds
 //! `min_players`. The **race** then lines the cars up on the grid at once, holds them there for a
 //! few seconds, and lasts until every racer has driven the laps, or until a timeout after the first
-//! one finished. The **results** show for a few seconds: whoever crossed the line watches their car
-//! drive itself, everyone else drives freely again, then the cycle begins anew. Players who join on
+//! one finished. The **results** show for a few seconds, every car driving itself, then the cycle
+//! begins anew. Nobody drives outside a race. Players who join on
 //! the grid race; players who join after the start spectate the race and race in the next one.
 //!
 //! One task owns the whole lobby and advances it at `TICK_RATE`. Sessions send it commands, and
@@ -68,11 +68,11 @@ pub struct Timings {
 impl Default for Timings {
     fn default() -> Self {
         Self {
-            grid: Duration::from_secs(3 + u64::from(race::START_LIGHTS_SECONDS)),
+            grid: Duration::from_secs(1 + u64::from(race::START_LIGHTS_SECONDS)),
             finish_timeout: Duration::from_secs(30),
             results: Duration::from_secs(8),
-            quick_solo: Duration::from_secs(15),
-            ranked_grid: Duration::from_secs(12),
+            quick_solo: Duration::from_secs(5),
+            ranked_grid: Duration::from_secs(8),
             gather: Duration::from_secs(15),
         }
     }
@@ -705,6 +705,7 @@ impl Lobby {
                     self.start_race();
                 } else {
                     self.hand_cars_back();
+                    self.line_up_waiting();
                     self.solo_tick = self.solo_after.map(|after| self.tick + after);
                     self.set_phase(Phase::Waiting);
                 }
@@ -772,9 +773,10 @@ impl Lobby {
         info!(lobby = %self.id, ?results, "race finished");
         let ratings = self.settle_ratings(&results);
 
-        // Everyone who did not cross the line drives freely again; those who did keep watching
-        // their car drive itself, through the results and until the next race lines up. A solo
-        // race ends on the tick its only player finishes, so this is the whole of their finish.
+        // Nobody drives outside a race: whoever did not cross the line has their car driven for
+        // them through the results; those who did keep watching their car drive itself, through
+        // the results and until the next race lines up. A solo race ends on the tick its only
+        // player finishes, so this is the whole of their finish.
         // Spectators get a car, once the racers are counted as standing where they are.
         for member in &mut self.members {
             if member.status == PlayerStatus::Racing {
@@ -865,16 +867,32 @@ impl Lobby {
         self.changed |= handed;
     }
 
+    /// Puts the cars back on the grid, in the order their players joined, for a lobby going back
+    /// to waiting: they stand there, held, until the next race.
+    fn line_up_waiting(&mut self) {
+        let track = &self.track.track;
+        let mut slot = 0;
+        for member in &mut self.members {
+            if member.status == PlayerStatus::Driving {
+                member.car = Car::on_grid(track, slot);
+                slot += 1;
+            }
+        }
+        self.changed = true;
+    }
+
     /// Moves every car that may move this tick, and records laps and finishes.
     fn drive(&mut self) {
         let track = &self.track.track;
+        let results = matches!(self.phase, Phase::Results { .. });
         let Phase::Racing(race) = &mut self.phase else {
             for member in &mut self.members {
                 match member.status {
-                    PlayerStatus::Driving => member.car.step(member.input, &self.tuning, track),
-                    // The race is over, and they crossed the line: their car carries on by
-                    // itself while the results show.
-                    PlayerStatus::Finished { .. } => {
+                    // Waiting for a race, nobody drives: the car stands on the grid.
+                    PlayerStatus::Driving if !results => {}
+                    // The race is over: every car carries on by itself while the results show,
+                    // whether or not it crossed the line.
+                    PlayerStatus::Driving | PlayerStatus::Finished { .. } => {
                         let input = self_driven(member.car_id, &member.car, track);
                         member.car.step(input, &self.tuning, track);
                     }
@@ -1203,7 +1221,7 @@ mod tests {
         let LobbyPhase::Racing { start_tick } = lobby.state().phase else {
             panic!("expected the grid, got {:?}", lobby.state().phase);
         };
-        assert_eq!(start_tick, lobby.tick + 6 * TICK_RATE);
+        assert_eq!(start_tick, lobby.tick + 4 * TICK_RATE);
         for car in [first, second] {
             assert_eq!(member(&lobby, car).status, PlayerStatus::Racing);
         }
@@ -1215,11 +1233,12 @@ mod tests {
         let car = join(&mut lobby, 1);
         lobby.input(car, CarInput::new(true, 0.0), 0, 0);
 
-        // Driving freely while waiting for players.
+        // Held on the grid while waiting for players, accelerator down.
         let spawn = member(&lobby, car).car.position;
         lobby.tick();
         lobby.tick();
-        assert!(member(&lobby, car).car.velocity.length() > 0.0);
+        assert_eq!(member(&lobby, car).car.position, spawn);
+        assert_eq!(member(&lobby, car).car.velocity.length(), 0.0);
 
         join(&mut lobby, 2);
         lobby.tick();
@@ -1694,7 +1713,7 @@ mod tests {
         lobby.tick();
         let now = Instant::now();
         let info = lobby.info(now);
-        let later = info.summary(now + Duration::from_secs(4));
+        let later = info.summary(now + Duration::from_secs(2));
         let LobbyStatus::Starting { remaining_ms } = later.status else {
             panic!("expected the grid, got {:?}", later.status);
         };

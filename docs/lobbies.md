@@ -32,18 +32,20 @@ Waiting ─────────────▶ Racing ─────── 
    └─────────────────────────── not enough players ─────────┘
 ```
 
-- **Waiting**: fewer players than "players to start". Everyone drives freely, so waiting for a
-  friend is not staring at a black screen.
+- **Waiting**: fewer players than "players to start". Every car stands on the grid, held, in the
+  order its player joined: nobody drives outside a race (since v0.1.65, the user's word "enlève
+  qu'on puisse jouer avant que ça commence"; before it everyone drove freely while waiting).
 - **Racing**: as soon as there are enough players, every player is lined up on the grid, in the
-  order they joined, and held there for 6 s: inputs are kept but cars do not move, so everyone
+  order they joined, and held there for 4 s: inputs are kept but cars do not move, so everyone
   starts at the same tick. Nobody drives before the start, so there is no countdown to jump. The
-  grid shows nothing for 3 s, time to look at the screen, then the four start lights light up, one
-  a second: three amber, and the fourth, green, at the very start. A player joining while the cars are on the grid takes the
+  grid shows nothing for 1 s, time to look at the screen, then the four start lights light up, one
+  a second: three amber, and the fourth, green, at the very start (6 s and 3 s of nothing before
+  v0.1.65, the user's word "Réduis le temps avant le début de la game"). A player joining while the cars are on the grid takes the
   first free slot and races. The race lasts until every racer has finished, or 30 s after the
   first one did. It also ends when no racer is left.
 - **Results**: 8 s of results. Whoever crossed the line is still watching their car drive itself
-  (see [After the line](#after-the-line)); everyone else drives freely again. Then the grid again
-  if there are still enough players, or waiting, where everyone has their car back.
+  (see [After the line](#after-the-line)); everyone else's car drives itself too. Then the grid
+  again if there are still enough players, or waiting, every car put back on the grid.
 
 These durations are `lobby::Timings`; tests shorten them.
 
@@ -140,7 +142,8 @@ way of one still racing.
 thing that takes the wheel from a player. A race can end on the very tick its last racer crosses
 the line — a solo race always does — and giving the car straight back would make the finish a
 single tick long, seen by nobody. Whoever did not cross the line, and a spectator given a car at
-the end of the race, drive freely through the results as before.
+the end of the race, have their car driven the same way through the results (they drove freely
+before v0.1.65).
 
 The client stops chasing it at the same moment. Instead it cuts between shots every 3.6 s, the way
 a race is shown on television: low behind the car, alongside it, ahead of it looking back, high

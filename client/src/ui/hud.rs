@@ -1114,23 +1114,13 @@ fn build_model(
                 Some(tick) => {
                     let seconds = seconds_until(*tick).ceil().max(0.0);
                     model.text(Slot::Title, format!("RACE IN {seconds}"), theme::TEXT);
-                    model.text(
-                        Slot::Subtitle,
-                        "Looking for other players  ·  drive around while you wait",
-                        theme::TEXT_DIM,
-                    );
+                    model.text(Slot::Subtitle, "Looking for other players", theme::TEXT_DIM);
                 }
                 None => {
                     model.text(Slot::Title, "WAITING FOR PLAYERS", theme::TEXT);
-                    model.text(
-                        Slot::Subtitle,
-                        format!(
-                            "{} of {} players  ·  drive around while you wait",
-                            state.players.len(),
-                            settings.min_players
-                        ),
-                        theme::TEXT_DIM,
-                    );
+                    let (players, needed) = (state.players.len(), settings.min_players);
+                    let count = format!("{players} of {needed} players");
+                    model.text(Slot::Subtitle, count, theme::TEXT_DIM);
                 }
             }
             player_list(&mut model, membership);

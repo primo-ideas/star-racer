@@ -35,8 +35,8 @@ trails the server by the way down, and the input takes the way up.
 **Inputs placed on a tick.** Each input goes out stamped with the tick it takes effect on, the
 next one on the timeline, and the server holds it until then (see
 [Protocol](protocol.md#in-a-lobby)). Both sides step the car with the same inputs on the same
-ticks, through the same code: `Car::step` while driving freely, and `race::racing_tick` in a race,
-which holds the car on the grid, grades the start and pays its boost, so even the start is
+ticks, through the same code: `race::racing_tick`, the only time a player drives (since v0.1.65
+nobody drives outside a race, and the car is then shown from the snapshots like any other), which holds the car on the grid, grades the start and pays its boost, so even the start is
 predicted to the tick (see [Lobbies](lobbies.md#the-start)). The client needs the car's tuning for
 that, which the lobby state now carries.
 

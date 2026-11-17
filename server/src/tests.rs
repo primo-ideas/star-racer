@@ -485,11 +485,12 @@ async fn enough_players_line_up_for_a_race() {
 
 #[tokio::test]
 async fn accelerating_moves_the_car_forward() {
-    let url = start_server().await;
+    // A race at once, the only time a car can be driven.
+    let url = start_server_with(brisk_timings()).await;
     let (mut socket, _, _) = browse(&url).await;
     let (_, car) = enter(
         &mut socket,
-        ClientMessage::CreateLobby(settings("Solo", 2, 8)),
+        ClientMessage::CreateLobby(settings("Solo", 1, 8)),
     )
     .await
     .unwrap();

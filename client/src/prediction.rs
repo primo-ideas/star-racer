@@ -52,19 +52,17 @@ const CORRECTION_FADE: f32 = 0.08;
 /// What the rules do to the player's car, as far as the client knows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
-    /// Driving freely: waiting for players, or between races.
-    Free,
-    /// In the race that starts on `start_tick`.
+    /// In the race that starts on `start_tick`. The only time a player drives: waiting for a
+    /// race their car stands on the grid, and through the results it drives itself.
     Racing { start_tick: u32 },
 }
 
 impl Mode {
-    /// The rules for the player's car, or `None` when it is not theirs to drive: once they have
-    /// crossed the line, while they spectate, or before the lobby has said.
+    /// The rules for the player's car, or `None` when it is not theirs to drive: outside a race,
+    /// once they have crossed the line, while they spectate, or before the lobby has said.
     fn of(membership: &Membership) -> Option<Self> {
         let state = membership.state.as_ref()?;
         match (membership.own_status()?, &state.phase) {
-            (PlayerStatus::Driving, _) => Some(Self::Free),
             (PlayerStatus::Racing, LobbyPhase::Racing { start_tick }) => Some(Self::Racing {
                 start_tick: *start_tick,
             }),
@@ -196,7 +194,6 @@ impl Predictor {
             }
         }
         match mode {
-            Mode::Free => next.car.step(next.input, tuning, track),
             Mode::Racing { start_tick } => {
                 if next.race != Some(start_tick) {
                     next.start.reset();
@@ -230,7 +227,6 @@ impl Predictor {
                 Some(grade) => (StartTiming::graded(grade), Some(start_tick)),
                 None => (Self::held(input, tick), Some(start_tick)),
             },
-            Mode::Free => (Self::held(input, tick), None),
         };
         self.ticks.clear();
         self.ticks.push_back(Predicted {
@@ -491,7 +487,6 @@ mod tests {
                 }
             }
             match mode {
-                Mode::Free => self.car.step(self.input, tuning, track),
                 Mode::Racing { start_tick } => {
                     race::racing_tick(
                         &mut self.car,
@@ -560,7 +555,7 @@ mod tests {
     /// predicted for its tick, and there is nothing to correct.
     #[test]
     fn a_prediction_the_server_agrees_with_needs_no_correction() {
-        let errors = race_against_the_server(Mode::Free, 0, 8, 5);
+        let errors = race_against_the_server(Mode::Racing { start_tick: 0 }, 0, 8, 5);
         assert!(errors.len() > 200, "{}", errors.len());
         assert!(errors.iter().all(|&error| error == 0.0), "{errors:?}");
     }
@@ -569,7 +564,7 @@ mod tests {
     /// corrected, and agrees again once the replay has caught up.
     #[test]
     fn a_late_input_is_corrected_and_the_prediction_agrees_again() {
-        let errors = race_against_the_server(Mode::Free, 2, 8, 5);
+        let errors = race_against_the_server(Mode::Racing { start_tick: 0 }, 2, 8, 5);
         assert!(errors.iter().any(|&error| error > 0.0));
         // Each late input costs a correction or two, while the server has not applied it yet;
         // the rest of the time the prediction agrees exactly.
