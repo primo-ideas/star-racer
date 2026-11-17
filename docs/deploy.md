@@ -6,8 +6,8 @@ whole host; after that a deployment only replaces the build.
 
 There are two ways to deploy, and they do the same three things to the machine:
 
-- **A push to `main`** runs the "Deploy" workflow, which is the usual way a commit goes online.
-  It can also be started by hand from the Actions tab. See
+- **The "Deploy" workflow**, started by hand from the Actions tab (until 2026-11-17 a push to
+  `main` started it; CI no longer deploys on its own, by the global rule for every repository). See
   [Continuous integration](ci.md#deploying).
 - **`./deploy/deploy.ps1`**, from a Windows machine with the repository. This is how a build goes
   online without a commit, and how one goes online when GitHub is having a bad day. `-SkipBuild`

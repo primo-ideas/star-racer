@@ -2,7 +2,8 @@
 
 Six GitHub workflows in `.github/workflows/`, each with a badge of its own in the README. Four
 check a commit; the fifth puts it online; the sixth, `release.yml`, builds the desktop client for a
-version tag and publishes it as a GitHub release (see [Releases](releases.md)).
+version tag and publishes it as a GitHub release (see [Releases](releases.md)). Since 2026-11-17, the user's global rule "Tous les repos maintiennent une CI github sans deploy pour l'instant",
+the last two run only by hand, from the Actions tab.
 
 | Workflow | What it proves |
 | --- | --- |
@@ -36,7 +37,7 @@ is why the deployment is gated and serialized rather than merely automatic.
 
 ## Deploying
 
-`deploy.yml` runs on every push to `main` and on demand, in two jobs.
+`deploy.yml` runs on demand only (it ran on every push to `main` until 2026-11-17), in two jobs.
 
 The first runs the same tests as `test-server.yml`, restoring that workflow's cache without ever
 writing to it. Nothing goes online on a red test. The second cross-compiles the server to

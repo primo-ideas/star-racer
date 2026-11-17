@@ -3,11 +3,11 @@
 # releases/latest/download/<name> and always hand out the newest one. Claude pushes a tag
 # `vX.Y.Z` each time a version is deployed (docs/releases.md); a run can also be started by hand
 # for an existing tag.
+# Manual only since 2026-11-17: the global rule for every primo-ideas repository is a CI without
+# deployment for now, so a pushed tag no longer releases on its own; start it by hand with the tag.
 name: Release
 
 on:
-  push:
-    tags: ['v*']
   workflow_dispatch:
     inputs:
       tag:

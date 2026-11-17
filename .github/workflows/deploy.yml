@@ -9,11 +9,11 @@
 # The machine must have been set up by the maintainer's setup-server.sh, which lives outside this
 # repository because it sets up the whole host, both games included. The DEPLOY_SSH_KEY secret must
 # hold a private key that machine's root accepts. docs/deploy.md has both.
+# Manual only since 2026-11-17: the global rule for every primo-ideas repository is a CI without
+# deployment for now. It no longer runs on a push; start it by hand from the Actions tab.
 name: Deploy
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 # One at a time, and never cancelled halfway. install.sh swaps a binary, a data directory and a

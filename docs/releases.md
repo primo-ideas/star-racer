@@ -15,7 +15,8 @@ versions that only record a deployment. A tag can be released again by hand from
 
 ## What the Release workflow does
 
-`.github/workflows/release.yml` runs on every `v*` tag:
+`.github/workflows/release.yml` runs by hand, with a tag (until 2026-11-17 it ran on every pushed
+`v*` tag; CI no longer releases on its own, by the global rule for every repository):
 
 1. **Builds the client** for three systems at once, in release, on GitHub's runners: Windows x86-64,
    Linux x86-64 and macOS on Apple silicon. Nothing is built on this machine, which has no
