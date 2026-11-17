@@ -92,6 +92,12 @@ pub struct LookPreference {
     pub model: u8,
     pub paint: u8,
     pub neon: u8,
+    /// The trail behind the car and its color, since v0.1.68: a look saved before then has the
+    /// first trail in the first color.
+    #[serde(default)]
+    pub trail: u8,
+    #[serde(default)]
+    pub trail_color: u8,
 }
 
 impl LookPreference {
@@ -100,6 +106,8 @@ impl LookPreference {
             model: self.model,
             paint: self.paint,
             neon: self.neon,
+            trail: self.trail,
+            trail_color: self.trail_color,
         }
         .checked()
     }
@@ -109,6 +117,8 @@ impl LookPreference {
             model: look.model,
             paint: look.paint,
             neon: look.neon,
+            trail: look.trail,
+            trail_color: look.trail_color,
         }
     }
 }

@@ -206,7 +206,12 @@ const PAD_POOL_ALPHA: f32 = 0.55;
 /// Where the road stops at a gap and takes up again (see `sim::track::Gap`): the cut face of the
 /// slab, a line of hot magenta neon across the road at its edge, and the light of it thrown back
 /// along the road, so a gap reads from far off as a bright line with nothing beyond it.
-pub(super) fn gap_lips(lit: &mut Geometry, neon: &mut Geometry, glow: &mut Geometry, track: &Track) {
+pub(super) fn gap_lips(
+    lit: &mut Geometry,
+    neon: &mut Geometry,
+    glow: &mut Geometry,
+    track: &Track,
+) {
     for gap in track.gaps() {
         // The lip, the road behind it; then the far edge, the road ahead of it.
         for (edge, back) in [(gap.at, -1.0_f32), (gap.at + gap.length, 1.0)] {
@@ -517,7 +522,10 @@ pub(super) mod tests {
         edge_lines(&mut lit, &track);
         for position in lit.positions() {
             let at = track.project(on_plane(position)).distance;
-            assert!(!(60.6..69.4).contains(&at), "road drawn in the gap, at {at} m");
+            assert!(
+                !(60.6..69.4).contains(&at),
+                "road drawn in the gap, at {at} m"
+            );
         }
         let (mut neon, mut glow) = (Geometry::default(), Geometry::default());
         gap_lips(&mut lit, &mut neon, &mut glow, &track);
@@ -550,7 +558,10 @@ pub(super) mod tests {
             assert!(curvature > 0.0, "a kerb on a straight, {here:?}");
             assert!(here.lateral > 0.0, "a kerb on the outside, {here:?}");
             let from_wall = track.half_width_at(here.distance) - here.lateral;
-            assert!((-0.05..=KERB_WIDTH + 0.05).contains(&from_wall), "{from_wall}");
+            assert!(
+                (-0.05..=KERB_WIDTH + 0.05).contains(&from_wall),
+                "{from_wall}"
+            );
         }
     }
 

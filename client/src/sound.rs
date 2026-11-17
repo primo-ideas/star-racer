@@ -513,7 +513,11 @@ fn play_car(
             sounds.play(&mut commands, &sounds.ignite, 0.9);
         }
         if !car.is_airborne() && before.is_airborne() && before.altitude > 0.3 {
-            sounds.play(&mut commands, &sounds.land, 0.5 + 0.08 * before.altitude.min(5.0));
+            sounds.play(
+                &mut commands,
+                &sounds.land,
+                0.5 + 0.08 * before.altitude.min(5.0),
+            );
         }
         if car.turbo.floor() > before.turbo.floor() && car.turbo_boost <= before.turbo_boost {
             sounds.play(&mut commands, &sounds.charged, 0.6);

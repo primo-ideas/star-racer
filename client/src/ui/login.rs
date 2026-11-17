@@ -13,7 +13,7 @@
 use bevy::ecs::system::SystemParam;
 use bevy::input_focus::{FocusCause, InputFocus};
 use bevy::prelude::*;
-use bevy::text::{EditableText, LetterSpacing};
+use bevy::text::EditableText;
 use bevy::ui::InteractionDisabled;
 use bevy::ui_widgets::Activate;
 use star_racer_protocol::ranked::{PLACEMENT_GAMES, Tier};
@@ -29,8 +29,8 @@ use super::settings::SettingsDialog;
 use super::theme::{self, Fonts};
 use super::touch::{FullScreenButton, Touchscreen, full_screen_wanted};
 use super::widgets::{
-    ButtonKind, ButtonLabel, button, button_of_size, hint, hint_row, panel, secret_field,
-    set_text, text_field,
+    ButtonKind, ButtonLabel, button, button_of_size, hint, hint_row, panel, secret_field, set_text,
+    text_field,
 };
 use crate::lobby::{Ladder, Notice};
 use crate::net::{Connection, NetEvent, Network};
@@ -136,7 +136,13 @@ struct Status;
 #[derive(Component)]
 struct ServerLine;
 
+/// The server and protocol, for whoever is testing the game against another server; nothing on
+/// the default one, where a player has no use for it.
 fn server_line(network: &Network) -> String {
+    let default = crate::settings::server_url(&crate::settings::default_host());
+    if default.as_deref() == Some(network.server()) {
+        return String::new();
+    }
     format!("{}  ·  protocol {PROTOCOL_VERSION}", network.server())
 }
 
@@ -358,7 +364,8 @@ fn spawn_login(
             // Texts that come and go sit in a box of fixed minimum height, so the card does not
             // jump when they change.
             card.spawn(Node {
-                min_height: px(pick(20.0, 16.0)),
+                // None for a guest, who needs no help: the card is lighter without it.
+                min_height: px(0),
                 ..default()
             })
             .with_child((
@@ -481,18 +488,12 @@ fn spawn_login(
                     color: theme::NEON.with_alpha(0.8),
                 },
             ));
-            root.spawn((
-                Text::new("ONLINE ARCADE RACING  ·  ALPHA"),
-                fonts.caption(15.0),
-                LetterSpacing::Px(5.0),
-                TextColor(theme::NEON),
-                Node {
-                    margin: UiRect::bottom(px(pick(14.0, 6.0))),
-                    // On a phone the card needs the room more than the line does.
-                    display: touchscreen.pick(Display::Flex, Display::None),
-                    ..default()
-                },
-            ));
+            // The title alone over the card: since v0.1.68 no line under it, the screen made
+            // lighter at the user's word.
+            root.spawn(Node {
+                height: px(pick(14.0, 6.0)),
+                ..default()
+            });
         })
         .add_child(card)
         .with_children(|root| {
@@ -512,35 +513,32 @@ fn spawn_login(
                     border_radius: BorderRadius::all(px(theme::RADIUS_SMALL)),
                     ..default()
                 };
+                row.spawn((ActionButton, button(&fonts, ButtonKind::Quiet, "LOBBIES")))
+                    .insert(small(120.0))
+                    .observe(browse);
                 row.spawn((
                     ActionButton,
-                    button(&fonts, ButtonKind::Secondary, "BROWSE LOBBIES"),
-                ))
-                .insert(small(190.0))
-                .observe(browse);
-                row.spawn((
-                    ActionButton,
-                    button(&fonts, ButtonKind::Secondary, "LEADERBOARD"),
+                    button(&fonts, ButtonKind::Quiet, "LEADERBOARD"),
                 ))
                 .insert(small(170.0))
                 .observe(ask_for_leaderboard);
                 // Needs nobody to come in as and no server: always there, as the settings are.
-                row.spawn(button(&fonts, ButtonKind::Secondary, "GARAGE"))
+                row.spawn(button(&fonts, ButtonKind::Quiet, "GARAGE"))
                     .insert(small(120.0))
                     .observe(open_garage);
-                row.spawn(button(&fonts, ButtonKind::Secondary, "SETTINGS"))
+                row.spawn(button(&fonts, ButtonKind::Quiet, "SETTINGS"))
                     .insert(small(130.0))
                     .observe(open_settings);
                 // A page cannot close the tab it is in, so only the native game has a way out.
                 if cfg!(not(target_arch = "wasm32")) {
-                    row.spawn(button(&fonts, ButtonKind::Secondary, "QUIT"))
+                    row.spawn(button(&fonts, ButtonKind::Quiet, "QUIT"))
                         .insert(small(120.0))
                         .observe(quit);
                 }
                 // In its place on the web, the page that offers the game to download (see
                 // docs/releases.md); a phone has no use for it.
                 if cfg!(target_arch = "wasm32") && !touchscreen.0 {
-                    row.spawn(button(&fonts, ButtonKind::Secondary, "DOWNLOAD"))
+                    row.spawn(button(&fonts, ButtonKind::Quiet, "DOWNLOAD"))
                         .insert(small(150.0))
                         .observe(open_downloads);
                 }
@@ -548,7 +546,7 @@ fn spawn_login(
                 if full_screen_wanted(*touchscreen) {
                     row.spawn((
                         FullScreenButton,
-                        button(&fonts, ButtonKind::Secondary, "FULL SCREEN"),
+                        button(&fonts, ButtonKind::Quiet, "FULL SCREEN"),
                     ))
                     .insert(small(170.0));
                 }
@@ -992,16 +990,12 @@ fn shown(account: Option<&str>, mode: LoginMode) -> Shown {
 }
 
 /// What the line under the fields says, and in which color.
-fn help(
-    shown: Shown,
-    mode: LoginMode,
-    name: &str,
-    password: &str,
-) -> (String, Color) {
+fn help(shown: Shown, mode: LoginMode, name: &str, password: &str) -> (String, Color) {
     match shown {
         Shown::SignedIn => ("Signed in on this device.".into(), theme::TEXT_FAINT),
         Shown::Guest => (
-            "Guests play everything but ranked.".into(),
+            // Nothing: the ranked button already says a guest must sign in for it.
+            String::new(),
             theme::TEXT_FAINT,
         ),
         Shown::Account => {
@@ -1014,9 +1008,15 @@ fn help(
                 };
                 (text.into(), theme::TEXT_DIM)
             } else if name.trim() != name {
-                ("A name can't start or end with a space.".into(), theme::AMBER)
+                (
+                    "A name can't start or end with a space.".into(),
+                    theme::AMBER,
+                )
             } else if !is_valid_nickname(name) {
-                ("A name can't contain control characters.".into(), theme::AMBER)
+                (
+                    "A name can't contain control characters.".into(),
+                    theme::AMBER,
+                )
             } else if mode == LoginMode::Create
                 && !password.is_empty()
                 && password.chars().count() < MIN_PASSWORD_CHARS
@@ -1026,7 +1026,10 @@ fn help(
                     theme::AMBER,
                 )
             } else if mode == LoginMode::Create {
-                ("This is how other players will see you.".into(), theme::TEXT_FAINT)
+                (
+                    "This is how other players will see you.".into(),
+                    theme::TEXT_FAINT,
+                )
             } else {
                 (String::new(), theme::TEXT_DIM)
             }
@@ -1047,7 +1050,10 @@ fn update_login(
     guest_name: Res<GuestName>,
     preferences: Res<StoredPreferences>,
     time: Res<Time<Real>>,
-    action_buttons: Query<(Entity, Has<InteractionDisabled>, Has<RankedButton>), With<ActionButton>>,
+    action_buttons: Query<
+        (Entity, Has<InteractionDisabled>, Has<RankedButton>),
+        With<ActionButton>,
+    >,
     ranked_buttons: Query<&Children, With<RankedButton>>,
     mut tabs: Query<(&ModeTab, &mut ButtonKind)>,
     mut panels: Query<(
@@ -1095,7 +1101,11 @@ fn update_login(
         } else {
             continue;
         };
-        let display = if visible { Display::Flex } else { Display::None };
+        let display = if visible {
+            Display::Flex
+        } else {
+            Display::None
+        };
         if node.display != display {
             node.display = display;
         }
@@ -1190,17 +1200,11 @@ fn update_login(
         color.0 = status_color;
     }
 
-    let ready = request(
-        account.as_deref(),
-        *mode,
-        &guest_name.0,
-        &name,
-        &password,
-    )
-    .is_some();
+    let ready = request(account.as_deref(), *mode, &guest_name.0, &name, &password).is_some();
     for (button, disabled, ranked) in &action_buttons {
         // Leaving the queue is always possible.
-        let enabled = (ready && !connecting && !(ranked && as_guest)) || (ranked && ladder.queue.is_some());
+        let enabled =
+            (ready && !connecting && !(ranked && as_guest)) || (ranked && ladder.queue.is_some());
         if enabled && disabled {
             commands.entity(button).remove::<InteractionDisabled>();
         } else if !enabled && !disabled {
@@ -1275,9 +1279,9 @@ fn rejection_text(reason: &RejectReason) -> String {
         RejectReason::NotSignedIn => "This device is signed out: sign in again.".into(),
         RejectReason::WrongPassword => "Wrong account name or password.".into(),
         RejectReason::NameTaken => "This name is taken: pick another, or sign in.".into(),
-        RejectReason::InvalidPassword => format!(
-            "A password needs {MIN_PASSWORD_CHARS} to {MAX_PASSWORD_CHARS} characters."
-        ),
+        RejectReason::InvalidPassword => {
+            format!("A password needs {MIN_PASSWORD_CHARS} to {MAX_PASSWORD_CHARS} characters.")
+        }
     }
 }
 
@@ -1385,7 +1389,10 @@ mod tests {
         // In order: the guest name, which signing in ignores, the account name, the password.
         assert_eq!(request(None, LoginMode::SignIn, "x", "", "secret"), None);
         assert_eq!(request(None, LoginMode::SignIn, "x", "Ada", ""), None);
-        assert_eq!(request(None, LoginMode::SignIn, "x", " Ada", "secret"), None);
+        assert_eq!(
+            request(None, LoginMode::SignIn, "x", " Ada", "secret"),
+            None
+        );
         let request_in = request(None, LoginMode::SignIn, "x", "Ada", "short").unwrap();
         assert_eq!(
             request_in.login,
@@ -1398,7 +1405,10 @@ mod tests {
 
         assert_eq!(request(None, LoginMode::Create, "x", "Ada", "short"), None);
         let created = request(None, LoginMode::Create, "x", "Ada", "long enough").unwrap();
-        assert!(matches!(created.login, Login::Password { create: true, .. }));
+        assert!(matches!(
+            created.login,
+            Login::Password { create: true, .. }
+        ));
     }
 
     /// Already online the way the card asks: nothing to connect again for.

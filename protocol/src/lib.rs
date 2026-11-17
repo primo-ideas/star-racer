@@ -19,7 +19,7 @@ pub mod names;
 pub mod ranked;
 
 /// Bump on every incompatible protocol change.
-pub const PROTOCOL_VERSION: u32 = 36;
+pub const PROTOCOL_VERSION: u32 = 37;
 
 /// Local server port. In production, the reverse proxy terminates TLS and forwards here.
 pub const DEFAULT_PORT: u16 = 8080;
@@ -184,42 +184,51 @@ pub enum Login {
     },
 }
 
-/// How many pods there are to choose from, paints and neon colors. The client names and draws
-/// them (`car_model.rs`); the wire only carries which.
+/// How many skimmers there are to choose from, paints, neon colors, trails and trail colors. The
+/// client names and draws them (`car_model.rs`, `trail.rs`); the wire only carries which.
 pub const CAR_MODELS: u8 = 4;
 pub const CAR_PAINTS: u8 = 10;
 pub const CAR_NEONS: u8 = 8;
+pub const CAR_TRAILS: u8 = 3;
+pub const CAR_TRAIL_COLORS: u8 = 8;
 
-/// How a player's car looks: which pod, and its paint and neon, each an index into the client's
-/// lists. Purely what is drawn: every pod drives the same.
+/// How a player's car looks: which skimmer, its paint and neon, and the trail it leaves on the road
+/// and that trail's color, each an index into the client's lists. Purely what is drawn: every
+/// skimmer drives the same.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Encode, Decode)]
 pub struct CarLook {
     pub model: u8,
     pub paint: u8,
     pub neon: u8,
+    pub trail: u8,
+    pub trail_color: u8,
 }
 
 impl CarLook {
     /// A look picked at random, for a player who has never been to the garage: a grid of players
     /// who never chose is not a grid of the same car.
     pub fn random() -> Self {
-        let mut bytes = [0; 3];
+        let mut bytes = [0; 5];
         getrandom::fill(&mut bytes).expect("OS random generator unavailable");
         Self {
             model: bytes[0],
             paint: bytes[1],
             neon: bytes[2],
+            trail: bytes[3],
+            trail_color: bytes[4],
         }
         .checked()
     }
 
-    /// The same look with anything out of range brought back in, so a peer cannot ask for a pod
+    /// The same look with anything out of range brought back in, so a peer cannot ask for a skimmer
     /// that does not exist.
     pub fn checked(self) -> Self {
         Self {
             model: self.model % CAR_MODELS,
             paint: self.paint % CAR_PAINTS,
             neon: self.neon % CAR_NEONS,
+            trail: self.trail % CAR_TRAILS,
+            trail_color: self.trail_color % CAR_TRAIL_COLORS,
         }
     }
 }
@@ -509,6 +518,8 @@ mod tests {
             model: CAR_MODELS + 1,
             paint: 255,
             neon: CAR_NEONS,
+            trail: 1,
+            trail_color: 2,
         }
         .checked();
         assert!(look.model < CAR_MODELS && look.paint < CAR_PAINTS && look.neon < CAR_NEONS);
@@ -537,6 +548,8 @@ mod tests {
                     model: 2,
                     paint: 7,
                     neon: 3,
+                    trail: 1,
+                    trail_color: 2,
                 },
             };
             assert_eq!(decode::<ClientMessage>(&encode(&hello)).unwrap(), hello);
@@ -649,6 +662,8 @@ mod tests {
                     model: 3,
                     paint: 1,
                     neon: 5,
+                    trail: 1,
+                    trail_color: 2,
                 },
                 status: PlayerStatus::Finished { time_ms: 61_250 },
                 start: Some(StartGrade::A),

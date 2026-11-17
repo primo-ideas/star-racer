@@ -114,7 +114,11 @@ pub fn four_stroke_bang() -> Recorded {
         let excitation = firing(0.0) + AFTER_FIRE_LEVEL * firing(AFTER_FIRE);
 
         // The pipe: what went in comes back a period later, a little duller each time.
-        let echo = if index >= delay { pipe[index - delay] } else { 0.0 };
+        let echo = if index >= delay {
+            pipe[index - delay]
+        } else {
+            0.0
+        };
         damped += PIPE_BRIGHTNESS * (echo - damped);
         pipe[index] = excitation + PIPE_FEEDBACK * damped;
 
@@ -132,7 +136,9 @@ pub fn four_stroke_bang() -> Recorded {
     }
 
     // Driven into a soft clip for the bark, then brought to its peak, faded in and out.
-    let loudest = samples.iter().fold(0.0_f32, |most, sample| most.max(sample.abs()));
+    let loudest = samples
+        .iter()
+        .fold(0.0_f32, |most, sample| most.max(sample.abs()));
     let scale = if loudest > 0.0 { 1.0 / loudest } else { 0.0 };
     let total = count as f32 / rate;
     let samples: Arc<[f32]> = samples
@@ -194,7 +200,12 @@ mod tests {
         };
         let period = (rate / PIPE_PITCH).round() as usize;
         assert!(likeness(period) > 0.0);
-        assert!(likeness(period) > likeness(period / 2), "no ring at the pipe's note: {} {}", likeness(period), likeness(period / 2));
+        assert!(
+            likeness(period) > likeness(period / 2),
+            "no ring at the pipe's note: {} {}",
+            likeness(period),
+            likeness(period / 2)
+        );
     }
 
     /// Writes the bang to `target/sounds/hop.wav`, to hear it outside the game:

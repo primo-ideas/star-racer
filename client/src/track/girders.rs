@@ -41,7 +41,11 @@ pub(super) fn girders(lit: &mut Geometry, neon: &mut Geometry, track: &Track) {
                 world::position(beside(*point, lateral), height)
             };
             let middle = |point: &TrackPoint, height: f32| {
-                at(point, side * (point.half_width + WALL_THICKNESS / 2.0), height)
+                at(
+                    point,
+                    side * (point.half_width + WALL_THICKNESS / 2.0),
+                    height,
+                )
             };
 
             // The chords, a box per segment following the road.
@@ -89,18 +93,24 @@ pub(super) fn girders(lit: &mut Geometry, neon: &mut Geometry, track: &Track) {
                 if panel == 0 || panel == panels {
                     // Back into the road a little, so it caps the wall's open end.
                     let back = if panel == 0 { -1.0 } else { 1.0 };
-                    let post = track.point_at(
-                        node_at(panel) + back * (END_POST / 2.0 - spacing / 2.0),
-                    );
+                    let post =
+                        track.point_at(node_at(panel) + back * (END_POST / 2.0 - spacing / 2.0));
                     let frame = Frame::new(
-                        world::position(beside(post, side * (post.half_width + WALL_THICKNESS / 2.0)), base(&post)),
+                        world::position(
+                            beside(post, side * (post.half_width + WALL_THICKNESS / 2.0)),
+                            base(&post),
+                        ),
                         world::direction(post.direction),
                         world::direction(post.direction.perp() * side),
                     );
                     lit.block(
                         &frame,
                         Vec3::new(-END_POST / 2.0, -SLAB - 0.02, -WALL_THICKNESS / 2.0 - 0.06),
-                        Vec3::new(END_POST / 2.0, WALL_HEIGHT + 0.08, WALL_THICKNESS / 2.0 + 0.06),
+                        Vec3::new(
+                            END_POST / 2.0,
+                            WALL_HEIGHT + 0.08,
+                            WALL_THICKNESS / 2.0 + 0.06,
+                        ),
                         WALL_DARK,
                     );
                     continue;
@@ -157,7 +167,10 @@ mod tests {
         assert_eq!(runs.len(), 1);
         let spacing = track.spacing();
         let (start, end) = (runs[0].start as f32 * spacing, runs[0].end as f32 * spacing);
-        assert!((start - 60.0).abs() <= spacing && (end - 70.0).abs() <= spacing, "{start} {end}");
+        assert!(
+            (start - 60.0).abs() <= spacing && (end - 70.0).abs() <= spacing,
+            "{start} {end}"
+        );
 
         let (mut lit, mut neon) = (Geometry::default(), Geometry::default());
         girders(&mut lit, &mut neon, &track);

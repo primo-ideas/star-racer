@@ -755,6 +755,8 @@ async fn a_chosen_look_is_seen_in_the_lobby() {
         model: 2,
         paint: 7,
         neon: 3,
+        trail: 1,
+        trail_color: 2,
     };
     send(&mut socket, &ClientMessage::SetLook(look)).await;
     enter(&mut socket, ClientMessage::QuickPlay)
@@ -768,6 +770,8 @@ async fn a_chosen_look_is_seen_in_the_lobby() {
         model: 250,
         paint: 250,
         neon: 250,
+        trail: 1,
+        trail_color: 2,
     };
     send(&mut other, &ClientMessage::SetLook(wild)).await;
     enter(&mut other, ClientMessage::QuickPlay)

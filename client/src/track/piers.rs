@@ -98,7 +98,10 @@ fn pier(
     };
     let top = ring(HEAD_LENGTH, head_reach)
         .map(|(along, lateral)| place(along, lateral, underside(along, lateral)));
-    let lowest = top.iter().map(|corner| corner.y).fold(f32::INFINITY, f32::min);
+    let lowest = top
+        .iter()
+        .map(|corner| corner.y)
+        .fold(f32::INFINITY, f32::min);
     let neck = lowest - HEAD_DROP;
     let column = |height: f32| {
         ring(COLUMN_LENGTH, column_reach).map(|(along, lateral)| place(along, lateral, height))
@@ -196,12 +199,19 @@ mod tests {
             let here = track.project(Vec2::new(position.x, -position.z));
             assert!(here.lateral.abs() < track.half_width(), "{here:?}");
             let road = track.surface_at(&here).height;
-            assert!(position.y < road - SLAB + 0.3, "{} m under the road", road - position.y);
+            assert!(
+                position.y < road - SLAB + 0.3,
+                "{} m under the road",
+                road - position.y
+            );
             if (position.y - ABYSS).abs() < 1e-3 {
                 assert_eq!(&color[..3], &[0.0, 0.0, 0.0]);
             }
         }
-        let lowest = lit.positions().map(|position| position.y).fold(0.0, f32::min);
+        let lowest = lit
+            .positions()
+            .map(|position| position.y)
+            .fold(0.0, f32::min);
         assert!((lowest - ABYSS).abs() < 1e-3, "{lowest}");
     }
 
@@ -224,7 +234,10 @@ mod tests {
                 })
                 .map(|position| (underside - position.y).abs())
                 .fold(f32::INFINITY, f32::min);
-            assert!(closest < 0.4, "{closest} m from the underside at {lateral} m");
+            assert!(
+                closest < 0.4,
+                "{closest} m from the underside at {lateral} m"
+            );
         }
     }
 

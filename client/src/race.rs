@@ -197,7 +197,7 @@ fn create_car_assets(
 /// Spawns a car drawn in `look` under `root`, and returns it: its body, which sways in a race
 /// (`racing`), with the hull, the lights and a flame at every nozzle, and on the road under it the
 /// shadow and the light. `car` is the race's car whose speed the flames follow; without one they
-/// burn as at rest. The garage shows its pod with this too.
+/// burn as at rest. The garage shows its skimmer with this too.
 pub fn spawn_car(
     commands: &mut Commands,
     assets: &mut CarAssets,
@@ -398,7 +398,7 @@ fn display_cars(
     view.own_tick = prediction.own_tick();
 
     // Each player's look, as the lobby says it; a car seen before its player is drawn as the
-    // first pod, and again once the look arrives.
+    // first skimmer, and again once the look arrives.
     let look_of = |id: CarId| {
         current
             .0

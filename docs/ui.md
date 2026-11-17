@@ -28,8 +28,11 @@ ranked match. Each screen's entities despawn when it is left.
   (see [Quick play and ranked](ranked.md)). A race is one press away from the moment the game
   opens, even with a gamepad, which cannot type; Enter in the field is quick play. While queued,
   the ranked button counts the time and cancels. The dice button rolls another nickname. The last
-  nickname is saved next to the identity key when the player presses a button. Under the card:
-  BROWSE LOBBIES, LEADERBOARD (a dialog with the ten best, `leaderboard.rs`), GARAGE (below),
+  nickname is saved next to the identity key when the player presses a button. Since v0.1.68 (the
+  user's word "Allège le menu d'accueil") the title stands alone, with no line under it, a guest
+  gets no help line (the ranked button already says to sign in), and the server's address shows in
+  the corner only when it is not the default one. Under the card, in quiet buttons, text until
+  focused: LOBBIES, LEADERBOARD (a dialog with the ten best, `leaderboard.rs`), GARAGE (below),
   SETTINGS (see
   [Settings](#settings)) and QUIT, which closes
   the game: the window's close button does the same, but a gamepad cannot reach it. QUIT has no
@@ -37,12 +40,16 @@ ranked match. Each screen's entities despawn when it is left.
   must not close the game; and the web has no such button, since a page cannot close the tab it is
   in.
 - **Garage** (`garage.rs`, since v0.1.40, the user's request "fais trois nouvelles
-  voitures/pods ainsi qu'un choix et customization de voiture"): the player's pod standing over the
-  menu's neon grid, turning slowly under a light of its own, beside a card of three rows stepped
-  with left and right, the arrows or a click: **POD** (Arrow, Lance, Twin, Manta, each with a line
-  about it), **PAINT** (ten, with a swatch) and **NEON** (eight, with a swatch). DONE, Escape or B
+  voitures/pods ainsi qu'un choix et customization de voiture"): the player's skimmer (the cars'
+  name since v0.1.68, the user having asked for one in place of "pod") standing over the
+  menu's neon grid, turning slowly under a light of its own, beside a card of five rows stepped
+  with left and right, the arrows or a click: **SKIMMER** (Arrow, Lance, Twin, Manta, each with a
+  line about it), **PAINT** (ten, with a swatch), **NEON** (eight, with a swatch), and since
+  v0.1.68 **TRAIL** (RIBBON, SKID, PIXELS) and its **COLOR** (the eight neons), the trail drawn
+  under the turning car as if it had just driven a bend (see
+  [Architecture](architecture.md#the-trail)). DONE, Escape or B
   keeps the choice, tells the server if connected (`SetLook`), and goes back to the first screen.
-  It needs no connection. Every pod drives the same, and the card says so: the look is drawn,
+  It needs no connection. Every skimmer drives the same, and the card says so: the look is drawn,
   never simulated (see [Architecture](architecture.md#displaying-the-race)). `--garage` opens it,
   to capture it.
 - **Lobbies** (`lobbies.rs`): every lobby, live, with its track, players and a status badge; the

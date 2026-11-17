@@ -4,9 +4,9 @@
 
 mod bindings;
 mod camera;
-mod car_model;
 #[cfg(not(target_arch = "wasm32"))]
 mod capture;
+mod car_model;
 mod city;
 mod controls;
 mod dice;
@@ -26,6 +26,7 @@ mod settings;
 mod sky;
 mod sound;
 mod track;
+mod trail;
 mod ui;
 mod weight;
 mod world;
@@ -123,6 +124,7 @@ fn main() {
     ))
     .add_plugins((
         reconnect::ReconnectPlugin,
+        trail::TrailPlugin,
         ui::safe_area::SafeAreaPlugin {
             fixed: settings.safe_area,
         },

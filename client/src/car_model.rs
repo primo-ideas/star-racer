@@ -1,8 +1,9 @@
 //! The cars, as drawn: low racing hovercraft in the spirit of F-Zero's machines, built from
 //! flat-shaded triangles like everything else in the game.
 //!
-//! There are four pods to choose from in the garage, every one of them driving the same, since the
-//! handling is the simulation's and the simulation knows nothing of looks:
+//! The cars are called skimmers. There are four to choose from in the garage, every one of them
+//! driving the same, since the handling is the simulation's and the simulation knows nothing of
+//! looks:
 //!
 //! - **Arrow**, the first: a long wedge of a hull with a pointed nose, a cockpit bubble on its back,
 //!   and two engine pods slung beside it on a rear wing, each wearing a fin.
@@ -29,7 +30,7 @@ use star_racer_protocol::CarLook;
 
 use crate::geometry::{Frame, Geometry};
 
-/// The pods, in the order the garage offers them and the wire numbers them.
+/// The skimmers, in the order the garage offers them and the wire numbers them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CarModel {
     Arrow,
@@ -41,7 +42,7 @@ pub enum CarModel {
 impl CarModel {
     pub const ALL: [Self; 4] = [Self::Arrow, Self::Lance, Self::Twin, Self::Manta];
 
-    /// The pod numbered `index` on the wire; an unknown one is the first.
+    /// The skimmer numbered `index` on the wire; an unknown one is the first.
     pub fn of(index: u8) -> Self {
         Self::ALL
             .get(usize::from(index))
@@ -61,7 +62,7 @@ impl CarModel {
     /// A line about it, for the garage.
     pub fn blurb(self) -> &'static str {
         match self {
-            Self::Arrow => "The first pod: a wedge between two engines.",
+            Self::Arrow => "The first skimmer: a wedge between two engines.",
             Self::Lance => "A needle with a delta wing and one big thruster.",
             Self::Twin => "Two hulls, a bridge, and the cockpit between them.",
             Self::Manta => "A flying wing, flat and wide, lined in neon.",
@@ -99,7 +100,7 @@ pub const NEONS: [(&str, LinearRgba); 8] = [
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Livery {
     pub model: CarModel,
-    /// The hull's top and the pods' tops.
+    /// The hull's top and the skimmers' tops.
     pub body: Color,
     /// The neon lines along the hull and the light under it.
     pub accent: LinearRgba,
@@ -117,7 +118,7 @@ impl Livery {
     }
 }
 
-/// The dark parts: the hull's flanks under the neon, the pods' sides, the wings.
+/// The dark parts: the hull's flanks under the neon, the skimmers' sides, the wings.
 const GRAPHITE: Color = Color::srgb(0.075, 0.08, 0.095);
 /// The underside, which the road never lights.
 const UNDERSIDE: Color = Color::srgb(0.025, 0.025, 0.035);
@@ -168,30 +169,31 @@ const fn nozzle(x: f32, y: f32, z: f32, half_z: f32, half_y: f32) -> Nozzle {
 
 /// The hull, from its tail to the tip of its nose: widest just ahead of the tail, where the wing
 /// joins it, and drawn out to a point.
-const ARROW_HULL: [Section; 6] = [
-    section(-1.95, 0.60, 0.34, 0.74),
-    section(-1.55, 0.74, 0.28, 0.86),
-    section(-0.40, 0.78, 0.26, 0.86),
-    section(0.70, 0.64, 0.27, 0.72),
-    section(1.60, 0.40, 0.29, 0.56),
-    section(2.40, 0.07, 0.33, 0.39),
+const ARROW_HULL: [Section; 7] = [
+    section(-1.95, 0.58, 0.34, 0.70),
+    section(-1.55, 0.76, 0.27, 0.80),
+    section(-0.40, 0.80, 0.25, 0.78),
+    section(0.60, 0.68, 0.26, 0.66),
+    section(1.50, 0.46, 0.28, 0.52),
+    section(2.20, 0.20, 0.31, 0.42),
+    section(2.62, 0.04, 0.34, 0.37),
 ];
 
 /// An engine pod, either side of the hull, `ARROW_POD_OFFSET` meters out.
 const ARROW_POD: [Section; 4] = [
-    section(-2.15, 0.26, 0.30, 0.66),
-    section(-1.80, 0.30, 0.26, 0.72),
-    section(-0.20, 0.27, 0.27, 0.66),
-    section(0.80, 0.08, 0.37, 0.47),
+    section(-2.15, 0.24, 0.30, 0.60),
+    section(-1.80, 0.29, 0.26, 0.66),
+    section(-0.20, 0.26, 0.27, 0.60),
+    section(1.00, 0.05, 0.36, 0.42),
 ];
 const ARROW_POD_OFFSET: f32 = 1.2;
 
 /// The cockpit, a bubble on the hull's back.
 const ARROW_COCKPIT: [Section; 4] = [
-    section(-0.85, 0.20, 0.82, 0.87),
-    section(-0.40, 0.34, 0.84, 1.13),
-    section(0.35, 0.32, 0.79, 1.06),
-    section(0.95, 0.09, 0.70, 0.76),
+    section(-0.95, 0.18, 0.74, 0.78),
+    section(-0.45, 0.32, 0.76, 1.00),
+    section(0.35, 0.30, 0.70, 0.94),
+    section(1.05, 0.07, 0.58, 0.64),
 ];
 
 const ARROW_NOZZLES: [Nozzle; 4] = [
@@ -203,19 +205,20 @@ const ARROW_NOZZLES: [Nozzle; 4] = [
 
 // Lance.
 
-const LANCE_HULL: [Section; 5] = [
-    section(-2.20, 0.50, 0.32, 0.80),
-    section(-1.70, 0.58, 0.27, 0.88),
-    section(-0.20, 0.50, 0.27, 0.78),
-    section(1.30, 0.32, 0.29, 0.58),
-    section(2.70, 0.05, 0.35, 0.40),
+const LANCE_HULL: [Section; 6] = [
+    section(-2.20, 0.50, 0.32, 0.74),
+    section(-1.70, 0.58, 0.27, 0.80),
+    section(-0.20, 0.50, 0.26, 0.70),
+    section(1.20, 0.32, 0.28, 0.54),
+    section(2.20, 0.13, 0.32, 0.42),
+    section(2.72, 0.03, 0.35, 0.38),
 ];
 
 const LANCE_COCKPIT: [Section; 4] = [
-    section(-1.25, 0.16, 0.84, 0.89),
-    section(-0.85, 0.28, 0.86, 1.12),
-    section(-0.15, 0.26, 0.79, 1.03),
-    section(0.35, 0.08, 0.70, 0.76),
+    section(-1.30, 0.15, 0.76, 0.80),
+    section(-0.85, 0.27, 0.78, 1.02),
+    section(-0.15, 0.25, 0.71, 0.94),
+    section(0.45, 0.07, 0.60, 0.66),
 ];
 
 /// How far out the tips of the delta wing are, either side.
@@ -230,12 +233,13 @@ const LANCE_NOZZLES: [Nozzle; 3] = [
 // Twin.
 
 /// Each of the two hulls, `TWIN_OFFSET` meters either side of the middle.
-const TWIN_HULL: [Section; 5] = [
-    section(-2.10, 0.34, 0.30, 0.70),
-    section(-1.70, 0.40, 0.26, 0.78),
-    section(0.20, 0.38, 0.26, 0.74),
-    section(1.50, 0.24, 0.28, 0.58),
-    section(2.35, 0.05, 0.33, 0.38),
+const TWIN_HULL: [Section; 6] = [
+    section(-2.10, 0.34, 0.30, 0.66),
+    section(-1.70, 0.40, 0.26, 0.72),
+    section(0.20, 0.38, 0.26, 0.68),
+    section(1.40, 0.25, 0.28, 0.54),
+    section(2.15, 0.10, 0.31, 0.42),
+    section(2.55, 0.03, 0.34, 0.37),
 ];
 const TWIN_OFFSET: f32 = 0.92;
 
@@ -263,19 +267,20 @@ const TWIN_NOZZLES: [Nozzle; 3] = [
 // Manta.
 
 /// The wing, one wide flat body: broadest at the back, swept to a blunt point.
-const MANTA_WING: [Section; 5] = [
-    section(-1.90, 1.40, 0.30, 0.52),
-    section(-1.45, 1.55, 0.27, 0.60),
-    section(-0.30, 1.25, 0.26, 0.66),
-    section(0.95, 0.68, 0.27, 0.56),
-    section(2.15, 0.10, 0.31, 0.37),
+const MANTA_WING: [Section; 6] = [
+    section(-1.90, 1.42, 0.30, 0.48),
+    section(-1.45, 1.56, 0.27, 0.55),
+    section(-0.30, 1.28, 0.26, 0.60),
+    section(0.90, 0.72, 0.27, 0.52),
+    section(1.80, 0.28, 0.30, 0.40),
+    section(2.30, 0.05, 0.32, 0.36),
 ];
 
 const MANTA_COCKPIT: [Section; 4] = [
-    section(-0.60, 0.18, 0.62, 0.66),
-    section(-0.20, 0.30, 0.64, 0.92),
-    section(0.50, 0.26, 0.60, 0.86),
-    section(0.95, 0.07, 0.56, 0.60),
+    section(-0.60, 0.18, 0.56, 0.60),
+    section(-0.20, 0.30, 0.58, 0.86),
+    section(0.50, 0.26, 0.54, 0.80),
+    section(0.95, 0.07, 0.50, 0.54),
 ];
 
 const MANTA_FIN: f32 = 0.72;
@@ -286,7 +291,7 @@ const MANTA_NOZZLES: [Nozzle; 3] = [
     nozzle(-1.92, 0.42, 0.85, 0.22, 0.08),
 ];
 
-/// Where a pod's thrusters are, whose flames are drawn from them.
+/// Where a skimmer's thrusters are, whose flames are drawn from them.
 pub fn nozzles(model: CarModel) -> &'static [Nozzle] {
     match model {
         CarModel::Arrow => &ARROW_NOZZLES,
@@ -306,9 +311,11 @@ fn ring(section: &Section) -> [Vec2; 8] {
         ..
     } = *section;
     let height = top - bottom;
-    let shoulder = Vec2::new(0.62 * w, top - 0.08 * height);
-    let widest = Vec2::new(w, bottom + 0.55 * height);
-    let flank = Vec2::new(0.8 * w, bottom);
+    // A low racing section: a flat, wide deck, a sharp chine low on the flank, and the belly
+    // tucked in under it, so the body reads as a wedge rather than a tube.
+    let shoulder = Vec2::new(0.8 * w, top - 0.14 * height);
+    let widest = Vec2::new(w, bottom + 0.4 * height);
+    let flank = Vec2::new(0.6 * w, bottom);
     [
         Vec2::new(0.0, top),
         shoulder,
@@ -422,7 +429,7 @@ pub fn hull_geometry(livery: &Livery) -> Geometry {
             for side in [-1.0, 1.0] {
                 let z = side * ARROW_POD_OFFSET;
                 loft(g, &ARROW_POD, z, painted(livery), GRAPHITE, GRAPHITE);
-                // A fin on each pod, raked back and narrowing as it rises.
+                // A fin on each skimmer, raked back and narrowing as it rises.
                 g.tapered_block(
                     &frame,
                     Vec3::new(-2.05, 0.66, z - 0.035),
@@ -431,7 +438,7 @@ pub fn hull_geometry(livery: &Livery) -> Geometry {
                     GRAPHITE,
                 );
             }
-            // The rear wing the pods hang from, through the hull, and a splitter under the nose.
+            // The rear wing the skimmers hang from, through the hull, and a splitter under the nose.
             g.block(
                 &frame,
                 Vec3::new(-1.75, 0.44, -ARROW_POD_OFFSET),
@@ -582,8 +589,14 @@ pub fn lights_geometry(livery: &Livery) -> Geometry {
     for side in [-1.0, 1.0] {
         match livery.model {
             CarModel::Arrow => {
-                neon(g, &frame, &widest_line(&ARROW_HULL, 0.0, side, 1), 0.045, accent);
-                // And one along the top of each pod.
+                neon(
+                    g,
+                    &frame,
+                    &widest_line(&ARROW_HULL, 0.0, side, 1),
+                    0.045,
+                    accent,
+                );
+                // And one along the top of each skimmer.
                 let pod_line: Vec<Vec3> = ARROW_POD[..3]
                     .iter()
                     .map(|section| {
@@ -593,7 +606,13 @@ pub fn lights_geometry(livery: &Livery) -> Geometry {
                 neon(g, &frame, &pod_line, 0.04, accent);
             }
             CarModel::Lance => {
-                neon(g, &frame, &widest_line(&LANCE_HULL, 0.0, side, 1), 0.045, accent);
+                neon(
+                    g,
+                    &frame,
+                    &widest_line(&LANCE_HULL, 0.0, side, 1),
+                    0.045,
+                    accent,
+                );
                 // Along the swept leading edge of the wing.
                 neon(
                     g,
@@ -613,7 +632,13 @@ pub fn lights_geometry(livery: &Livery) -> Geometry {
             }
             CarModel::Manta => {
                 // The whole edge of the wing, nose to tail, is the neon.
-                neon(g, &frame, &widest_line(&MANTA_WING, 0.0, side, 0), 0.05, accent);
+                neon(
+                    g,
+                    &frame,
+                    &widest_line(&MANTA_WING, 0.0, side, 0),
+                    0.05,
+                    accent,
+                );
             }
         }
     }
@@ -628,8 +653,8 @@ pub fn lights_geometry(livery: &Livery) -> Geometry {
     geometry
 }
 
-/// A pod's outline on the road, as an oval: half its length and half its width, about the same for
-/// every pod.
+/// A skimmer's outline on the road, as an oval: half its length and half its width, about the same for
+/// every skimmer.
 /// The light and the shadow under the car are drawn in multiples of it.
 const FOOTPRINT: Vec2 = Vec2::new(2.25, 1.35);
 
@@ -736,7 +761,11 @@ pub fn flame_geometry() -> Geometry {
     for face in 0..4 {
         let a = corners[face];
         let b = corners[(face + 1) % 4];
-        geometry.quad_facing_away_shaded([a, b, tip, tip], inside, [base, base, tip_color, tip_color]);
+        geometry.quad_facing_away_shaded(
+            [a, b, tip, tip],
+            inside,
+            [base, base, tip_color, tip_color],
+        );
     }
     geometry
 }
@@ -759,7 +788,6 @@ pub fn flame_length(speed_share: f32, boosting: bool, flicker: f32) -> f32 {
     (steady + roar) * (1.0 + 0.08 * flicker.clamp(-1.0, 1.0))
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -779,7 +807,7 @@ mod tests {
         }
     }
 
-    /// Every pod is about as big as what the simulation collides, it hovers clear of the road, and
+    /// Every skimmer is about as big as what the simulation collides, it hovers clear of the road, and
     /// its nose points forward.
     #[test]
     fn every_pod_is_the_size_of_its_collisions_and_hovers() {
@@ -789,16 +817,23 @@ mod tests {
             assert!(max.x > 2.1 && max.x < 2.75, "{model:?} {max}");
             assert!(min.x > -2.3, "{model:?} {min}");
             assert!(max.z < 1.65 && min.z > -1.65, "{model:?} {min} {max}");
-            assert!(min.y > 0.2, "{model:?}: the underside clears the road: {min}");
+            assert!(
+                min.y > 0.2,
+                "{model:?}: the underside clears the road: {min}"
+            );
             assert!(max.y < 1.2, "{model:?} {max}");
             // The tip of the nose is on the middle of the car, or of each hull for the Twin.
             let tip = hull.positions().max_by(|a, b| a.x.total_cmp(&b.x)).unwrap();
-            let middle = if model == CarModel::Twin { TWIN_OFFSET } else { 0.0 };
+            let middle = if model == CarModel::Twin {
+                TWIN_OFFSET
+            } else {
+                0.0
+            };
             assert!((tip.z.abs() - middle).abs() < 0.1, "{model:?} {tip}");
         }
     }
 
-    /// Every pod's thrusters are at the back, the Twin's middle one at the end of its nacelle, and
+    /// Every skimmer's thrusters are at the back, the Twin's middle one at the end of its nacelle, and
     /// the flames hang behind them.
     #[test]
     fn the_thrusters_are_at_the_tail() {
@@ -842,6 +877,8 @@ mod tests {
                     model: model as u8,
                     paint: paint as u8,
                     neon: 0,
+                    trail: 1,
+                    trail_color: 2,
                 });
                 assert!(brightest(hull_geometry(&livery)) <= 1.0);
             }
@@ -850,8 +887,13 @@ mod tests {
                     model: model as u8,
                     paint: 0,
                     neon: neon as u8,
+                    trail: 1,
+                    trail_color: 2,
                 });
-                assert!(brightest(lights_geometry(&livery)) > 2.0, "{model:?} {neon}");
+                assert!(
+                    brightest(lights_geometry(&livery)) > 2.0,
+                    "{model:?} {neon}"
+                );
             }
         }
     }
@@ -870,6 +912,8 @@ mod tests {
             model: 200,
             paint: 200,
             neon: 200,
+            trail: 1,
+            trail_color: 2,
         });
         assert!(CarModel::ALL.contains(&wild.model));
     }
@@ -894,7 +938,11 @@ mod tests {
             for (point, color) in geometry.positions().zip(colors) {
                 let out = (point.x / FOOTPRINT.x).hypot(point.z / FOOTPRINT.y);
                 if (out - rim).abs() < 1e-3 {
-                    assert!(color.iter().all(|&channel| channel == 0.0 || channel == 1.0));
+                    assert!(
+                        color
+                            .iter()
+                            .all(|&channel| channel == 0.0 || channel == 1.0)
+                    );
                     assert!(color[3] == 0.0 || color[..3] == [0.0; 3], "{color:?}");
                 }
             }

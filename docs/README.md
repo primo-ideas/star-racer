@@ -3,7 +3,7 @@
 The reasoned technical decisions behind Star Racer. `CLAUDE.md` holds the working rules and
 the current status; these pages explain *why* the code looks the way it does.
 
-- [Architecture](architecture.md) — workspace layout, transport choice, deployment constraints.
+- [Architecture](architecture.md) — workspace layout, transport choice, deployment constraints, how the race is drawn, the trail behind every car.
 - [Protocol](protocol.md) — wire format, versioning, handshake, authentication.
 - [Simulation](simulation.md) — conventions, the car model and its tuning, drift, walls, autopilot.
 - [Tracks](tracks.md) — the track file format, transitions, scenery, validation, built geometry.

@@ -215,7 +215,11 @@ with magenta.
   thrusters across its back.
 
 A paint (ten, `PAINTS`) covers the tops of the hull and pods, a neon (eight, `NEONS`) lines it and
-lights the road under it. On the wire a look is three numbers, `CarLook { model, paint, neon }`,
+lights the road under it. Since v0.1.68 the cars are called skimmers, and their hulls are lower:
+every section is a flat deck with a sharp chine low on its flank and the belly tucked in under it
+(`car_model::ring`), the decks 5 to 10 cm lower, the noses drawn out longer to a finer point and
+the canopies lower, at the user's word "Revois un peu la forme des pods". On the wire a look is
+five numbers since v0.1.68 (protocol 37), `CarLook { model, paint, neon, trail, trail_color }`,
 said in `Hello`, changed with `SetLook` while browsing, kept by the server on the player and listed
 with every `LobbyPlayer`; both ends bring a number out of range back in (`CarLook::checked`). The
 player's own car is no longer told apart by its colors: the chase camera follows it, and every
@@ -288,6 +292,26 @@ make anything stronger seasick), and shakes when the car hits something, by how 
 hit took. A hit is a change of velocity faster than any driving makes, 150 m/s², where a boost
 pushes at 35 and the tightest drift turns the car at about 90. The finish shots, which no longer
 ride with the car, feel none of it.
+
+## The trail
+
+Since v0.1.68 (the user's word: "un liseret de couleur stylisé, et dans le thème, derrière la
+voiture, comme si c'était une trace de dérapage. Couleur et effets customisables dans le meme menu
+que la voiture. Fais trois effets"), every car leaves a line of neon on the road behind it
+(`client/src/trail.rs`), chosen in the garage with the rest of its look: **RIBBON**, a band as wide
+as the tail edged with brighter lines, narrowing as it fades; **SKID**, two thin bright lines, one
+under each side of the tail, the marks of a skid in neon; **PIXELS**, squares dropped one side
+then the other, shrinking as they fade. Its color is one of the eight neons.
+
+The trail is laid from the back of the body (1.9 m behind the middle, along `Car::body_heading`),
+so in a drift, where the body swings across the travel, the tail swings out and draws the drift's
+arc as a skid would. A point is laid every 0.5 m the tail moves, on the road's surface plus 8 cm
+(over the flat strips the road is built of), and every point fades out over 1.1 s. Nothing is laid
+in the air, over a gap or off the road, and a tail that jumped more than 12 m (a car brought back
+to its checkpoint) starts a new trail. Each car's trail is one mesh rebuilt every frame, drawn
+unlit and added to what is behind it, so a fading color fades to nothing; the simulation never
+sees it. The garage draws the same geometry from a fixed bend (`trail::preview_points`) under its
+turning car.
 
 ## Build profiles
 

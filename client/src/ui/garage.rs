@@ -1,15 +1,18 @@
-//! The garage: where the player picks their pod and paints it.
+//! The garage: where the player picks their skimmer and paints it.
 //!
-//! Reached from the first screen, connected or not. The pod stands over the menu's neon grid,
-//! turning slowly, to the right of a card with three choices: which pod, its paint and its neon,
+//! Reached from the first screen, connected or not. The skimmer stands over the menu's neon grid,
+//! turning slowly, to the right of a card with three choices: which skimmer, its paint and its neon,
 //! each stepped through with left and right, the arrows beside it, or a click. What is chosen is
 //! kept with the menu choices and sent to the server, which shows it to everyone in the next lobby
-//! the player enters. Every pod drives the same: this is how a car looks, never how it handles.
+//! the player enters. Every skimmer drives the same: this is how a car looks, never how it handles.
 
 use bevy::input_focus::{FocusCause, InputFocus};
+use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 use bevy::ui_widgets::Activate;
-use star_racer_protocol::{CAR_MODELS, CAR_NEONS, CAR_PAINTS, CarLook};
+use star_racer_protocol::{
+    CAR_MODELS, CAR_NEONS, CAR_PAINTS, CAR_TRAIL_COLORS, CAR_TRAILS, CarLook,
+};
 
 use super::navigation::MenuInput;
 use super::safe_area::SafePadding;
@@ -22,8 +25,9 @@ use crate::preferences::{LookPreference, StoredPreferences};
 use crate::race::{CarAssets, spawn_car};
 use crate::screen::Screen;
 use crate::settings::Script;
+use crate::trail::{self, Effect, TRAIL_COLORS, TRAILS, TrailMaterial};
 
-/// Where the pod stands in front of the menu camera, which `backdrop.rs` places at 3 m over the
+/// Where the skimmer stands in front of the menu camera, which `backdrop.rs` places at 3 m over the
 /// grid looking far ahead: a little to the right of the card, close enough to fill the screen.
 const PREVIEW_AT: Vec3 = Vec3::new(2.6, 0.0, -8.5);
 /// How fast it turns, in radians per second.
@@ -50,6 +54,8 @@ enum Part {
     Model,
     Paint,
     Neon,
+    Trail,
+    TrailColor,
 }
 
 /// The name of what a row holds.
@@ -60,15 +66,15 @@ struct ChoiceName(Part);
 #[derive(Component)]
 struct Swatch(Part);
 
-/// The line describing the pod.
+/// The line describing the skimmer.
 #[derive(Component)]
 struct Blurb;
 
-/// The pod turning beside the card, and the look it is drawn in.
+/// The skimmer turning beside the card, the look it is drawn in, and the mesh of its trail.
 #[derive(Component)]
-struct Preview(CarLook);
+struct Preview(CarLook, Handle<Mesh>);
 
-/// The light over the pod, so its paint shows against the night.
+/// The light over the skimmer, so its paint shows against the night.
 #[derive(Component)]
 struct PreviewLight;
 
@@ -80,6 +86,8 @@ fn look_of(rows: &Query<(&Part, &Stepper)>) -> CarLook {
             Part::Model => look.model = stepper.value,
             Part::Paint => look.paint = stepper.value,
             Part::Neon => look.neon = stepper.value,
+            Part::Trail => look.trail = stepper.value,
+            Part::TrailColor => look.trail_color = stepper.value,
         }
     }
     look.checked()
@@ -133,9 +141,16 @@ fn spawn_garage(
 
     let mut first_row = None;
     for (part, label, value, count) in [
-        (Part::Model, "POD", look.model, CAR_MODELS),
+        (Part::Model, "SKIMMER", look.model, CAR_MODELS),
         (Part::Paint, "PAINT", look.paint, CAR_PAINTS),
         (Part::Neon, "NEON", look.neon, CAR_NEONS),
+        (Part::Trail, "TRAIL", look.trail, CAR_TRAILS),
+        (
+            Part::TrailColor,
+            "COLOR",
+            look.trail_color,
+            CAR_TRAIL_COLORS,
+        ),
     ] {
         let row = commands
             .spawn((
@@ -165,7 +180,7 @@ fn spawn_garage(
                 theme::CAPTION_SPACING,
                 TextColor(theme::TEXT_FAINT),
                 Node {
-                    width: px(56),
+                    width: px(78),
                     ..default()
                 },
             ));
@@ -179,7 +194,7 @@ fn spawn_garage(
                     ..default()
                 })
                 .with_children(|middle| {
-                    if part != Part::Model {
+                    if part != Part::Model && part != Part::Trail {
                         middle.spawn((
                             Swatch(part),
                             Node {
@@ -207,7 +222,7 @@ fn spawn_garage(
 
     commands.entity(card).with_children(|card| {
         card.spawn((
-            Text::new("Every pod drives the same: it is how yours looks."),
+            Text::new("Every skimmer drives the same: it is how yours looks."),
             fonts.text(13.0, 400),
             TextColor(theme::TEXT_FAINT),
         ));
@@ -315,7 +330,7 @@ fn leave(
     }
 }
 
-/// Writes what each row holds, its swatch, and the pod's line. The steppers step themselves (see
+/// Writes what each row holds, its swatch, and the skimmer's line. The steppers step themselves (see
 /// `widgets.rs` and `navigation.rs`).
 fn show_choices(
     rows: Query<(&Part, &Stepper)>,
@@ -327,11 +342,15 @@ fn show_choices(
     let model = CarModel::of(look.model);
     let paint = PAINTS[usize::from(look.paint)];
     let neon = NEONS[usize::from(look.neon)];
+    let trail_name = TRAILS[usize::from(look.trail)].0;
+    let trail_color = TRAIL_COLORS[usize::from(look.trail_color)];
     for (name, mut text) in &mut names {
         let wanted = match name.0 {
             Part::Model => model.name(),
             Part::Paint => paint.0,
             Part::Neon => neon.0,
+            Part::Trail => trail_name,
+            Part::TrailColor => trail_color.0,
         };
         if text.0 != wanted {
             text.0 = wanted.to_owned();
@@ -341,7 +360,15 @@ fn show_choices(
         // The neon as it would be seen, not brighter than white.
         let wanted = match swatch.0 {
             Part::Paint => paint.1,
-            Part::Neon | Part::Model => {
+            Part::TrailColor => {
+                let max = trail_color
+                    .1
+                    .red
+                    .max(trail_color.1.green)
+                    .max(trail_color.1.blue);
+                Color::LinearRgba(trail_color.1 * (1.0 / max)).with_alpha(1.0)
+            }
+            Part::Neon | Part::Model | Part::Trail => {
                 let max = neon.1.red.max(neon.1.green).max(neon.1.blue);
                 Color::LinearRgba(neon.1 * (1.0 / max)).with_alpha(1.0)
             }
@@ -355,13 +382,14 @@ fn show_choices(
     }
 }
 
-/// Draws the pod in the look chosen, again whenever it changes, keeping its turn.
+/// Draws the skimmer in the look chosen, again whenever it changes, keeping its turn.
 fn show_preview(
     mut commands: Commands,
     rows: Query<(&Part, &Stepper)>,
     previews: Query<(Entity, &Preview, &Transform)>,
     mut assets: ResMut<CarAssets>,
     mut meshes: ResMut<Assets<Mesh>>,
+    trail_material: Res<TrailMaterial>,
 ) {
     let look = look_of(&rows);
     let mut rotation = Quat::from_rotation_y(-0.6);
@@ -370,9 +398,20 @@ fn show_preview(
             return;
         }
         rotation = transform.rotation;
+        meshes.remove(&preview.1);
         commands.entity(entity).despawn();
     }
-    spawn_car(
+    // The trail under it, swept out behind its tail as if it had just driven a bend.
+    let trail = meshes.add(
+        trail::trail_geometry(
+            Effect::of(look.trail),
+            TRAIL_COLORS[usize::from(look.trail_color)].1,
+            &trail::preview_points(),
+            trail::PREVIEW_NOW,
+        )
+        .into_mesh(),
+    );
+    let car = spawn_car(
         &mut commands,
         &mut assets,
         &mut meshes,
@@ -380,12 +419,17 @@ fn show_preview(
         None,
         false,
         (
-            Preview(look),
+            Preview(look, trail.clone()),
             DespawnOnExit(Screen::Garage),
             Transform::from_translation(PREVIEW_AT).with_rotation(rotation),
             Visibility::default(),
         ),
     );
+    commands.entity(car).with_child((
+        Mesh3d(trail),
+        MeshMaterial3d(trail_material.0.clone()),
+        NotShadowCaster,
+    ));
 }
 
 fn turn_preview(time: Res<Time>, mut previews: Query<&mut Transform, With<Preview>>) {
@@ -398,7 +442,7 @@ fn turn_preview(time: Res<Time>, mut previews: Query<&mut Transform, With<Previe
 mod tests {
     use super::*;
 
-    /// The rows step round: past the last pod comes the first.
+    /// The rows step round: past the last skimmer comes the first.
     #[test]
     fn the_choices_wrap_round() {
         let mut stepper = Stepper {
