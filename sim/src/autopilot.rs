@@ -240,10 +240,16 @@ fn fires_turbo(personality: &Personality, car: &Car, track: &Track) -> bool {
 fn drift_through_turns(personality: &Personality, car: &Car, track: &Track) -> CarInput {
     if gap_within(car, track, GAP_STRAIGHT) {
         // Lined up for a gap, the car lands where it pointed when it left the road: no drift is
-        // started this close to one, and one under way is straightened out of, the stick
-        // centered until the body is back in line.
+        // started this close to one, and one under way is straightened out of: the stick never
+        // points into it, so the body comes back into line and the drift ends, but it may still
+        // point against it, which turns the drift's travel back toward the road. Centered, as
+        // until v0.1.60, the travel ran straight on at whatever angle the drift had it, and a
+        // car driving on late information took off 10 to 40 degrees across the gap.
         if car.is_drifting() {
-            return CarInput::new(true, 0.0)
+            let steer = pursue(personality, car, track, DRIFT_LOOK_AHEAD_TIME);
+            let into = steer * f32::from(car.drift);
+            let steer = if into > 0.0 { 0.0 } else { steer };
+            return CarInput::new(true, steer)
                 .with_jump(jumps(car, track))
                 .with_thrust(jumps(car, track));
         }
@@ -272,8 +278,9 @@ fn drift_through_turns(personality: &Personality, car: &Car, track: &Track) -> C
 }
 
 /// How far before a gap's lip the autopilot stops drifting, in meters: a drift held into the air
-/// keeps its travel there, and one taken in at an angle flies off the road.
-const GAP_STRAIGHT: f32 = 90.0;
+/// keeps its travel there, and one taken in at an angle flies off the road. 90 until v0.1.60:
+/// a drift begun just short of it was not over by the lip at top speed.
+const GAP_STRAIGHT: f32 = 150.0;
 
 /// Whether a gap's lip lies less than `meters` ahead of the car along the road.
 fn gap_within(car: &Car, track: &Track, meters: f32) -> bool {
