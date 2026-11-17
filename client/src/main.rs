@@ -19,6 +19,8 @@ mod nickname;
 mod prediction;
 mod preferences;
 mod race;
+#[cfg(not(target_arch = "wasm32"))]
+mod record;
 mod reconnect;
 mod scenery;
 mod screen;
@@ -135,6 +137,10 @@ fn main() {
     #[cfg(not(target_arch = "wasm32"))]
     if let Some((path, delay)) = settings.capture {
         app.add_plugins(capture::CapturePlugin { path, delay });
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Some((dir, fps, seconds)) = settings.record {
+        app.add_plugins(record::RecordPlugin { dir, fps, seconds });
     }
 
     app.run();

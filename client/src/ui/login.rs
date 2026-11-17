@@ -710,17 +710,26 @@ fn play_another_round(
     time: Res<Time<Real>>,
     mut since: Local<Option<f64>>,
 ) {
-    if script.rounds_left == 0 || !matches!(*connection, Connection::Online { .. }) {
+    // `--press-quick-play`: the first press, from the first screen, before anything is connected.
+    let first_press = script.press_quick_play;
+    if first_press.is_none()
+        && (script.rounds_left == 0 || !matches!(*connection, Connection::Online { .. }))
+    {
         *since = None;
         return;
     }
     let now = time.elapsed_secs_f64();
     let first = *since.get_or_insert(now);
-    if now - first < ROUND_PAUSE {
+    let pause = first_press.map_or(ROUND_PAUSE, f64::from);
+    if now - first < pause {
         return;
     }
     if let Ok(button) = buttons.single() {
-        script.rounds_left -= 1;
+        if first_press.is_some() {
+            script.press_quick_play = None;
+        } else {
+            script.rounds_left -= 1;
+        }
         *since = None;
         info!(left = script.rounds_left, "quick play again, as --rounds asks");
         commands.trigger(Activate { entity: button });

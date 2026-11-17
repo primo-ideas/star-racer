@@ -32,6 +32,8 @@ pub struct Settings {
     /// Screenshot path, and how long to wait once the screen is ready. Native only.
     #[cfg(not(target_arch = "wasm32"))]
     pub capture: Option<(std::path::PathBuf, std::time::Duration)>,
+    /// `--record`: the directory frames go to, how many a second, and for how many seconds.
+    pub record: Option<(std::path::PathBuf, f32, f32)>,
     /// The window size asked for, in logical pixels. Always `None` on the web, where the page
     /// decides how big the canvas is.
     pub window_size: Option<(u32, u32)>,
@@ -75,6 +77,9 @@ pub struct Script {
     pub camera_cycle: Option<f32>,
     /// As a spectator, start with this camera: chase, orbit, top or free.
     pub camera: Option<String>,
+    /// On the first screen, press QUICK PLAY after this many seconds, as a player would: the whole
+    /// way in, from the first screen, for films.
+    pub press_quick_play: Option<f32>,
 }
 
 /// How often the autopilot jumps with `--jump`, in seconds.
@@ -303,6 +308,10 @@ pub fn read() -> Settings {
         #[arg(long)]
         camera_cycle: Option<f32>,
 
+        /// On the first screen, press QUICK PLAY after this many seconds, as a player would.
+        #[arg(long, conflicts_with = "who")]
+        press_quick_play: Option<f32>,
+
         /// As a spectator, start with this camera: chase, orbit, top or free.
         #[arg(long)]
         camera: Option<String>,
@@ -343,6 +352,19 @@ pub fn read() -> Settings {
         /// With --capture, seconds to wait once that screen is shown, so the cars have moved.
         #[arg(long, default_value_t = 0.0, requires = "capture")]
         capture_delay: f32,
+
+        /// Record what the game draws to this directory, a PNG a frame named by its time, then
+        /// exit: for films (docs/film.md).
+        #[arg(long)]
+        record: Option<PathBuf>,
+
+        /// With --record, frames a second at most.
+        #[arg(long, default_value_t = 30.0, requires = "record")]
+        record_fps: f32,
+
+        /// With --record, how long to record, in seconds.
+        #[arg(long, default_value_t = 60.0, requires = "record")]
+        record_seconds: f32,
 
         /// Let the autopilot drive, for unattended checks.
         #[arg(long)]
@@ -419,10 +441,14 @@ pub fn read() -> Settings {
             watch: args.watch,
             camera_cycle: args.camera_cycle,
             camera: args.camera,
+            press_quick_play: args.press_quick_play,
         },
         touch: args.touch,
         latency: args.latency,
         capture: args.capture.map(|path| (path, capture_delay)),
+        record: args
+            .record
+            .map(|dir| (dir, args.record_fps, args.record_seconds)),
         window_size: args.window_size,
         safe_area: args.safe_area,
     }
@@ -489,10 +515,12 @@ pub fn read() -> Settings {
             watch: get("watch"),
             camera_cycle: get("camera_cycle").and_then(|value| value.parse().ok()),
             camera: get("camera"),
+            press_quick_play: None,
         },
         touch: has("touch") || touchscreen(),
         latency: has("latency"),
         window_size: None,
+        record: None,
         safe_area: get("safe_area").and_then(|value| value.parse().ok()),
     }
 }
