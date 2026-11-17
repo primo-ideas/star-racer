@@ -9,8 +9,8 @@
 //! gamepad. The right one holds the cross. Touching the cross anywhere accelerates -- the game has
 //! no brake, so the throttle is simply wherever the thumb lands -- and sliding from its hub onto a
 //! branch calls that branch's function without ever letting go of the throttle. Drift is the
-//! first branch, straight up, and the turbo the second, toward the middle of the screen, where the
-//! thumb folds to; the other two are drawn as the empty slots they are, waiting for what follows.
+//! first branch, straight up, the turbo the second, toward the middle of the screen, where the
+//! thumb folds to, the jump the third, straight down, and the horn the fourth, toward the edge.
 //!
 //! Neither thumb has to find its control again once it is down: anywhere in the bottom of the
 //! left half steers, and anywhere in the bottom of the right half accelerates, so a thumb that
@@ -352,6 +352,11 @@ impl TouchControls {
     }
 
     /// The thumb is on the jump branch: arriving there hops, staying there holds the thruster.
+    /// The thumb is on the horn branch: arriving there honks.
+    pub fn honking(self) -> bool {
+        self.branch == Some(Branch::HORN)
+    }
+
     pub fn jumping(self) -> bool {
         self.branch == Some(Branch::JUMP)
     }
@@ -383,6 +388,9 @@ impl Branch {
     /// The jump is the third, straight down: a thumb pulled back toward the edge of the screen,
     /// and held there for the thruster.
     const JUMP: Self = Self::Down;
+    /// The horn is the fourth, toward the edge (since v0.1.69): the last slot, for what matters
+    /// least to the race.
+    const HORN: Self = Self::Right;
 
     const ALL: [Self; 4] = [Self::Up, Self::Left, Self::Right, Self::Down];
 
@@ -392,7 +400,7 @@ impl Branch {
             Self::DRIFT => "DRIFT",
             Self::TURBO => "TURBO",
             Self::JUMP => "JUMP",
-            _ => "",
+            Self::HORN => "HORN",
         }
     }
 
@@ -470,14 +478,9 @@ impl Pad {
         }
     }
 
-    /// Whether the pad does anything at all. An empty branch still answers a thumb that finds
-    /// it, so it is plain that it is there and that it is waiting for a function.
+    /// Whether the pad does anything at all: since the horn took the last branch, every one does.
     fn works(self) -> bool {
-        !matches!(
-            self,
-            Self::Branch(branch)
-                if branch != Branch::DRIFT && branch != Branch::TURBO && branch != Branch::JUMP
-        )
+        true
     }
 
     /// Background, border and text, as it should look now, held this far.

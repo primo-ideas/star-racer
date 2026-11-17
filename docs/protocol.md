@@ -165,6 +165,7 @@ Client                                        Server
   |<------------- Lobby(state) ------------------|  right after JoinedLobby, then on every change
   |<------------- Snapshot { tick, cars } -------|  every tick, 60 per second
   |-- Input { input, tick, seq } -------------->|  whenever the input changes, for a tick ahead
+  |-- Honk ------------------------------------->|  the horn, at most every third of a second
   |-- Ping(n) ---------------------------------->|  twice a second, here and while browsing
   |<------------- Pong(n) -----------------------|  at once
   |-- LeaveLobby ------------------------------->|  back to browsing
@@ -215,6 +216,14 @@ Client                                        Server
 - **Snapshots may be skipped.** Each player has a small queue on the server; when a connection
   cannot keep up, new snapshots are dropped rather than slowing down the lobby for everyone. The
   next snapshot supersedes the missing ones, and the tick numbers show the gap.
+- **Horns** (since v0.1.69, protocol 38): `Honk` counts a honk on the car, at most one every
+  `HONK_EVERY_TICKS` (20 ticks), and every snapshot carries the count (`CarSnapshot::honks`, a
+  byte that wraps): a client hears a car honk when its count changes, in the horn of that car's
+  look (`CarLook::horn`).
+- **Experience** (since v0.1.69): the results carry what the race paid each player
+  (`LobbyPhase::Results::xp`), and `Progress { xp }` follows every `Profile`, after the welcome
+  and on coming back from a lobby, for guests too (see [Rewards](rewards.md)). A look asking for a
+  car, trail or horn not unlocked yet has it put back to the first free one.
 - **Leaving is immediate on the client**, which ignores the lobby messages still on their way. The
   server processes messages in order, so everything about the old lobby arrives before anything
   about a lobby joined later.

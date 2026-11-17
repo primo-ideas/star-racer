@@ -53,6 +53,7 @@ async fn start_server_with(timings: Timings) -> String {
         tuning,
         timings,
         Ratings::in_memory(),
+        crate::progress::Progress::in_memory(),
         Accounts::in_memory(),
     );
 
@@ -755,6 +756,7 @@ async fn a_chosen_look_is_seen_in_the_lobby() {
         model: 2,
         paint: 7,
         neon: 3,
+        horn: 1,
         trail: 1,
         trail_color: 2,
     };
@@ -770,6 +772,7 @@ async fn a_chosen_look_is_seen_in_the_lobby() {
         model: 250,
         paint: 250,
         neon: 250,
+        horn: 1,
         trail: 1,
         trail_color: 2,
     };
@@ -779,7 +782,11 @@ async fn a_chosen_look_is_seen_in_the_lobby() {
         .expect("quick play failed");
     let state = next_state(&mut other).await;
     let seen = state.players.iter().map(|player| player.look).collect::<Vec<_>>();
-    assert!(seen.contains(&wild.checked()), "{seen:?}");
+    // Out of range brought back in, and what a new player has not unlocked put back to the free one.
+    assert!(
+        seen.contains(&star_racer_protocol::rewards::allowed(wild, 0)),
+        "{seen:?}"
+    );
 }
 
 /// An account is created once, comes back on its device without its password, signs in with it

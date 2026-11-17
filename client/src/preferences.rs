@@ -98,6 +98,9 @@ pub struct LookPreference {
     pub trail: u8,
     #[serde(default)]
     pub trail_color: u8,
+    /// The horn, since v0.1.69: a look saved before has the first.
+    #[serde(default)]
+    pub horn: u8,
 }
 
 impl LookPreference {
@@ -108,6 +111,7 @@ impl LookPreference {
             neon: self.neon,
             trail: self.trail,
             trail_color: self.trail_color,
+            horn: self.horn,
         }
         .checked()
     }
@@ -119,6 +123,7 @@ impl LookPreference {
             neon: look.neon,
             trail: look.trail,
             trail_color: look.trail_color,
+            horn: look.horn,
         }
     }
 }

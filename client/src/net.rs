@@ -59,6 +59,8 @@ pub enum NetEvent {
     LobbyEnded,
     /// Where the player stands on the ladder.
     Profile(RankedProfile),
+    /// The player's experience, which makes their level and what they have unlocked.
+    Progress(u32),
     /// The best players.
     Leaderboard(Vec<LeaderboardEntry>),
     /// Where the ranked queue stands while the player is in it, `None` once they are out.
@@ -348,6 +350,7 @@ async fn run_session(
                     ServerMessage::Lobby(state) => NetEvent::Lobby(state),
                     ServerMessage::LobbyEnded => NetEvent::LobbyEnded,
                     ServerMessage::Profile(profile) => NetEvent::Profile(profile),
+                    ServerMessage::Progress { xp } => NetEvent::Progress(xp),
                     ServerMessage::Leaderboard(board) => NetEvent::Leaderboard(board),
                     ServerMessage::Queue(status) => NetEvent::Queue(status),
                     ServerMessage::Snapshot(snapshot) => NetEvent::Snapshot {
@@ -506,6 +509,7 @@ fn log_event(event: &NetEvent) {
         | NetEvent::Lobby(_)
         | NetEvent::LobbyEnded
         | NetEvent::Profile(_)
+        | NetEvent::Progress(_)
         | NetEvent::Leaderboard(_)
         | NetEvent::Queue(_)
         | NetEvent::Snapshot { .. }

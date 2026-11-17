@@ -64,6 +64,13 @@ impl Plugin for ControlsPlugin {
                     .after(TouchUpdate)
                     .run_if(in_state(Screen::Lobby)),
             )
+            .init_resource::<OwnHonk>()
+            .add_systems(
+                Update,
+                honk.after(RaceUpdate)
+                    .after(TouchUpdate)
+                    .run_if(in_state(Screen::Lobby)),
+            )
             .add_systems(PostUpdate, rumble.run_if(in_state(Screen::Lobby)));
     }
 }
@@ -138,6 +145,52 @@ fn send_input(
         network.send(ClientMessage::Input { input, tick, seq });
         latency.input_sent(seq, Instant::now(), tick);
         *last_sent = LastSent { input, seq };
+    }
+}
+
+/// The player sounded their horn this frame: the sound plays it at once, without waiting for the
+/// server to carry it back (see `sound.rs`).
+#[derive(Resource, Default)]
+pub struct OwnHonk(pub bool);
+
+/// Sounds the horn on a press of its key, its button or the touch cross's horn branch, while the
+/// player has a car and is not asking to leave. The server spaces honks out; so does this, for
+/// the sound played at once.
+#[allow(clippy::too_many_arguments)]
+fn honk(
+    view: Res<RaceView>,
+    leave_dialog: Res<LeaveDialog>,
+    gamepads: Query<&Gamepad>,
+    keyboard: Res<ButtonInput<KeyCode>>,
+    touch: Res<TouchControls>,
+    preferences: Res<StoredPreferences>,
+    time: Res<Time>,
+    network: Res<Network>,
+    mut own: ResMut<OwnHonk>,
+    mut touching: Local<bool>,
+    mut last: Local<f32>,
+) {
+    own.0 = false;
+    let on_branch = touch.honking();
+    let touched = on_branch && !*touching;
+    *touching = on_branch;
+    if leave_dialog.open || view.own_car.is_none() {
+        return;
+    }
+    let horn = &preferences.get().controls.horn;
+    let pressed = touched
+        || keyboard.any_just_pressed(horn.keys())
+        || gamepads.iter().any(|gamepad| {
+            horn.gamepad
+                .0
+                .is_some_and(|button| gamepad.just_pressed(button))
+        });
+    let now = time.elapsed_secs();
+    let spaced = now - *last >= star_racer_protocol::HONK_EVERY_TICKS as f32 / star_racer_sim::TICK_RATE as f32;
+    if pressed && spaced {
+        *last = now;
+        own.0 = true;
+        network.send(ClientMessage::Honk);
     }
 }
 

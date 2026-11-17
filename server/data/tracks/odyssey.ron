@@ -159,14 +159,12 @@
     // The city is on the outside of the lap, the right of the road all the way round, and inside
     // the three loops: the ground the shortcuts fly over is left to the dark.
     scenery: [
-        // The line, under its arch, between two stands.
-        Gantry(at: 0.0),
+        // The line, between two stands.
         Grandstand(at: 5177.9, side: Right, offset: 4.0, length: 80.0, rows: 8),
         Grandstand(at: 5192.9, side: Left, offset: 4.0, length: 60.0, rows: 6),
         Skyline(at: 5127.9, side: Right, offset: 8.0, length: 140.0, depth: 70.0, height: 38.0),
-        // The launch: an arch over the hop's lip, a mast on either side of the far one.
+        // The launch: a mast on either side of the hop's far edge.
         Billboard(at: 60.0, side: Right, offset: 3.0),
-        Gantry(at: 146.0),
         Pylon(at: 168.0, side: Left, offset: 1.0, height: 14.0),
         Pylon(at: 168.0, side: Right, offset: 1.0, height: 14.0),
         Skyline(at: 20.0, side: Right, offset: 8.0, length: 210.0, depth: 70.0, height: 34.0),
@@ -187,13 +185,11 @@
         Chevrons(at: 1180.0, side: Right),
         Skyline(at: 1190.0, side: Right, offset: 8.0, length: 250.0, depth: 80.0, height: 44.0),
         Billboard(at: 1300.0, side: Left, offset: 3.0),
-        // The leap: an arch on its lip, masts where the road takes up again.
-        Gantry(at: 1471.0, clearance: 9.0),
+        // The leap: masts where the road takes up again.
         Pylon(at: 1589.0, side: Left, offset: 1.0, height: 18.0),
         Pylon(at: 1589.0, side: Right, offset: 1.0, height: 18.0),
-        // The climb, through a tunnel.
+        // The climb.
         Chevrons(at: 1665.9, side: Left),
-        Tunnel(at: 1780.0, length: 60.0),
         Skyline(at: 1623.0, side: Right, offset: 8.0, length: 150.0, depth: 70.0, height: 46.0),
         Skyline(at: 1790.0, side: Right, offset: 8.0, length: 150.0, depth: 70.0, height: 42.0),
         // The balcony, around a spire, the highest thing in the city.
@@ -204,15 +200,12 @@
         // The sky bowl and the gate.
         Chevrons(at: 2504.2, side: Right),
         Skyline(at: 2508.2, side: Right, offset: 8.0, length: 130.0, depth: 70.0, height: 40.0),
-        Gantry(at: 2670.4),
-        // The dive, through a tunnel on its kink.
+        // The dive.
         Billboard(at: 2735.5, side: Right, offset: 3.0),
-        Tunnel(at: 2878.2, length: 70.0),
         Skyline(at: 2688.2, side: Right, offset: 8.0, length: 210.0, depth: 80.0, height: 44.0),
         Skyline(at: 2838.2, side: Right, offset: 8.0, length: 210.0, depth: 80.0, height: 40.0),
-        // The rift: its gate on the lip, two monoliths standing over the void, masts and a stand
+        // The rift: two monoliths standing over the void, masts and a stand
         // where the road takes up again.
-        Gantry(at: 3084.2, clearance: 9.0),
         Monolith(at: 3169.7, side: Left, offset: 40.0, height: 48.0, width: 14.0),
         Monolith(at: 3176.2, side: Right, offset: 50.0, height: 40.0, width: 12.0),
         Pylon(at: 3262.2, side: Left, offset: 1.0, height: 18.0),
@@ -221,14 +214,12 @@
         // The scree and the step.
         Chevrons(at: 3309.4, side: Right),
         Skyline(at: 3328.2, side: Right, offset: 8.0, length: 240.0, depth: 70.0, height: 38.0),
-        Gantry(at: 3635.7),
         Pylon(at: 3659.2, side: Left, offset: 1.0, height: 14.0),
         Pylon(at: 3659.2, side: Right, offset: 1.0, height: 14.0),
-        // The west corner and the esses, through a tunnel.
+        // The west corner and the esses.
         Chevrons(at: 3716.2, side: Right),
         Skyline(at: 3728.2, side: Right, offset: 8.0, length: 200.0, depth: 80.0, height: 42.0),
         Chevrons(at: 3932.2, side: Left),
-        Tunnel(at: 4058.2, length: 60.0),
         Skyline(at: 3938.2, side: Right, offset: 8.0, length: 145.0, depth: 70.0, height: 40.0),
         Skyline(at: 4083.2, side: Right, offset: 8.0, length: 145.0, depth: 70.0, height: 36.0),
         // The long way round, around a tower.

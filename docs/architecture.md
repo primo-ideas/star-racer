@@ -203,23 +203,25 @@ livery said whose it was: the player's own orange, lined with orange neon, every
 with magenta.
 
 **Since v0.1.40 (protocol 27) each player chooses their car in the garage** (see
-[Interface](ui.md#screens)): one of four pods, all built the same way, all 4.4 to 4.9 m long and
-2.5 to 3.1 m wide, all hovering a quarter of a meter up, all driving the same:
+[Interface](ui.md#screens)). Since v0.1.69 they are cars again, at the user's word "Les skimmers
+redeviennent des voitures. Des voitures style futur très stylisés" (they were pods, then skimmers
+in v0.1.68): six stylized cars of the future, all built the same way in `car_model.rs` from one
+`Design` each (a body and a glass cabin lofted through sections, two axles of hover-wheels, wings,
+fins, thrusters), all 4.4 to 5 m long, all hovering, all driving the same. The first three are
+free, the others won (see [Rewards](rewards.md)):
 
-- **Arrow**, the one above;
-- **Lance**, a needle 4.9 m long with a delta wing at its tail, a fin at each wing tip, canards near
-  the nose, one big thruster and two small ones at the wing tips;
-- **Twin**, a catamaran, two slim hulls joined by two bridges, the cockpit on a nacelle between
-  them with a fin, a thruster in each hull and one in the nacelle;
-- **Manta**, a flying wing 3.1 m across, its whole edge lined in neon, two tail fins, three
-  thrusters across its back.
+- **COMET**, a low coupé, a long wedge of a nose, the cabin set back, a duck tail;
+- **BOLT**, a muscle car, a long bonnet, broad shoulders, fat rear wheels and a big wing on struts;
+- **PULSE**, a compact, short and round, a bubble of a cabin, big wheels at its corners;
+- **PHANTOM**, a hypercar, the lowest of all, its canopy forward, twin fins at the tail;
+- **TITAN**, an off-roader, high on huge wheels, a light bar across its roof;
+- **NOVA**, an open-wheel racer, a needle of a body, its wheels out on arms, a front and a rear
+  wing.
 
-A paint (ten, `PAINTS`) covers the tops of the hull and pods, a neon (eight, `NEONS`) lines it and
-lights the road under it. Since v0.1.68 the cars are called skimmers, and their hulls are lower:
-every section is a flat deck with a sharp chine low on its flank and the belly tucked in under it
-(`car_model::ring`), the decks 5 to 10 cm lower, the noses drawn out longer to a finer point and
-the canopies lower, at the user's word "Revois un peu la forme des pods". On the wire a look is
-five numbers since v0.1.68 (protocol 37), `CarLook { model, paint, neon, trail, trail_color }`,
+A hover-wheel is an octagonal disc, its lowest side 22 cm over the road, its outer face a hub
+ringed with the car's neon. A paint (sixteen, `PAINTS`) covers the body, a neon (twelve, `NEONS`)
+lines its flanks, rings its wheels and lights the road under it. On the wire a look is six numbers
+since v0.1.69 (protocol 38), `CarLook { model, paint, neon, trail, trail_color, horn }`,
 said in `Hello`, changed with `SetLook` while browsing, kept by the server on the player and listed
 with every `LobbyPlayer`; both ends bring a number out of range back in (`CarLook::checked`). The
 player's own car is no longer told apart by its colors: the chase camera follows it, and every
@@ -301,7 +303,16 @@ que la voiture. Fais trois effets"), every car leaves a line of neon on the road
 (`client/src/trail.rs`), chosen in the garage with the rest of its look: **RIBBON**, a band as wide
 as the tail edged with brighter lines, narrowing as it fades; **SKID**, two thin bright lines, one
 under each side of the tail, the marks of a skid in neon; **PIXELS**, squares dropped one side
-then the other, shrinking as they fade. Its color is one of the eight neons.
+then the other, shrinking as they fade. Since v0.1.69 there are three more, won by playing (see
+[Rewards](rewards.md)): **ZIGZAG**, a bolt of lightning snapping from one side of the tail to the
+other; **HELIX**, two lines winding round each other, the one in front brighter; **ARROWS**, arrows
+of light pointing the way the car went. Its color is one of the twelve neons, picked from a palette.
+
+Since v0.1.69 every corner of the trail lies on the road (the user's word: "fais en sorte que le
+sillon suive les courbures de la route"): each point keeps where it lies on the road, meters along
+the lap and from the centerline, and a corner beside it is put at the road's height under it,
+`Track::height_beside` at the point's place moved by the corner's offset along and across the
+road, so a trail laid across a banked turn banks with it instead of standing flat over it.
 
 The trail is laid from the back of the body (1.9 m behind the middle, along `Car::body_heading`),
 so in a drift, where the body swings across the travel, the tail swings out and draws the drift's

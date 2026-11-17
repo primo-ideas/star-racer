@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use bevy::prelude::*;
 use star_racer_protocol::ranked::{LeaderboardEntry, RankedProfile};
+use star_racer_protocol::rewards::{self, Reward};
 use star_racer_protocol::{
     CarId, ClientMessage, JoinError, LobbyId, LobbyPhase, LobbyPlayer, LobbySettings, LobbyState,
     LobbySummary, OnlinePlayer, PlayerStatus, RatingChange,
@@ -27,6 +28,7 @@ impl Plugin for LobbyPlugin {
             .init_resource::<OnlinePlayers>()
             .init_resource::<CurrentLobby>()
             .init_resource::<Ladder>()
+            .init_resource::<PlayerProgress>()
             .init_resource::<Notice>()
             .add_systems(
                 PreUpdate,
@@ -104,6 +106,35 @@ impl Membership {
     }
 }
 
+/// The player's experience (see `protocol::rewards`), as last heard from the server, and what the
+/// last race paid and unlocked, for the results to show.
+#[derive(Resource, Default, Debug)]
+pub struct PlayerProgress {
+    /// `None` until they have connected once; kept across connections.
+    pub xp: Option<u32>,
+    /// What the last race paid, and what it unlocked, until the next one pays.
+    pub last_gain: Option<u32>,
+    pub unlocked: Vec<Reward>,
+    /// The end of the results already counted, so a lobby state sent again does not pay twice.
+    counted: Option<u32>,
+}
+
+impl PlayerProgress {
+    /// Counts what the race whose results end at `end_tick` paid, once: the server keeps the
+    /// same, and says so when the player is back in the menus.
+    pub fn paid(&mut self, end_tick: u32, gained: u32) {
+        if self.counted == Some(end_tick) {
+            return;
+        }
+        self.counted = Some(end_tick);
+        let before = self.xp.unwrap_or(0);
+        let after = before.saturating_add(gained);
+        self.unlocked = rewards::unlocked_between(before, after);
+        self.last_gain = Some(gained);
+        self.xp = Some(after);
+    }
+}
+
 /// Where the player stands in ranked, as last heard from the server.
 #[derive(Resource, Default)]
 pub struct Ladder {
@@ -175,6 +206,7 @@ fn receive_lobby_events(
     mut current: ResMut<CurrentLobby>,
     mut notice: ResMut<Notice>,
     mut ladder: ResMut<Ladder>,
+    mut progress: ResMut<PlayerProgress>,
     mut buffer: ResMut<SnapshotBuffer>,
     mut images: ResMut<Assets<Image>>,
     time: Res<Time<Real>>,
@@ -240,10 +272,16 @@ fn receive_lobby_events(
                     {
                         ladder.last_change = Some(*change);
                     }
+                    if let LobbyPhase::Results { xp, end_tick, .. } = &state.phase
+                        && let Some(gain) = xp.iter().find(|gain| gain.car == membership.car)
+                    {
+                        progress.paid(*end_tick, gain.gained);
+                    }
                 }
             }
             NetEvent::LobbyEnded => current.0 = None,
             NetEvent::Profile(profile) => ladder.profile = Some(*profile),
+            NetEvent::Progress(xp) => progress.xp = Some(*xp),
             NetEvent::Leaderboard(board) => ladder.leaderboard = board.clone(),
             NetEvent::Queue(status) => {
                 let since = ladder.queue.map_or(now, |queue| queue.since);

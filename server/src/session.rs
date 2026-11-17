@@ -10,7 +10,7 @@ use star_racer_protocol::auth::{self, PublicKey};
 use star_racer_protocol::ranked::QueueStatus;
 use star_racer_protocol::{
     self as protocol, CarLook, ClientMessage, Identity, JoinError, Login, PROTOCOL_VERSION, RejectReason,
-    ServerMessage, is_valid_nickname, is_valid_password, names,
+    ServerMessage, is_valid_nickname, is_valid_password, names, rewards,
 };
 use tokio::sync::oneshot;
 use tokio::time::timeout;
@@ -300,7 +300,9 @@ async fn connected(
                     continue;
                 }
                 Ok(Some(ClientMessage::SetLook(look))) => {
-                    player.look = look.checked();
+                    // Only what they have unlocked.
+                    let xp = directory.profile(player.id).await.map_or(0, |(_, xp)| xp);
+                    player.look = rewards::allowed(look, xp);
                     continue;
                 }
                 Ok(Some(ClientMessage::SignOut)) => {
@@ -319,7 +321,9 @@ async fn connected(
                     continue;
                 }
                 // Sent before the client knew it was out of its lobby.
-                Ok(Some(ClientMessage::Input { .. } | ClientMessage::LeaveLobby)) => continue,
+                Ok(Some(
+                    ClientMessage::Input { .. } | ClientMessage::LeaveLobby | ClientMessage::Honk,
+                )) => continue,
                 Ok(Some(_)) => return "unexpected message".into(),
                 Ok(None) => return "connection closed".into(),
                 Err(error) => return error.to_string(),
@@ -366,20 +370,22 @@ async fn connected(
     }
 }
 
-/// Sends the player where they stand on the ladder, unless the server is stopping. A guest is not
-/// on it.
+/// Sends the player their experience and where they stand on the ladder (a guest is not on it),
+/// unless the server is stopping, and takes off their car whatever it has not unlocked.
 async fn send_profile(
     socket: &mut WebSocket,
     directory: &Directory,
-    player: &Player,
+    player: &mut Player,
 ) -> Result<()> {
+    let Some((profile, xp)) = directory.profile(player.id).await else {
+        return Ok(());
+    };
+    player.look = rewards::allowed(player.look, xp);
+    send(socket, &ServerMessage::Progress { xp }).await?;
     if player.guest {
         return Ok(());
     }
-    match directory.profile(player.id).await {
-        Some(profile) => send(socket, &ServerMessage::Profile(profile)).await,
-        None => Ok(()),
-    }
+    send(socket, &ServerMessage::Profile(profile)).await
 }
 
 /// How a player's time in a lobby ended.
@@ -438,6 +444,7 @@ async fn play(socket: &mut WebSocket, membership: Membership, replaced: &mut Rep
                         break Ending::Lost(error.to_string());
                     }
                 }
+                Ok(Some(ClientMessage::Honk)) => lobby.honk(car).await,
                 Ok(Some(ClientMessage::LeaveLobby)) => break Ending::Left,
                 // Sent before the client knew it was in a match: it was in the queue a moment ago.
                 Ok(Some(ClientMessage::LeaveQueue | ClientMessage::QueueRanked)) => {}

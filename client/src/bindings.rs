@@ -34,10 +34,11 @@ pub enum Action {
     Turbo,
     Jump,
     Thrust,
+    Horn,
 }
 
 impl Action {
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::Accelerate,
         Self::SteerLeft,
         Self::SteerRight,
@@ -45,6 +46,7 @@ impl Action {
         Self::Turbo,
         Self::Jump,
         Self::Thrust,
+        Self::Horn,
     ];
 
     /// Whether a key or a button may do both `self` and `other`: the jump and the thrust share
@@ -65,6 +67,7 @@ impl Action {
             Self::Turbo => "Turbo",
             Self::Jump => "Jump",
             Self::Thrust => "Thrust",
+            Self::Horn => "Horn",
         }
     }
 }
@@ -141,6 +144,8 @@ pub struct Bindings {
     /// Held in the air, the thruster (since v0.1.52; until then the jump held). The jump's keys
     /// and button by default. Choices saved before it existed are given its default.
     pub thrust: Binding,
+    /// The horn (since v0.1.69): H, and X / square on a gamepad, both free until then.
+    pub horn: Binding,
 }
 
 impl Default for Bindings {
@@ -167,6 +172,10 @@ impl Default for Bindings {
             turbo: Binding::new(KeyCode::KeyE, KeyCode::ArrowDown, GamepadButton::North),
             jump: Binding::new(KeyCode::Space, KeyCode::KeyQ, GamepadButton::South),
             thrust: Binding::new(KeyCode::Space, KeyCode::KeyQ, GamepadButton::South),
+            horn: Binding {
+                alternate: Slot(None),
+                ..Binding::new(KeyCode::KeyH, KeyCode::KeyH, GamepadButton::West)
+            },
         }
     }
 }
@@ -181,6 +190,7 @@ impl Bindings {
             Action::Turbo => &self.turbo,
             Action::Jump => &self.jump,
             Action::Thrust => &self.thrust,
+            Action::Horn => &self.horn,
         }
     }
 
@@ -222,6 +232,7 @@ impl Bindings {
             Action::Turbo => &mut self.turbo,
             Action::Jump => &mut self.jump,
             Action::Thrust => &mut self.thrust,
+            Action::Horn => &mut self.horn,
         }
     }
 

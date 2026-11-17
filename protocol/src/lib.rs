@@ -17,9 +17,10 @@ use star_racer_sim::track::TrackDescription;
 pub mod auth;
 pub mod names;
 pub mod ranked;
+pub mod rewards;
 
 /// Bump on every incompatible protocol change.
-pub const PROTOCOL_VERSION: u32 = 37;
+pub const PROTOCOL_VERSION: u32 = 38;
 
 /// Local server port. In production, the reverse proxy terminates TLS and forwards here.
 pub const DEFAULT_PORT: u16 = 8080;
@@ -100,7 +101,13 @@ pub enum ClientMessage {
     /// Answered at once with a [`ServerMessage::Pong`] carrying the same number, whether browsing
     /// or in a lobby. The client times the round trip; the server does not.
     Ping(u32),
+    /// The player sounds their horn. Only in a lobby with a car; everyone there hears it, through
+    /// [`CarSnapshot::honks`]. The server lets one through every [`HONK_EVERY_TICKS`].
+    Honk,
 }
+
+/// The least time between two honks of one car, in ticks: a third of a second.
+pub const HONK_EVERY_TICKS: u32 = 20;
 
 #[derive(Debug, Clone, PartialEq, Encode, Decode)]
 pub enum ServerMessage {
@@ -145,6 +152,11 @@ pub enum ServerMessage {
     Snapshot(Snapshot),
     /// The answer to [`ClientMessage::Ping`], sent as soon as the ping arrives.
     Pong(u32),
+    /// The player's experience, which makes their level and what they have unlocked (see
+    /// [`rewards`]). Sent with every [`ServerMessage::Profile`].
+    Progress {
+        xp: u32,
+    },
     Rejected(RejectReason),
 }
 
@@ -184,17 +196,19 @@ pub enum Login {
     },
 }
 
-/// How many skimmers there are to choose from, paints, neon colors, trails and trail colors. The
-/// client names and draws them (`car_model.rs`, `trail.rs`); the wire only carries which.
-pub const CAR_MODELS: u8 = 4;
-pub const CAR_PAINTS: u8 = 10;
-pub const CAR_NEONS: u8 = 8;
-pub const CAR_TRAILS: u8 = 3;
-pub const CAR_TRAIL_COLORS: u8 = 8;
+/// How many cars there are to choose from, paints, neon colors, trails, trail colors and horns. The
+/// client names, draws and plays them (`car_model.rs`, `trail.rs`, `sound/horn.rs`); the wire only
+/// carries which. Half the cars, trails and horns are won by playing (see [`rewards`]).
+pub const CAR_MODELS: u8 = 6;
+pub const CAR_PAINTS: u8 = 16;
+pub const CAR_NEONS: u8 = 12;
+pub const CAR_TRAILS: u8 = 6;
+pub const CAR_TRAIL_COLORS: u8 = 12;
+pub const CAR_HORNS: u8 = 6;
 
-/// How a player's car looks: which skimmer, its paint and neon, and the trail it leaves on the road
-/// and that trail's color, each an index into the client's lists. Purely what is drawn: every
-/// skimmer drives the same.
+/// How a player's car looks and sounds: which car, its paint and neon, the trail it leaves on the
+/// road and that trail's color, and its horn, each an index into the client's lists. Purely what is
+/// drawn and heard: every car drives the same.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Encode, Decode)]
 pub struct CarLook {
     pub model: u8,
@@ -202,25 +216,31 @@ pub struct CarLook {
     pub neon: u8,
     pub trail: u8,
     pub trail_color: u8,
+    pub horn: u8,
 }
 
 impl CarLook {
     /// A look picked at random, for a player who has never been to the garage: a grid of players
-    /// who never chose is not a grid of the same car.
+    /// who never chose is not a grid of the same car. Only what is free.
     pub fn random() -> Self {
-        let mut bytes = [0; 5];
+        let mut bytes = [0; 6];
         getrandom::fill(&mut bytes).expect("OS random generator unavailable");
-        Self {
+        let mut look = Self {
             model: bytes[0],
             paint: bytes[1],
             neon: bytes[2],
             trail: bytes[3],
             trail_color: bytes[4],
+            horn: bytes[5],
         }
-        .checked()
+        .checked();
+        look.model %= rewards::FREE;
+        look.trail %= rewards::FREE;
+        look.horn %= rewards::FREE;
+        look
     }
 
-    /// The same look with anything out of range brought back in, so a peer cannot ask for a skimmer
+    /// The same look with anything out of range brought back in, so a peer cannot ask for a car
     /// that does not exist.
     pub fn checked(self) -> Self {
         Self {
@@ -229,6 +249,7 @@ impl CarLook {
             neon: self.neon % CAR_NEONS,
             trail: self.trail % CAR_TRAILS,
             trail_color: self.trail_color % CAR_TRAIL_COLORS,
+            horn: self.horn % CAR_HORNS,
         }
     }
 }
@@ -369,7 +390,16 @@ pub enum LobbyPhase {
         end_tick: u32,
         /// In a ranked match, what the race did to each rating. Empty otherwise.
         ratings: Vec<RatingChange>,
+        /// The experience the race paid each player who raced it (see [`rewards::race_xp`]).
+        xp: Vec<XpGain>,
     },
+}
+
+/// The experience a race paid a player.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Encode, Decode)]
+pub struct XpGain {
+    pub car: CarId,
+    pub gained: u32,
 }
 
 /// What a ranked race did to a player's rating.
@@ -457,6 +487,9 @@ pub struct CarSnapshot {
     /// car, it tells them which of their inputs the server has acted on, which is how the client
     /// times its input lag. 0 before any input.
     pub input_seq: u32,
+    /// How many times the driver has sounded the horn in this lobby, wrapping round: a change
+    /// from one snapshot to the next is a honk to play.
+    pub honks: u8,
 }
 
 impl CarSnapshot {
@@ -482,6 +515,7 @@ impl CarSnapshot {
                 0.0
             },
             input_seq,
+            honks: 0,
         }
     }
 }
@@ -520,6 +554,7 @@ mod tests {
             neon: CAR_NEONS,
             trail: 1,
             trail_color: 2,
+            horn: 1,
         }
         .checked();
         assert!(look.model < CAR_MODELS && look.paint < CAR_PAINTS && look.neon < CAR_NEONS);
@@ -550,6 +585,7 @@ mod tests {
                     neon: 3,
                     trail: 1,
                     trail_color: 2,
+                    horn: 1,
                 },
             };
             assert_eq!(decode::<ClientMessage>(&encode(&hello)).unwrap(), hello);
@@ -652,6 +688,10 @@ mod tests {
                     before: 1000,
                     after: 1024,
                 }],
+                xp: vec![XpGain {
+                    car: CarId(2),
+                    gained: 270,
+                }],
             },
             ranked: true,
             players: vec![LobbyPlayer {
@@ -664,6 +704,7 @@ mod tests {
                     neon: 5,
                     trail: 1,
                     trail_color: 2,
+                    horn: 1,
                 },
                 status: PlayerStatus::Finished { time_ms: 61_250 },
                 start: Some(StartGrade::A),
@@ -711,6 +752,7 @@ mod tests {
                 boost_gauge: 0.3,
                 turbo_gauge: 0.6,
                 input_seq: 41,
+                honks: 7,
             }],
         });
         let input = ClientMessage::Input {
@@ -746,6 +788,7 @@ mod tests {
             profile,
             leaderboard,
             queue,
+            ServerMessage::Progress { xp: 1234 },
         ] {
             assert_eq!(decode::<ServerMessage>(&encode(&message)).unwrap(), message);
         }
@@ -755,6 +798,7 @@ mod tests {
             ClientMessage::QuickPlay,
             ClientMessage::QueueRanked,
             ClientMessage::LeaveQueue,
+            ClientMessage::Honk,
         ] {
             assert_eq!(decode::<ClientMessage>(&encode(&message)).unwrap(), message);
         }

@@ -16,17 +16,19 @@
 //!   press is seen; a spectator hears the car they watch.
 //! - **The menus**: a tick as the focus moves and a click on whatever is pressed.
 
-mod bang;
+pub mod bang;
 mod drone;
+pub mod horn;
 mod tone;
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use bevy::audio::{AddAudioSource, GlobalVolume, Volume};
 use bevy::input_focus::InputFocus;
 use bevy::prelude::*;
 use bevy::ui_widgets::Activate;
-use star_racer_protocol::{LobbyPhase, PlayerStatus};
+use star_racer_protocol::{CarId, LobbyPhase, PlayerStatus};
 use star_racer_sim::TICK_RATE;
 use star_racer_sim::car::Car;
 use star_racer_sim::race;
@@ -78,12 +80,15 @@ impl Plugin for SoundPlugin {
                     .run_if(in_state(Screen::Lobby)),
             )
             // After the cars were moved and what pushed them worked out, as the rumble is.
-            .add_systems(PostUpdate, play_car.run_if(in_state(Screen::Lobby)));
+            .add_systems(
+                PostUpdate,
+                (play_car, play_horns).run_if(in_state(Screen::Lobby)),
+            );
     }
 }
 
 #[derive(Resource)]
-struct Sounds {
+pub struct Sounds {
     /// An amber start light coming on.
     light: Handle<Tone>,
     /// The green one: the race is on.
@@ -106,6 +111,8 @@ struct Sounds {
     hop: Handle<Recorded>,
     ignite: Handle<Tone>,
     land: Handle<Tone>,
+    /// Every horn, in the order the wire numbers them (see `sound/horn.rs`).
+    pub horns: Vec<Handle<Recorded>>,
     /// In the menus: the focus moved, something was pressed.
     focus: Handle<Tone>,
     press: Handle<Tone>,
@@ -114,7 +121,7 @@ struct Sounds {
 }
 
 impl Sounds {
-    fn play<S: Asset + bevy::audio::Decodable>(
+    pub fn play<S: Asset + bevy::audio::Decodable>(
         &self,
         commands: &mut Commands,
         sound: &Handle<S>,
@@ -239,6 +246,9 @@ fn add_sounds(
     });
     // The hop: "PAF", the bang of a single-cylinder four-stroke firing (`sound/bang.rs`).
     let hop = recorded.add(bang::four_stroke_bang());
+    let horns = (0..star_racer_protocol::CAR_HORNS)
+        .map(|index| recorded.add(horn::horn(index)))
+        .collect();
     // The thruster lighting: a deep thump and a roar of air opening upward, a second push.
     let ignite = tones.add(Tone {
         partials: vec![(62.0, 1.0), (124.0, 0.5)],
@@ -304,6 +314,7 @@ fn add_sounds(
         hop,
         ignite,
         land,
+        horns,
         focus,
         press,
         drone: controls,
@@ -535,6 +546,53 @@ fn play_car(
     heard.car = car;
 }
 
+/// How far away a horn is still heard, in meters from the car the camera follows, fading out on
+/// the way.
+const HORN_REACH: f32 = 180.0;
+
+/// Every car's horn as it sounds: the player's own on the frame they press it, every other car's
+/// when its snapshots say it honked, quieter the further it is from the car the camera follows.
+/// Each plays in the horn its player chose.
+fn play_horns(
+    mut commands: Commands,
+    view: Res<RaceView>,
+    current: Res<CurrentLobby>,
+    own: Res<crate::controls::OwnHonk>,
+    sounds: Res<Sounds>,
+    mut counted: Local<HashMap<CarId, u8>>,
+) {
+    let Some(membership) = &current.0 else {
+        counted.clear();
+        return;
+    };
+    let horn_of = |car: CarId| {
+        membership
+            .player(car)
+            .map_or(0, |player| player.look.checked().horn)
+    };
+    let play = |commands: &mut Commands, car: CarId, volume: f32| {
+        if let Some(sound) = sounds.horns.get(usize::from(horn_of(car))) {
+            sounds.play(commands, sound, volume);
+        }
+    };
+    if own.0 {
+        play(&mut commands, membership.car, 0.8);
+    }
+    let listener = view.followed.map(|(_, car)| car.position);
+    for snapshot in &view.cars {
+        let before = counted.insert(snapshot.id, snapshot.honks);
+        // Heard already, when pressed; and a car seen for the first time has not just honked.
+        if snapshot.id == membership.car || before.is_none_or(|before| before == snapshot.honks) {
+            continue;
+        }
+        let distance = listener.map_or(0.0, |at| at.distance(snapshot.car.position));
+        let volume = 0.8 * (1.0 - distance / HORN_REACH).clamp(0.0, 1.0);
+        if volume > 0.02 {
+            play(&mut commands, snapshot.id, volume);
+        }
+    }
+}
+
 /// How loud a hit that took `impact` m/s from the car is, from a tap to a full blow, if it is more
 /// than a graze.
 fn hit_volume(impact: f32) -> Option<f32> {
@@ -575,7 +633,7 @@ mod tests {
         app.update();
         let tones = app.world().resource::<Assets<Tone>>();
         assert_eq!(tones.len(), 14);
-        assert_eq!(app.world().resource::<Assets<Recorded>>().len(), 1);
+        assert_eq!(app.world().resource::<Assets<Recorded>>().len(), 7);
         for (_, tone) in tones.iter() {
             let samples: Vec<f32> = tone.decoder().collect();
             let peak = samples

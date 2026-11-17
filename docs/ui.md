@@ -40,18 +40,21 @@ ranked match. Each screen's entities despawn when it is left.
   must not close the game; and the web has no such button, since a page cannot close the tab it is
   in.
 - **Garage** (`garage.rs`, since v0.1.40, the user's request "fais trois nouvelles
-  voitures/pods ainsi qu'un choix et customization de voiture"): the player's skimmer (the cars'
-  name since v0.1.68, the user having asked for one in place of "pod") standing over the
-  menu's neon grid, turning slowly under a light of its own, beside a card of five rows stepped
-  with left and right, the arrows or a click: **SKIMMER** (Arrow, Lance, Twin, Manta, each with a
-  line about it), **PAINT** (ten, with a swatch), **NEON** (eight, with a swatch), and since
-  v0.1.68 **TRAIL** (RIBBON, SKID, PIXELS) and its **COLOR** (the eight neons), the trail drawn
-  under the turning car as if it had just driven a bend (see
-  [Architecture](architecture.md#the-trail)). DONE, Escape or B
-  keeps the choice, tells the server if connected (`SetLook`), and goes back to the first screen.
-  It needs no connection. Every skimmer drives the same, and the card says so: the look is drawn,
-  never simulated (see [Architecture](architecture.md#displaying-the-race)). `--garage` opens it,
-  to capture it.
+  voitures/pods ainsi qu'un choix et customization de voiture"): the player's car standing over the
+  menu's neon grid, turning slowly under a light of its own with its trail swept out behind it as
+  if it had just driven a bend, beside a card of six rows: **CAR** (COMET, BOLT, PULSE, PHANTOM,
+  TITAN, NOVA, each with a line about it), **PAINT**, **NEON**, **TRAIL** (RIBBON, SKID, PIXELS,
+  ZIGZAG, HELIX, ARROWS), its **COLOR**, and **HORN** (TWO-TONE, AIR HORN, BEEP BEEP, LASER,
+  FANFARE, SAUCER, each played as it is stepped to). The car, the trail and the horn are stepped
+  with left and right, the arrows or a click; since v0.1.69 the three colors are palettes, at the
+  user's word "les choix de couleur se feront par une palette": every color of the row at once,
+  sixteen paints and twelve neons, the chosen one ringed, picked with a click or stepped along
+  with left and right. What is not won yet (see [Rewards](rewards.md)) is shown and previewed, its
+  name dim and `LOCKED · LEVEL 8` under it; the player's level stands small in the card's corner.
+  DONE, Escape or B keeps what is chosen of what is unlocked, tells the server if connected
+  (`SetLook`), and goes back to the first screen. It needs no connection. Every car drives the
+  same: the look is drawn, never simulated (see
+  [Architecture](architecture.md#displaying-the-race)). `--garage` opens it, to capture it.
 - **Lobbies** (`lobbies.rs`): every lobby, live, with its track, players and a status badge; the
   focused lobby's details beside the list (track thumbnail, what joining means right now, who is
   in). A header shows the player's nickname, HOME back to the first screen, and the button to
@@ -134,8 +137,8 @@ SETTINGS, on the first screen, opens a dialog over it (`ui/settings.rs`; `--sett
 once). What it holds is stored with the other choices, written out as it changes, and in force
 from the next lobby entered.
 
-**With keys and a gamepad**, it is the table of bindings (`client/src/bindings.rs`): seven actions
--- accelerate, steer left, steer right, drift, turbo, jump, thrust -- each with two keys and one
+**With keys and a gamepad**, it is the table of bindings (`client/src/bindings.rs`): eight actions
+-- accelerate, steer left, steer right, drift, turbo, jump, thrust, horn -- each with two keys and one
 gamepad button.
 
 | Action | Key | Or | Gamepad |
@@ -147,6 +150,7 @@ gamepad button.
 | Turbo | E | down arrow | Y (top face button) |
 | Jump | Space | Q | A (bottom face button) |
 | Thrust | Space | Q | A (bottom face button) |
+| Horn (since v0.1.69) | H | -- | X (left face button) |
 
 Those are the defaults, the gamepad's drift and turbo being the user's choice of 2026-11-11. The
 jump (v0.1.48) took Space and A, Rocket Racing's, and the drift's second key became the right
@@ -306,8 +310,8 @@ the left**, toward the middle of the screen, where a right thumb folds more easi
 stretches toward the edge: arriving on it is the press, which fires a charge if the meter holds
 one, and the phone kicks for 70 ms as it fires. **The jump is the third, straight down** (since
 v0.1.48), a thumb pulled back toward the edge: arriving on it hops, staying on it holds the
-thruster (the branch is both the jump and the thrust). The fourth is drawn as the empty slot it is, and lights up grey rather than neon when a
-thumb finds it, so it is plain that it is there and waiting for whatever comes next.
+thruster (the branch is both the jump and the thrust). Since v0.1.69 the fourth, toward the edge, is the horn:
+arriving on it honks.
 
 **Neither thumb has to find its control again.** Anywhere in the bottom of the left half steers,
 up to 70 units above the buttons, as hard as the place it rests at; anywhere in the bottom of the

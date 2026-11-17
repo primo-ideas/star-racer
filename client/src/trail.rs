@@ -25,10 +25,14 @@ use crate::track::CurrentTrack;
 use crate::world;
 
 /// The trails, in the order the garage offers them and the wire numbers them, with their names.
-pub const TRAILS: [(&str, Effect); 3] = [
+/// The first three are free, the others won by playing (see `protocol::rewards`).
+pub const TRAILS: [(&str, Effect); 6] = [
     ("RIBBON", Effect::Ribbon),
     ("SKID", Effect::Skid),
     ("PIXELS", Effect::Pixels),
+    ("ZIGZAG", Effect::Zigzag),
+    ("HELIX", Effect::Helix),
+    ("ARROWS", Effect::Arrows),
 ];
 
 /// The trail's colors: the neons'.
@@ -43,6 +47,12 @@ pub enum Effect {
     Skid,
     /// Squares of light dropped behind the tail, one side then the other, shrinking as they fade.
     Pixels,
+    /// A bolt of lightning: one bright line snapping from one side of the tail to the other.
+    Zigzag,
+    /// Two lines winding round each other, the one in front brighter than the one behind.
+    Helix,
+    /// Arrows of light pointing the way the car went, every meter and a half.
+    Arrows,
 }
 
 impl Effect {
@@ -117,6 +127,9 @@ pub struct TrailPoint {
     pub joined: bool,
     /// Counts the points laid, so a pixel stays where it was dropped.
     pub number: u32,
+    /// Where it lies on the road: meters along the lap and from the centerline, so what is drawn
+    /// beside it can be laid on the road too, banked and climbing as the road is.
+    pub road: Vec2,
 }
 
 /// A car's trail as it is laid.
@@ -167,8 +180,9 @@ fn lay_trails(
         let position = car.position - Vec2::new(heading.cos(), heading.sin()) * TAIL;
         let projection = track.0.project(position);
         let on_road = car.altitude <= 0.05 && track.0.over_road(&projection);
-        let height = track.0.surface(position).height + LIFT;
-        (world::position(position, height), on_road)
+        let height = track.0.surface_at(&projection).height + LIFT;
+        let road = Vec2::new(projection.distance, projection.lateral);
+        (world::position(position, height), road, on_road)
     };
 
     let mut seen = Vec::new();
@@ -180,12 +194,22 @@ fn lay_trails(
         };
         seen.push(trail.car);
         trail.look = look_of(trail.car);
-        let (at, on_road) = tail(&snapshot.car);
-        lay(&mut trail, at, on_road, now);
+        let (at, road, on_road) = tail(&snapshot.car);
+        lay(&mut trail, at, road, on_road, now);
         let effect = Effect::of(trail.look.trail);
         let color = TRAIL_COLORS[usize::from(trail.look.trail_color)].1;
         let points: Vec<TrailPoint> = trail.points.iter().copied().collect();
-        let geometry = trail_geometry(effect, color, &points, now);
+        // Every corner laid on the road beside the point it belongs to: across the road its height
+        // follows the banking, along it the climb.
+        let on_road = |point: &TrailPoint, corner: Vec3| {
+            let road = track.0.point_at(point.road.x);
+            let offset = Vec2::new(corner.x - point.at.x, -(corner.z - point.at.z));
+            let along = point.road.x + offset.dot(road.direction);
+            let lateral = point.road.y + offset.dot(road.direction.perp());
+            let height = track.0.height_beside(&track.0.point_at(along), lateral);
+            Vec3::new(corner.x, height + LIFT, corner.z)
+        };
+        let geometry = never_empty(trail_geometry(effect, color, &points, now, &on_road));
         if let Some(mut mesh) = meshes.get_mut(&trail.mesh) {
             *mesh = geometry.into_mesh();
         }
@@ -194,7 +218,7 @@ fn lay_trails(
         if seen.contains(&snapshot.id) {
             continue;
         }
-        let mesh = meshes.add(Geometry::default().into_mesh());
+        let mesh = meshes.add(never_empty(Geometry::default()).into_mesh());
         commands.spawn((
             Trail {
                 car: snapshot.id,
@@ -213,9 +237,19 @@ fn lay_trails(
     }
 }
 
+/// The trail with at least one triangle, a black one of no size, which an added material shows as
+/// nothing. A mesh emptied and filled again from frame to frame had the renderer copy into
+/// storage it had already freed, and log it every frame.
+fn never_empty(mut geometry: Geometry) -> Geometry {
+    if geometry.triangles() == 0 {
+        geometry.quad_shaded([Vec3::ZERO; 4], Vec3::Y, [Color::BLACK; 4]);
+    }
+    geometry
+}
+
 /// Lays a point where the tail is if it has moved far enough, breaks the trail where there is no
 /// road or the car was put elsewhere, and drops what has faded out.
-fn lay(trail: &mut Trail, at: Vec3, on_road: bool, now: f32) {
+fn lay(trail: &mut Trail, at: Vec3, road: Vec2, on_road: bool, now: f32) {
     while trail
         .points
         .front()
@@ -239,19 +273,31 @@ fn lay(trail: &mut Trail, at: Vec3, on_road: bool, now: f32) {
         time: now,
         joined,
         number: trail.laid,
+        road,
     });
 }
 
-/// The trail's triangles, from its points, oldest first, faded by their age at `now`.
+/// Corners left where they are: the garage's floor is flat.
+pub fn flat(_: &TrailPoint, corner: Vec3) -> Vec3 {
+    corner
+}
+
+/// The trail's triangles, from its points, oldest first, faded by their age at `now`, each corner
+/// laid on the `ground` beside the point it belongs to.
 pub fn trail_geometry(
     effect: Effect,
     color: LinearRgba,
     points: &[TrailPoint],
     now: f32,
+    ground: &dyn Fn(&TrailPoint, Vec3) -> Vec3,
 ) -> Geometry {
     let mut geometry = Geometry::default();
     let fade = |point: &TrailPoint| (1.0 - (now - point.time) / LIFE).clamp(0.0, 1.0);
     let shade = |share: f32| Color::LinearRgba(color * share);
+    // A quad, its corners laid on the ground beside `point`, the one they belong to.
+    let put = |geometry: &mut Geometry, point: &TrailPoint, corners: [Vec3; 4], colors: [Color; 4]| {
+        geometry.quad_shaded(corners.map(|corner| ground(point, corner)), Vec3::Y, colors);
+    };
     // Across the trail at each point, level, to the right of the way it runs.
     let across = |index: usize| {
         let before = points[index.saturating_sub(1)].at;
@@ -296,14 +342,13 @@ pub fn trail_geometry(
                         let middle = offset * narrow(fade);
                         point.at + across * (middle + side * width / 2.0 * narrow(fade))
                     };
-                    geometry.quad_shaded(
+                    put(&mut geometry, a,
                         [
                             edge(a, across_a, fade_a, -1.0),
                             edge(a, across_a, fade_a, 1.0),
                             edge(b, across_b, fade_b, 1.0),
                             edge(b, across_b, fade_b, -1.0),
                         ],
-                        Vec3::Y,
                         [
                             shade(bright * fade_a * fade_a),
                             shade(bright * fade_a * fade_a),
@@ -328,21 +373,105 @@ pub fn trail_geometry(
                 let middle = point.at + across * side * PIXEL_OFFSET;
                 let corner = |x: f32, z: f32| middle + along * (x * half) + across * (z * half);
                 let color = shade(PIXEL_BRIGHT * fade);
-                geometry.quad_shaded(
+                put(&mut geometry, point,
                     [
                         corner(-1.0, -1.0),
                         corner(-1.0, 1.0),
                         corner(1.0, 1.0),
                         corner(1.0, -1.0),
                     ],
-                    Vec3::Y,
                     [color; 4],
                 );
+            }
+        }
+        Effect::Zigzag | Effect::Helix => {
+            // Lines whose place across the tail changes from point to point: `(offset, light)` of
+            // each line at a point, from its number.
+            let lines: &[fn(u32) -> (f32, f32)] = match effect {
+                Effect::Zigzag => &[|number| {
+                    let side = if number % 2 == 0 { 1.0 } else { -1.0 };
+                    (side * ZIGZAG_SWING, 1.0)
+                }],
+                _ => &[
+                    |number| {
+                        let angle = number as f32 * HELIX_TURN;
+                        (HELIX_RADIUS * angle.sin(), 0.55 + 0.45 * angle.cos())
+                    },
+                    |number| {
+                        let angle = number as f32 * HELIX_TURN + std::f32::consts::PI;
+                        (HELIX_RADIUS * angle.sin(), 0.55 + 0.45 * angle.cos())
+                    },
+                ],
+            };
+            let width = if effect == Effect::Zigzag {
+                ZIGZAG_WIDTH
+            } else {
+                HELIX_WIDTH
+            };
+            for index in 1..points.len() {
+                let (a, b) = (&points[index - 1], &points[index]);
+                if !b.joined {
+                    continue;
+                }
+                let (across_a, across_b) = (across(index - 1), across(index));
+                for line in lines {
+                    let ((offset_a, light_a), (offset_b, light_b)) = (line(a.number), line(b.number));
+                    let (fade_a, fade_b) = (fade(a), fade(b));
+                    let (shade_a, shade_b) = (
+                        shade(LINE_BRIGHT * light_a * fade_a * fade_a),
+                        shade(LINE_BRIGHT * light_b * fade_b * fade_b),
+                    );
+                    put(&mut geometry, a,
+                        [
+                            a.at + across_a * (offset_a - width / 2.0),
+                            a.at + across_a * (offset_a + width / 2.0),
+                            b.at + across_b * (offset_b + width / 2.0),
+                            b.at + across_b * (offset_b - width / 2.0),
+                        ],
+                        [shade_a, shade_a, shade_b, shade_b],
+                    );
+                }
+            }
+        }
+        Effect::Arrows => {
+            for (index, point) in points.iter().enumerate() {
+                if point.number % ARROW_EVERY != 0 {
+                    continue;
+                }
+                let fade = fade(point);
+                let across = across(index);
+                let along = across.cross(Vec3::NEG_Y);
+                let color = shade(LINE_BRIGHT * fade);
+                // Two strokes from the tail's sides, behind, to the tip in the middle, ahead.
+                for side in [-1.0f32, 1.0] {
+                    let back = point.at + across * (side * ARROW_HALF) - along * ARROW_DEPTH;
+                    let stroke = along * ARROW_STROKE;
+                    put(&mut geometry, point,
+                        [back, point.at, point.at + stroke, back + stroke],
+                        [color; 4],
+                    );
+                }
             }
         }
     }
     geometry
 }
+
+/// The zigzag: how far either side of the middle it snaps, and how wide its line is; the helix:
+/// how far its lines wind out, how far round they turn from one point to the next, in radians,
+/// and how wide each is; the arrows: one every this many points, how far either side their arms
+/// reach, how far behind the tip, and how thick; and how bright the lines are against their color,
+/// in meters where they are lengths.
+const ZIGZAG_SWING: f32 = 0.55;
+const ZIGZAG_WIDTH: f32 = 0.2;
+const HELIX_RADIUS: f32 = 0.75;
+const HELIX_TURN: f32 = 0.55;
+const HELIX_WIDTH: f32 = 0.16;
+const ARROW_EVERY: u32 = 3;
+const ARROW_HALF: f32 = 0.75;
+const ARROW_DEPTH: f32 = 0.7;
+const ARROW_STROKE: f32 = 0.22;
+const LINE_BRIGHT: f32 = 0.85;
 
 /// A trail as the garage shows it under its turning car: a curve swept out behind it, laid as if
 /// the car had just driven it, in the car's own coordinates.
@@ -359,6 +488,7 @@ pub fn preview_points() -> Vec<TrailPoint> {
                 time: share * LIFE * 0.85,
                 joined: index > 0,
                 number: index as u32,
+                road: Vec2::ZERO,
             }
         })
         .collect()
@@ -378,6 +508,7 @@ mod tests {
                 time: index as f32 * 0.02,
                 joined: index > 0,
                 number: index as u32,
+                road: Vec2::ZERO,
             })
             .collect()
     }
@@ -388,7 +519,7 @@ mod tests {
         let points = line(30, SAMPLE);
         let now = 30.0 * 0.02;
         for (_, effect) in TRAILS {
-            let geometry = trail_geometry(effect, NEONS[2].1, &points, now);
+            let geometry = trail_geometry(effect, NEONS[2].1, &points, now, &flat);
             assert!(geometry.triangles() > 0, "{effect:?}");
             assert!(
                 geometry.positions().all(|at| at.y.abs() < 1e-4),
@@ -406,6 +537,22 @@ mod tests {
         }
     }
 
+    /// Every corner of every effect is laid on the ground it is given, beside its own point: on a
+    /// road banked one way, the trail's edges stand as high as the road does under them.
+    #[test]
+    fn every_corner_lies_on_the_ground() {
+        let points = line(30, SAMPLE);
+        // A road banked across: a meter up for every ten meters to the right (`+z`).
+        let banked = |_: &TrailPoint, corner: Vec3| Vec3::new(corner.x, corner.z * 0.1, corner.z);
+        for (_, effect) in TRAILS {
+            let geometry = trail_geometry(effect, NEONS[3].1, &points, 0.6, &banked);
+            for corner in geometry.positions() {
+                assert!((corner.y - corner.z * 0.1).abs() < 1e-5, "{effect:?} {corner}");
+            }
+            assert!(geometry.positions().any(|corner| corner.y.abs() > 0.01), "{effect:?}");
+        }
+    }
+
     /// Nothing is drawn across a break, and a faded trail draws nothing visible.
     #[test]
     fn a_trail_is_not_drawn_across_a_break() {
@@ -413,9 +560,9 @@ mod tests {
         for point in &mut points {
             point.joined = false;
         }
-        let geometry = trail_geometry(Effect::Ribbon, NEONS[0].1, &points, 0.2);
+        let geometry = trail_geometry(Effect::Ribbon, NEONS[0].1, &points, 0.2, &flat);
         assert_eq!(geometry.triangles(), 0);
-        let faded = trail_geometry(Effect::Skid, NEONS[0].1, &line(10, SAMPLE), 10.0);
+        let faded = trail_geometry(Effect::Skid, NEONS[0].1, &line(10, SAMPLE), 10.0, &flat);
         assert!(faded.colors().all(|[r, g, b, _]| r.max(g).max(b) < 1e-4));
     }
 

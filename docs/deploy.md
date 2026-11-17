@@ -34,7 +34,9 @@ then restarts the service and checks it is still up two seconds later, so a bina
 startup fails the deployment instead of passing for one.
 
 The ranked ladder, `/home/star-racer/ratings.ron`, and the player accounts,
-`/home/star-racer/accounts.ron` (since v0.1.38), sit beside them and are not part of a build: a
+`/home/star-racer/accounts.ron` (since v0.1.38), and every player's experience,
+`/home/star-racer/progress.ron` (since v0.1.69, see [Rewards](rewards.md)), sit beside them and are
+not part of a build: a
 deployment restarts the server, which reads them back (see [Quick play and ranked](ranked.md) and
 [Protocol](protocol.md#accounts-and-guests)). The accounts file holds password hashes, never
 passwords, and is the one file on the machine that cannot be lost without locking players out:

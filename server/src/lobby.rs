@@ -20,7 +20,7 @@ use axum::body::Bytes;
 use star_racer_protocol::{
     self as protocol, CarId, CarSnapshot, JoinError, LobbyId, LobbyPhase, LobbyPlayer,
     LobbySettings, LobbyState, LobbyStatus, LobbySummary, MAX_INPUT_LEAD, PlayerStatus, RaceResult,
-    RatingChange, ServerMessage, Snapshot,
+    RatingChange, ServerMessage, Snapshot, XpGain, HONK_EVERY_TICKS, rewards,
 };
 use star_racer_sim::autopilot;
 use star_racer_sim::car::{Car, CarInput, CarTuning};
@@ -140,6 +140,8 @@ pub enum LobbyEvent {
     Closed(LobbyId),
     /// A ranked race is over: what it did to everyone's rating.
     MatchFinished(Vec<Placed>),
+    /// A race is over: the experience it paid each of its players.
+    RaceFinished(Vec<(PlayerId, u32)>),
 }
 
 /// How a lobby came to be, which decides how long it waits and how it ends.
@@ -193,6 +195,9 @@ enum Command {
     Leave {
         car: CarId,
     },
+    Honk {
+        car: CarId,
+    },
 }
 
 /// A membership, before the handle is attached to it.
@@ -229,6 +234,10 @@ impl LobbyHandle {
                 seq,
             })
             .await;
+    }
+
+    pub async fn honk(&self, car: CarId) {
+        let _ = self.commands.send(Command::Honk { car }).await;
     }
 
     pub async fn leave(&self, car: CarId) {
@@ -341,6 +350,8 @@ pub struct Lobby {
     ranked: Option<RankedMatch>,
     /// What the race just did to the ratings, for the task to tell the directory.
     outcome: Option<Vec<Placed>>,
+    /// What the race just paid in experience, for the task to tell the directory.
+    gains: Option<Vec<(PlayerId, u32)>>,
 }
 
 /// The players of a ranked match, whether or not they are still in it.
@@ -362,6 +373,7 @@ enum Phase {
         results: Vec<RaceResult>,
         end_tick: u32,
         ratings: Vec<RatingChange>,
+        xp: Vec<XpGain>,
     },
 }
 
@@ -390,6 +402,9 @@ struct Member {
     /// Meaningful while racing.
     progress: Progress,
     snapshots: mpsc::Sender<Bytes>,
+    /// How many times they honked, which the snapshots carry, and the tick of the last honk.
+    honks: u8,
+    honked_at: Option<u32>,
 }
 
 /// An input waiting for the tick it takes effect on.
@@ -424,6 +439,7 @@ impl Lobby {
             solo_tick: solo_after,
             ranked: None,
             outcome: None,
+            gains: None,
         }
     }
 
@@ -476,6 +492,9 @@ impl Lobby {
             if let Some(placed) = self.outcome.take() {
                 let _ = events.send(LobbyEvent::MatchFinished(placed));
             }
+            if let Some(gains) = self.gains.take() {
+                let _ = events.send(LobbyEvent::RaceFinished(gains));
+            }
             // Everyone has left, or a ranked match has shown its results.
             if self.members.is_empty() {
                 break;
@@ -517,6 +536,7 @@ impl Lobby {
                 seq,
             } => self.input(car, input, tick, seq),
             Command::Leave { car } => self.leave(car),
+            Command::Honk { car } => self.honk(car),
         }
     }
 
@@ -560,6 +580,8 @@ impl Lobby {
             start: StartTiming::default(),
             progress: Progress::of(&self.track.track, &car),
             snapshots,
+            honks: 0,
+            honked_at: None,
         });
         self.changed = true;
         Ok((car_id, receiver))
@@ -591,6 +613,24 @@ impl Lobby {
             input,
             seq,
         });
+    }
+
+    /// Counts a honk, at most one every [`HONK_EVERY_TICKS`], for every snapshot to carry. A
+    /// spectator has no car to honk with.
+    fn honk(&mut self, car: CarId) {
+        let tick = self.tick;
+        let Some(member) = self.members.iter_mut().find(|member| member.car_id == car) else {
+            return;
+        };
+        if member.status == PlayerStatus::Spectating
+            || member
+                .honked_at
+                .is_some_and(|at| tick < at + HONK_EVERY_TICKS)
+        {
+            return;
+        }
+        member.honked_at = Some(tick);
+        member.honks = member.honks.wrapping_add(1);
     }
 
     fn leave(&mut self, car: CarId) {
@@ -772,6 +812,7 @@ impl Lobby {
         }));
         info!(lobby = %self.id, ?results, "race finished");
         let ratings = self.settle_ratings(&results);
+        let xp = self.settle_xp(&results);
 
         // Nobody drives outside a race: whoever did not cross the line has their car driven for
         // them through the results; those who did keep watching their car drive itself, through
@@ -796,7 +837,37 @@ impl Lobby {
             results,
             end_tick: self.tick + ticks(self.timings.results),
             ratings,
+            xp,
         });
+    }
+
+    /// Works out the experience the race paid every player still in the lobby who raced it, for them
+    /// to see and the directory to keep: by where they finished among the `results`, or for taking
+    /// part if they did not finish.
+    fn settle_xp(&mut self, results: &[RaceResult]) -> Vec<XpGain> {
+        let racers = results.len();
+        let mut shown = Vec::new();
+        let mut kept = Vec::new();
+        let mut finished = 0;
+        for result in results {
+            let place = result.time_ms.map(|_| {
+                finished += 1;
+                finished - 1
+            });
+            let Some(member) = self.members.iter().find(|member| member.car_id == result.car) else {
+                continue;
+            };
+            let gained = rewards::race_xp(place, racers);
+            shown.push(XpGain {
+                car: result.car,
+                gained,
+            });
+            kept.push((member.player.id, gained));
+        }
+        if !kept.is_empty() {
+            self.gains = Some(kept);
+        }
+        shown
     }
 
     /// In a ranked match, works out what the race did to every rating, for the players to see and
@@ -992,13 +1063,15 @@ impl Lobby {
                 .filter(|member| member.status != PlayerStatus::Spectating)
                 .map(|member| {
                     let progress = if racing { member.progress.total() } else { 0.0 };
-                    CarSnapshot::new(
+                    let mut snapshot = CarSnapshot::new(
                         member.car_id,
                         member.car,
                         progress,
                         member.input_seq,
                         &self.tuning,
-                    )
+                    );
+                    snapshot.honks = member.honks;
+                    snapshot
                 })
                 .collect(),
         });
@@ -1043,10 +1116,12 @@ impl Lobby {
                     results,
                     end_tick,
                     ratings,
+                    xp,
                 } => LobbyPhase::Results {
                     results: results.clone(),
                     end_tick: *end_tick,
                     ratings: ratings.clone(),
+                    xp: xp.clone(),
                 },
             },
             ranked: self.ranked.is_some(),
@@ -1356,6 +1431,41 @@ mod tests {
             matches!(lobby.phase, Phase::Racing(_))
         });
         assert_eq!(member(&lobby, car).status, PlayerStatus::Racing);
+    }
+
+    /// A finished race pays its racer the experience of a finish, shown in the results and handed
+    /// to the directory to keep.
+    #[test]
+    fn a_race_pays_experience() {
+        let mut lobby = new_lobby(settings(1, 1, 8), quick_timings());
+        let car = join(&mut lobby, 1);
+        tick_until(&mut lobby, 120.0, |lobby| {
+            autopilot_inputs(lobby);
+            matches!(lobby.phase, Phase::Results { .. })
+        });
+        let LobbyPhase::Results { xp, .. } = lobby.state().phase else {
+            unreachable!();
+        };
+        let paid = rewards::race_xp(Some(0), 1);
+        assert_eq!(xp, vec![XpGain { car, gained: paid }]);
+        let gains = lobby.gains.take().expect("the directory is told");
+        assert_eq!(gains, vec![(member(&lobby, car).player.id, paid)]);
+    }
+
+    /// A honk is counted and carried by the snapshots, but not twice within a third of a second,
+    /// and not from a spectator.
+    #[test]
+    fn honks_are_counted_and_spaced_out() {
+        let mut lobby = new_lobby(settings(1, 2, 8), quick_timings());
+        let car = join(&mut lobby, 1);
+        lobby.honk(car);
+        lobby.honk(car);
+        assert_eq!(member(&lobby, car).honks, 1);
+        for _ in 0..HONK_EVERY_TICKS {
+            lobby.tick();
+        }
+        lobby.honk(car);
+        assert_eq!(member(&lobby, car).honks, 2);
     }
 
     /// Once the results are over and there are not enough players for another race, whoever

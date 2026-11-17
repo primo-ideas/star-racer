@@ -552,6 +552,14 @@ pays out, holding the button brakes nothing, and no new drift starts there. On t
 carries on, and ends as any drift does, paying its boost when the stick lets it come back into
 line. So a drift is charged, flown across a gap, and let go of on landing.
 
+### Higher, and steered in the air
+
+In v0.1.69, the user's word "Fais qu'on puisse voler plus haut, et davantage se diriger dans les
+airs": `thrust_ceiling` 20 m instead of 10, so the thruster settles about 10 m up instead of 5;
+`air_steering` 0.9 instead of 0.5, the nose turning nearly as much as the stick asks on the road;
+and `air_grip` 5 instead of 2.5, the travel following the nose twice as fast. The autopilot still
+laps the Odyssey in every style without a fall, and still flies the three shortcuts.
+
 ### Natural flight
 
 In v0.1.53, the user's word "Il faut que les mouvements/trajectoires soient beaucoup plus

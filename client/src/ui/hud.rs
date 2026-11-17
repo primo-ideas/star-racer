@@ -29,6 +29,11 @@ use crate::bindings::{Action, Input};
 use crate::camera::MainCamera;
 use crate::preferences::StoredPreferences;
 use crate::latency::{Latency, LatencyOverlay};
+use crate::car_model::CarModel;
+use crate::lobby::PlayerProgress;
+use crate::sound::horn::HORNS;
+use crate::trail::TRAILS;
+use star_racer_protocol::rewards::{self, Reward};
 use crate::lobby::{CurrentLobby, Membership, Tracks, leave_lobby};
 use crate::net::Network;
 use crate::race::{RaceUpdate, RaceView};
@@ -126,6 +131,8 @@ enum Slot {
     /// What a ranked race did to the player's rating.
     ResultRating(usize),
     ResultsFooter,
+    /// What the race paid in experience, and what it unlocked.
+    ResultsReward,
     FrameRate,
     /// The latency figures, one per line, beside their names.
     Latency,
@@ -799,6 +806,17 @@ fn spawn_hud(
                                 ..default()
                             },
                         ));
+                        card.spawn((
+                            Slot::ResultsReward,
+                            Text::default(),
+                            fonts.caption(13.0),
+                            theme::CAPTION_SPACING,
+                            TextColor(theme::AMBER),
+                            Node {
+                                margin: UiRect::top(px(6)),
+                                ..default()
+                            },
+                        ));
                     });
             });
         });
@@ -827,13 +845,14 @@ fn update_hud(
     mut rings: Query<(&mut UiTransform, &mut BorderColor), (With<StartRing>, Without<StartLight>)>,
     mut blocks: Query<(&Block, &mut Node)>,
     mut fills: Query<(&Fill, &mut Node, &mut BackgroundColor), Without<Block>>,
-    (time, mut flash): (Res<Time>, Local<GateFlash>),
+    (time, mut flash, progress): (Res<Time>, Local<GateFlash>, Res<PlayerProgress>),
 ) {
     let Some(membership) = &current.0 else {
         return;
     };
     let track_length = track.as_ref().map_or(1.0, |track| track.0.length());
     let mut model = build_model(membership, &view, &tracks, track_length, *touchscreen);
+    reward_line(&mut model, membership, &progress);
     // A checkpoint passed, or the car brought back to one after a fall, is announced where the
     // start grade is, once that is gone.
     if let (Some(car), Some(track)) = (view.own_car, track.as_ref()) {
@@ -1190,6 +1209,8 @@ fn build_model(
             results,
             end_tick,
             ratings,
+            ..
+
         } => {
             model.shown.insert(Block::Results);
             for (row, result) in results.iter().take(ROWS).enumerate() {
@@ -1234,6 +1255,29 @@ fn build_model(
         }
     }
     model
+}
+
+/// Under the results, small: what the race paid, the level it leaves the player at, and anything
+/// it unlocked, named, for the garage.
+fn reward_line(model: &mut HudModel, membership: &Membership, progress: &PlayerProgress) {
+    let Some(LobbyPhase::Results { xp, .. }) = membership.state.as_ref().map(|state| &state.phase)
+    else {
+        return;
+    };
+    let Some(gain) = xp.iter().find(|gain| gain.car == membership.car) else {
+        return;
+    };
+    let level = rewards::level(progress.xp.unwrap_or(0));
+    let mut line = format!("+{} XP  ·  LEVEL {level}", gain.gained);
+    for reward in &progress.unlocked {
+        let (kind, name) = match *reward {
+            Reward::Car(index) => ("CAR", CarModel::of(index).name()),
+            Reward::Trail(index) => ("TRAIL", TRAILS[usize::from(index)].0),
+            Reward::Horn(index) => ("HORN", HORNS[usize::from(index)]),
+        };
+        line.push_str(&format!("  ·  NEW {kind}: {name}"));
+    }
+    model.text(Slot::ResultsReward, line, theme::AMBER);
 }
 
 /// The players of the lobby, outside races.

@@ -26,15 +26,17 @@ a quarter turn of 140 m, straights with a gap to jump.
 - **The weave**: a long, fast slalom, dropping 12 m.
 - **The keyhole**: the first loop, 440 m of it, the lowest part of the lap.
 - **The long left**: a wide banked quarter turn, climbing.
-- **The leap**: 110 m missing on the way up, under an arch: the thruster's.
-- **The climb**: a slalom through a tunnel up to the top of the lap, 60 m up.
+- **The leap**: 110 m missing on the way up: the thruster's.
+- **The climb**: a slalom up to the top of the lap, 60 m up.
 - **The balcony**: the second loop, out over the void, winding down 26 m.
 - **The sky bowl**, a banked left, and **the gate**, the top straight pinched to 18 m.
-- **The dive**: down 30 m through a fast kink under a tunnel.
+- **The dive**: down 30 m through a fast kink.
 - **The rift**: 170 m missing at the bottom of the dive, a monolith standing over the void on
   either side.
 - **The scree**, a slalom, and **the step**, 16 m missing on the way out of it.
-- **The west corner**, climbing, and **the esses**, through a tunnel.
+- **The west corner**, climbing, and **the esses**.
+
+Since v0.1.69 nothing stands over the Odyssey's road: its six gantries and three tunnels were taken out at the user's word "Enlève tout ce qu'il peut y avoir comme \"toit\" au dessus de la route", the car flying twice as high on its thruster. The two kinds of prop remain in the format.
 - **The long way round**: the third loop, the widest.
 - **The last corner**, onto the run home.
 

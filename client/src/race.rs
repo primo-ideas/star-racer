@@ -635,6 +635,7 @@ impl SnapshotBuffer {
                             boost_gauge: lerp(previous.boost_gauge, target.boost_gauge),
                             turbo_gauge: lerp(previous.turbo_gauge, target.turbo_gauge),
                             input_seq: target.input_seq,
+                            honks: target.honks,
                         }
                     }
                     // Just joined: nothing to interpolate from.
@@ -695,6 +696,7 @@ mod tests {
                 boost_gauge: 0.0,
                 turbo_gauge: 0.0,
                 input_seq: 0,
+                honks: 0,
             }],
         }
     }

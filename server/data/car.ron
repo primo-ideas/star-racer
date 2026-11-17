@@ -136,15 +136,15 @@
     // air. The thrust held in the air, once the hop has had thrust_delay (s, the top of the hop),
     // lights the thruster with a kick, the climb brought up to thrust_kick (m/s), then pushes at
     // thrust_acceleration (m/s²), less and less toward thrust_ceiling (m), thrust_damping (per
-    // second) holding back its climb so it settles where push and pull meet (up to 5.4 m, then
-    // 5 m), for as long as the tank holds: thrust_seconds, filled again on the road at
+    // second) holding back its climb so it settles where push and pull meet (about 10 m since
+    // v0.1.69, 5 m before), for as long as the tank holds: thrust_seconds, filled again on the road at
     // thrust_recharge seconds per second. A full tank flies 4.2 s, about 240 m at top speed. In the air the car feels no slope
     // and touches no pad, and a drift is held until it lands.
     jump_speed: 10.0,
     air_gravity: 50.0,
     thrust_delay: 0.2,
     thrust_acceleration: 100.0,
-    thrust_ceiling: 10.0,
+    thrust_ceiling: 20.0,
     thrust_seconds: 3.5,
     thrust_recharge: 1.4,
     thrust_kick: 7.0,
@@ -153,9 +153,10 @@
     // In the air (since v0.1.53): nothing grips, so the travel keeps its direction and follows
     // the nose at air_grip per second (the road's grip is 30), and the nose turns at air_steering
     // of what the stick asks on the road. Lower air_grip flies straighter whatever the stick does;
-    // higher steers in the air.
-    air_grip: 2.5,
-    air_steering: 0.5,
+    // higher steers in the air. Since v0.1.69, 5 and 0.9 (2.5 and 0.5 before): the user asked to
+    // steer more in the air.
+    air_grip: 5.0,
+    air_steering: 0.9,
 
     // Out of a drift (since v0.1.53): this share of the body's angle across the travel becomes a
     // real slide the grip takes up, so the travel comes round toward the nose as the drift ends,

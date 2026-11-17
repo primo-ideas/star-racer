@@ -3,6 +3,7 @@ mod content;
 mod directory;
 mod lobby;
 mod matchmaking;
+mod progress;
 mod ranking;
 mod session;
 #[cfg(test)]
@@ -26,6 +27,7 @@ use crate::accounts::Accounts;
 use crate::content::CarTuningFile;
 use crate::directory::Directory;
 use crate::lobby::Timings;
+use crate::progress::Progress;
 use crate::ranking::Ratings;
 
 #[derive(Parser)]
@@ -44,6 +46,9 @@ struct Args {
     /// Where the player accounts are kept, beside the ladder and for the same reason.
     #[arg(long, default_value = "accounts.ron")]
     accounts: PathBuf,
+    /// Where every player's experience is kept, beside the ladder and for the same reason.
+    #[arg(long, default_value = "progress.ron")]
+    progress: PathBuf,
 }
 
 /// Plain text and loopback only: in production, the reverse proxy terminates TLS and forwards here.
@@ -69,12 +74,14 @@ async fn main() -> Result<()> {
     let (tuning_file, tuning) =
         CarTuningFile::load(args.data_dir.join(content::CAR_TUNING_FILE), &tracks)?;
     let ratings = Ratings::load(args.ratings)?;
+    let progress = Progress::load(args.progress)?;
     let accounts = Accounts::load(args.accounts)?;
     let directory = Directory::spawn(
         tracks,
         tuning_file.watch(tuning),
         Timings::default(),
         ratings,
+        progress,
         accounts,
     );
 

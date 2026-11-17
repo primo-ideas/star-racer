@@ -26,6 +26,7 @@ use crate::lobby::{
     self, Entrant, InfoStatus, LobbyEvent, LobbyHandle, LobbyInfo, LobbyKind, Membership, Timings,
 };
 use crate::matchmaking::{self, Candidate};
+use crate::progress::Progress;
 use crate::ranking::Ratings;
 use crate::session::{Player, PlayerId};
 
@@ -80,7 +81,7 @@ enum Command {
     },
     Profile {
         player: PlayerId,
-        reply: oneshot::Sender<RankedProfile>,
+        reply: oneshot::Sender<(RankedProfile, u32)>,
     },
 }
 
@@ -107,6 +108,7 @@ impl Directory {
         tuning: watch::Receiver<CarTuning>,
         timings: Timings,
         ratings: Ratings,
+        progress: Progress,
         accounts: Accounts,
     ) -> Self {
         let (commands, command_receiver) = mpsc::channel(COMMAND_BUFFER);
@@ -132,6 +134,7 @@ impl Directory {
             list,
             queue: Vec::new(),
             ratings,
+            progress,
             leaderboard: leaderboard_sender,
             queue_size: queue_size_sender,
         };
@@ -258,7 +261,8 @@ impl Directory {
     }
 
     /// Where the player stands on the ladder, or `None` if the server is stopping.
-    pub async fn profile(&self, player: PlayerId) -> Option<RankedProfile> {
+    /// Where the player stands on the ladder, and their experience.
+    pub async fn profile(&self, player: PlayerId) -> Option<(RankedProfile, u32)> {
         let (reply, answer) = oneshot::channel();
         self.commands
             .send(Command::Profile { player, reply })
@@ -299,6 +303,7 @@ struct Registry {
     /// Longest waiting first.
     queue: Vec<Queued>,
     ratings: Ratings,
+    progress: Progress,
     leaderboard: watch::Sender<Arc<Vec<LeaderboardEntry>>>,
     queue_size: watch::Sender<u16>,
 }
@@ -359,7 +364,7 @@ impl Registry {
                 self.publish_queue_size();
             }
             Command::Profile { player, reply } => {
-                let _ = reply.send(self.ratings.profile(player));
+                let _ = reply.send((self.ratings.profile(player), self.progress.xp(player)));
             }
         }
     }
@@ -542,6 +547,10 @@ impl Registry {
                 self.ratings.apply(&placed);
                 self.leaderboard
                     .send_replace(Arc::new(self.ratings.leaderboard()));
+                return;
+            }
+            LobbyEvent::RaceFinished(gains) => {
+                self.progress.add(&gains);
                 return;
             }
         }
