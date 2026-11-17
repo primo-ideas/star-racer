@@ -70,13 +70,39 @@ const NAMEPLATE_WIDTH: f32 = 220.0;
 
 /// The color a player's name is written in: the player's own stands out, and a guest's is
 /// dimmer than an account's, which is how a guest is told apart in a race.
-fn name_color(own: bool, guest: bool) -> Color {
+/// Who a player in the list is, for the color of their name.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Kind {
+    Account,
+    Guest,
+    /// A car the server drives (since v0.1.71), its name in a pale violet of its own.
+    Bot,
+}
+
+impl Kind {
+    fn of(player: &star_racer_protocol::LobbyPlayer) -> Self {
+        if player.bot {
+            Self::Bot
+        } else if player.guest {
+            Self::Guest
+        } else {
+            Self::Account
+        }
+    }
+}
+
+/// The pale violet of the bots' names.
+const BOT_NAME: Color = Color::srgb(0.62, 0.58, 0.95);
+
+fn name_color(own: bool, kind: Kind) -> Color {
     if own {
         theme::OWN
-    } else if guest {
-        theme::TEXT_DIM
     } else {
-        theme::TEXT
+        match kind {
+            Kind::Account => theme::TEXT,
+            Kind::Guest => theme::TEXT_DIM,
+            Kind::Bot => BOT_NAME,
+        }
     }
 }
 
@@ -645,6 +671,7 @@ fn spawn_hud(
                     hint_row(),
                     children![
                         hint(&fonts, "← →", "D-pad", "Other car"),
+                        hint(&fonts, "V", "Y", "Camera"),
                         hint(&fonts, "Esc", "Start", "Menu"),
                     ],
                 ));
@@ -847,11 +874,12 @@ fn update_hud(
     mut rings: Query<(&mut UiTransform, &mut BorderColor), (With<StartRing>, Without<StartLight>)>,
     mut blocks: Query<(&Block, &mut Node)>,
     mut fills: Query<(&Fill, &mut Node, &mut BackgroundColor), Without<Block>>,
-    (time, mut flash, progress, held): (
+    (time, mut flash, progress, held, spectator): (
         Res<Time>,
         Local<GateFlash>,
         Res<PlayerProgress>,
         Res<crate::controls::HeldActions>,
+        Res<crate::spectator::SpectatorCamera>,
     ),
 ) {
     let Some(membership) = &current.0 else {
@@ -860,6 +888,14 @@ fn update_hud(
     let track_length = track.as_ref().map_or(1.0, |track| track.0.length());
     let mut model = build_model(membership, &view, &tracks, track_length, *touchscreen);
     reward_line(&mut model, membership, &progress);
+    // Watching: which camera, under whom.
+    if membership.own_status() == Some(PlayerStatus::Spectating) {
+        model.text(
+            Slot::Subtitle,
+            format!("CAMERA {}  ·  V TO CHANGE", spectator.mode.name()),
+            theme::TEXT_DIM,
+        );
+    }
     // The standings, shown or hidden with their button.
     if !held.standings {
         model.shown.retain(|block| {
@@ -1244,7 +1280,7 @@ fn build_model(
                 model.shown.insert(Block::ResultRow(row));
                 let own = result.car == membership.car;
                 let position_color = if row == 0 { theme::AMBER } else { theme::TEXT };
-                let guest = membership.player(result.car).is_some_and(|player| player.guest);
+                let guest = membership.player(result.car).map_or(Kind::Account, Kind::of);
                 let name_color = name_color(own, guest);
                 model.text(
                     Slot::ResultPosition(row),
@@ -1329,7 +1365,7 @@ fn player_list(model: &mut HudModel, membership: &Membership) {
         model.text(
             Slot::StandingName(row),
             player.nickname.clone(),
-            name_color(own, player.guest),
+            name_color(own, Kind::of(player)),
         );
         if own {
             model.text(Slot::StandingInfo(row), "YOU", theme::TEXT_FAINT);
@@ -1380,8 +1416,8 @@ fn race_standings(
         let own = *car == membership.car;
         let (nickname, guest) = membership
             .player(*car)
-            .map_or((String::new(), false), |player| {
-                (player.nickname.clone(), player.guest)
+            .map_or((String::new(), Kind::Account), |player| {
+                (player.nickname.clone(), Kind::of(player))
             });
         model.text(
             Slot::StandingPosition(row),
@@ -1460,7 +1496,7 @@ fn update_nameplates(
         return;
     };
     let followed = view.followed.map(|(car, _)| car);
-    let mut wanted: HashMap<CarId, (Vec2, String, bool)> = HashMap::new();
+    let mut wanted: HashMap<CarId, (Vec2, String, Kind)> = HashMap::new();
     for snapshot in &view.cars {
         if Some(snapshot.id) == followed {
             continue;
@@ -1475,8 +1511,8 @@ fn update_nameplates(
         };
         let (nickname, guest) = membership
             .player(snapshot.id)
-            .map_or((String::new(), false), |player| {
-                (player.nickname.clone(), player.guest)
+            .map_or((String::new(), Kind::Account), |player| {
+                (player.nickname.clone(), Kind::of(player))
             });
         wanted.insert(snapshot.id, (on_screen / ui_scale.0, nickname, guest));
     }

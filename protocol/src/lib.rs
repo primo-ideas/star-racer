@@ -20,7 +20,7 @@ pub mod ranked;
 pub mod rewards;
 
 /// Bump on every incompatible protocol change.
-pub const PROTOCOL_VERSION: u32 = 39;
+pub const PROTOCOL_VERSION: u32 = 40;
 
 /// Local server port. In production, the reverse proxy terminates TLS and forwards here.
 pub const DEFAULT_PORT: u16 = 8080;
@@ -74,6 +74,9 @@ pub enum ClientMessage {
     CreateLobby(LobbySettings),
     /// Only while browsing lobbies.
     JoinLobby(LobbyId),
+    /// Enters a lobby only to watch it (since v0.1.71): every race spectated, never a car. Only
+    /// while browsing lobbies.
+    Watch(LobbyId),
     /// Puts the player in the lobby that will race soonest, or opens one. Only while browsing
     /// lobbies.
     QuickPlay,
@@ -308,8 +311,11 @@ pub struct LobbySettings {
     pub laps: u8,
     /// Players needed before the cars line up for a race.
     pub min_players: u8,
-    /// Players the lobby holds, spectators included.
+    /// Players the lobby holds, spectators and bots included.
     pub max_players: u8,
+    /// Cars driven by the server added to the lobby when it opens (since v0.1.71), counted among
+    /// its players. They leave with the last player.
+    pub bots: u8,
 }
 
 impl LobbySettings {
@@ -318,6 +324,7 @@ impl LobbySettings {
             && (1..=MAX_LAPS).contains(&self.laps)
             && (1..=self.max_players).contains(&self.min_players)
             && self.max_players <= MAX_LOBBY_PLAYERS
+            && self.bots < self.max_players
     }
 }
 
@@ -419,6 +426,9 @@ pub struct LobbyPlayer {
     pub nickname: String,
     /// Playing without an account.
     pub guest: bool,
+    /// A car the server drives (since v0.1.71): added by the lobby's settings, or to fill a quick
+    /// play race nobody else came to.
+    pub bot: bool,
     /// How their car looks.
     pub look: CarLook,
     pub status: PlayerStatus,
@@ -704,6 +714,7 @@ mod tests {
                 car: CarId(2),
                 nickname: "Zoë".into(),
                 guest: true,
+                bot: false,
                 look: CarLook {
                     model: 3,
                     paint: 1,
@@ -845,6 +856,7 @@ mod tests {
             laps: 3,
             min_players: 2,
             max_players: 8,
+            bots: 3,
         };
         assert!(settings.is_valid());
 

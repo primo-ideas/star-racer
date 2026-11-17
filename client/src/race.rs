@@ -312,8 +312,13 @@ fn choose_spectated(
     view: Res<RaceView>,
     keyboard: Res<ButtonInput<KeyCode>>,
     gamepads: Query<&Gamepad>,
+    camera: Res<crate::spectator::SpectatorCamera>,
 ) {
-    if view.own_car.is_some() || view.cars.is_empty() {
+    // Flying free, the keys move the camera instead.
+    if view.own_car.is_some()
+        || view.cars.is_empty()
+        || camera.mode == crate::spectator::CameraMode::Free
+    {
         return;
     }
     let pressed = |keys: [KeyCode; 2], button: GamepadButton| {

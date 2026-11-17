@@ -552,6 +552,17 @@ fn spawn_browser(
                                         ..default()
                                     })
                                     .observe(join_selected);
+                                content
+                                    .spawn(button(&fonts, ButtonKind::Secondary, "WATCH"))
+                                    .insert(Node {
+                                        height: px(40),
+                                        justify_content: JustifyContent::Center,
+                                        align_items: AlignItems::Center,
+                                        border: px(1.5).all(),
+                                        border_radius: BorderRadius::all(px(theme::RADIUS_SMALL)),
+                                        ..default()
+                                    })
+                                    .observe(watch_selected);
                             });
                     });
                 }
@@ -1211,7 +1222,7 @@ fn join_row(
     time: Res<Time<Real>>,
 ) {
     if let Ok(row) = rows.get(activate.entity) {
-        request_join(row.id, &list, &network, &mut joining, &mut notice, &time);
+        request_join(row.id, false, &list, &network, &mut joining, &mut notice, &time);
     }
 }
 
@@ -1225,12 +1236,28 @@ fn join_selected(
     time: Res<Time<Real>>,
 ) {
     if let Some(id) = selected.0 {
-        request_join(id, &list, &network, &mut joining, &mut notice, &time);
+        request_join(id, false, &list, &network, &mut joining, &mut notice, &time);
+    }
+}
+
+/// Enters the selected lobby only to watch it, with a spectator's cameras (since v0.1.71).
+fn watch_selected(
+    _: On<Activate>,
+    selected: Res<Selected>,
+    list: Res<LobbyList>,
+    network: Res<Network>,
+    mut joining: ResMut<Joining>,
+    mut notice: ResMut<Notice>,
+    time: Res<Time<Real>>,
+) {
+    if let Some(id) = selected.0 {
+        request_join(id, true, &list, &network, &mut joining, &mut notice, &time);
     }
 }
 
 fn request_join(
     id: LobbyId,
+    watch: bool,
     list: &LobbyList,
     network: &Network,
     joining: &mut Joining,
@@ -1247,7 +1274,11 @@ fn request_join(
         notice.show("This lobby is full.", time.elapsed_secs_f64());
         return;
     }
-    network.send(ClientMessage::JoinLobby(id));
+    network.send(if watch {
+        ClientMessage::Watch(id)
+    } else {
+        ClientMessage::JoinLobby(id)
+    });
     joining.0 = true;
 }
 

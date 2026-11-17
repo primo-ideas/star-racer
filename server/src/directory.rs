@@ -441,6 +441,7 @@ impl Registry {
             laps: LAPS,
             min_players: QUICK_PLAY_MIN_PLAYERS,
             max_players: QUICK_PLAY_MAX_PLAYERS,
+            bots: 0,
         };
         self.open(settings, LobbyKind::QuickPlay, player)
             .map(QuickPlayed::Opened)
@@ -489,6 +490,7 @@ impl Registry {
             laps: LAPS,
             min_players: size,
             max_players: size,
+            bots: 0,
         };
         let (matched, entrants): (Vec<_>, Vec<_>) = players
             .into_iter()

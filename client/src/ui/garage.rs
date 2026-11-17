@@ -119,6 +119,7 @@ struct LockLine(Part);
 struct Swatch {
     row: Entity,
     value: u8,
+    color: Color,
 }
 
 /// The line describing the car.
@@ -256,36 +257,56 @@ fn spawn_garage(
                 },
             ));
             if part.is_palette() {
-                // Every color at once, the chosen one ringed.
+                // The chosen color's name, then every color at once as tiles, the chosen one
+                // ringed in white and glowing in its own color (since v0.1.71; small dots before).
                 content
                     .spawn(Node {
                         flex_grow: 1.0,
-                        flex_wrap: FlexWrap::Wrap,
-                        justify_content: JustifyContent::Center,
-                        column_gap: px(pick(5.0, 4.0)),
-                        row_gap: px(4),
-                        padding: UiRect::vertical(px(pick(5.0, 3.0))),
+                        flex_direction: FlexDirection::Column,
+                        align_items: AlignItems::Center,
+                        row_gap: px(pick(5.0, 3.0)),
+                        padding: UiRect::vertical(px(pick(4.0, 2.0))),
                         ..default()
                     })
-                    .with_children(|palette| {
-                        for (value, color) in part.colors().into_iter().enumerate() {
-                            palette.spawn((
-                                Swatch {
-                                    row,
-                                    value: value as u8,
-                                },
-                                Button,
-                                Node {
-                                    width: px(pick(20.0, 17.0)),
-                                    height: px(pick(20.0, 17.0)),
-                                    border: px(2).all(),
-                                    border_radius: BorderRadius::MAX,
-                                    ..default()
-                                },
-                                BackgroundColor(color),
-                                BorderColor::all(Color::NONE),
-                            ));
-                        }
+                    .with_children(|column| {
+                        column.spawn((
+                            ChoiceName(part),
+                            Text::default(),
+                            fonts.caption(pick(13.0, 11.0)),
+                            theme::CAPTION_SPACING,
+                            TextColor(theme::TEXT),
+                        ));
+                        column
+                            .spawn(Node {
+                                flex_wrap: FlexWrap::Wrap,
+                                justify_content: JustifyContent::Center,
+                                column_gap: px(pick(6.0, 4.0)),
+                                row_gap: px(pick(6.0, 4.0)),
+                                max_width: px(pick(252.0, 196.0)),
+                                ..default()
+                            })
+                            .with_children(|palette| {
+                                for (value, color) in part.colors().into_iter().enumerate() {
+                                    palette.spawn((
+                                        Swatch {
+                                            row,
+                                            value: value as u8,
+                                            color,
+                                        },
+                                        Button,
+                                        Node {
+                                            width: px(pick(26.0, 20.0)),
+                                            height: px(pick(26.0, 20.0)),
+                                            border: px(2).all(),
+                                            border_radius: BorderRadius::all(px(6)),
+                                            ..default()
+                                        },
+                                        BackgroundColor(color),
+                                        BorderColor::all(Color::BLACK.with_alpha(0.35)),
+                                        BoxShadow(Vec::new()),
+                                    ));
+                                }
+                            });
                     });
                 return;
             }
@@ -489,7 +510,9 @@ fn show_choices(
             Part::Model => model.name(),
             Part::Trail => TRAILS[usize::from(look.trail)].0,
             Part::Horn => HORNS[usize::from(look.horn)],
-            _ => "",
+            Part::Paint => PAINTS[usize::from(look.paint)].0,
+            Part::Neon => NEONS[usize::from(look.neon)].0,
+            Part::TrailColor => TRAIL_COLORS[usize::from(look.trail_color)].0,
         };
         if text.0 != wanted {
             text.0 = wanted.to_owned();
@@ -522,16 +545,35 @@ fn show_choices(
 /// Rings the chosen color of every palette.
 fn show_swatches(
     rows: Query<&Stepper>,
-    mut swatches: Query<(&Swatch, &mut BorderColor, &mut Node)>,
+    mut swatches: Query<(&Swatch, &mut BorderColor, &mut BoxShadow, &mut UiTransform)>,
 ) {
-    for (swatch, mut border, mut node) in &mut swatches {
+    for (swatch, mut border, mut shadow, mut transform) in &mut swatches {
         let chosen = rows
             .get(swatch.row)
             .is_ok_and(|stepper| stepper.value == swatch.value);
-        *border = BorderColor::all(if chosen { theme::TEXT } else { Color::NONE });
-        let outline = if chosen { px(3) } else { px(2) };
-        if node.border.left != outline {
-            node.border = outline.all();
+        *border = BorderColor::all(if chosen {
+            theme::TEXT
+        } else {
+            Color::BLACK.with_alpha(0.35)
+        });
+        // The chosen tile glows in its own color, a little larger than the rest.
+        let wanted = if chosen {
+            vec![ShadowStyle {
+                color: swatch.color.with_alpha(0.8),
+                x_offset: px(0),
+                y_offset: px(0),
+                spread_radius: px(1),
+                blur_radius: px(10),
+            }]
+        } else {
+            Vec::new()
+        };
+        if shadow.0 != wanted {
+            shadow.0 = wanted;
+        }
+        let scale = Vec2::splat(if chosen { 1.18 } else { 1.0 });
+        if transform.scale != scale {
+            transform.scale = scale;
         }
     }
 }

@@ -228,6 +228,7 @@ fn settings(name: &str, min_players: u8, max_players: u8) -> LobbySettings {
         laps: 3,
         min_players,
         max_players,
+        bots: 0,
     }
 }
 
@@ -941,6 +942,25 @@ async fn quick_play_races_alone_rather_than_waiting_forever() {
         _ => None,
     })
     .await;
+}
+
+/// Leaving a quick play lobby and asking for quick play again at once gets a race again, however
+/// many times: the lobby just left may still be listed while it closes.
+#[tokio::test]
+async fn quick_play_again_right_after_leaving() {
+    let url = start_server_with(brisk_timings()).await;
+    let mut socket = welcome_as(&url, "Ada").await;
+    for round in 0..4 {
+        enter(&mut socket, ClientMessage::QuickPlay)
+            .await
+            .unwrap_or_else(|error| panic!("round {round}: {error:?}"));
+        wait_for(&mut socket, "the lobby", |message| match message {
+            ServerMessage::Lobby(_) => Some(()),
+            _ => None,
+        })
+        .await;
+        send(&mut socket, &ClientMessage::LeaveLobby).await;
+    }
 }
 
 /// Quick play leaves a lobby alone that it could only watch: a new one opens beside it.

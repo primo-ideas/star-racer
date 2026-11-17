@@ -32,7 +32,7 @@ impl Plugin for LobbyPlugin {
             .init_resource::<Notice>()
             .add_systems(
                 PreUpdate,
-                (receive_lobby_events, follow_script)
+                (receive_lobby_events, follow_script, end_round)
                     .chain()
                     .in_set(LobbyUpdate),
             );
@@ -208,6 +208,7 @@ fn receive_lobby_events(
     mut ladder: ResMut<Ladder>,
     mut progress: ResMut<PlayerProgress>,
     mut buffer: ResMut<SnapshotBuffer>,
+    mut prediction: ResMut<crate::prediction::Prediction>,
     mut images: ResMut<Assets<Image>>,
     time: Res<Time<Real>>,
 ) {
@@ -253,6 +254,10 @@ fn receive_lobby_events(
                 settings,
             } => {
                 *buffer = SnapshotBuffer::default();
+                // A new lobby counts its ticks from 0: the old one's timeline, which never goes
+                // back, would hold the player's car still in it (the bug of leaving and quick
+                // playing again, fixed in v0.1.71).
+                *prediction = crate::prediction::Prediction::default();
                 ladder.queue = None;
                 current.0 = Some(Membership {
                     lobby: *lobby,
@@ -307,6 +312,40 @@ fn receive_lobby_events(
 const SCRIPT_TRACK: &str = "odyssey";
 
 /// Enters the scripted lobby once connected and listed.
+/// With `--rounds`, leaves the lobby `round_seconds` after entering it, the way a player does
+/// from the menu, for the first screen to quick play again (see `ui/login.rs`).
+fn end_round(
+    mut script: ResMut<Script>,
+    mut current: ResMut<CurrentLobby>,
+    network: Res<Network>,
+    after: Res<crate::screen::AfterLobby>,
+    mut next_screen: ResMut<NextState<crate::screen::Screen>>,
+    time: Res<Time<Real>>,
+    mut entered: Local<Option<(LobbyId, f64)>>,
+) {
+    let Some(lobby) = current.0.as_ref().map(|membership| membership.lobby) else {
+        *entered = None;
+        return;
+    };
+    if script.rounds == 0 {
+        return;
+    }
+    let now = time.elapsed_secs_f64();
+    let since = match *entered {
+        Some((id, since)) if id == lobby => since,
+        _ => {
+            *entered = Some((lobby, now));
+            now
+        }
+    };
+    if now - since >= f64::from(script.round_seconds) {
+        script.rounds -= 1;
+        script.rounds_left += 1;
+        info!(lobby = %lobby, "leaving the lobby, as --rounds asks");
+        leave_lobby(&network, &mut current, &after, &mut next_screen);
+    }
+}
+
 fn follow_script(
     mut script: ResMut<Script>,
     connection: Res<Connection>,
@@ -315,6 +354,18 @@ fn follow_script(
     network: Res<Network>,
 ) {
     if !matches!(*connection, Connection::Online { .. }) || !list.loaded {
+        return;
+    }
+    // `--watch`: in to watch, once the lobby of that name is listed.
+    if let Some(name) = &script.watch {
+        if let Some(summary) = list
+            .lobbies
+            .iter()
+            .find(|summary| &summary.settings.name == name)
+        {
+            network.send(ClientMessage::Watch(summary.id));
+            script.watch = None;
+        }
         return;
     }
     let Some(lobby) = script.lobby.take() else {
@@ -349,6 +400,7 @@ fn follow_script(
                 laps: lobby.laps,
                 min_players: lobby.min_players,
                 max_players: 8,
+                bots: 0,
             })
         }
     };

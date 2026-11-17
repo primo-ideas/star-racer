@@ -97,6 +97,29 @@ or **racing**, where joining means watching first. The list shows which, with th
 the grid or the leader's lap; the lobby publishes its listing again at the start so the two never
 blur.
 
+## Bots
+
+Since v0.1.71 (the user's word: "Ajoute qu'on puisse ajouter des bots dans les settings de la partie. Si pas
+assez de joueurs en quickplay, un pool doit etre dispo pour remplir en dernier recours, il sera
+affiché un peu differement"), a lobby can hold cars the server drives (`Player::bot`, `LobbyPlayer::bot`):
+
+- **In the settings** (`LobbySettings::bots`, the BOTS row of the creation dialog): that many are
+  added when the lobby opens, counted among its players, fewer than its maximum.
+- **In quick play, as a last resort**: when a quick play lobby has waited its 5 seconds alone, bots
+  from the pool fill the race up to four cars (`QUICK_PLAY_FILL`) before it starts, and stay for the
+  races after it, which then follow one another without waiting.
+
+A bot is named `BOT` and a name from the pool, wears a free look drawn from its number, drives on the
+drifting autopilot with a personality of its own, earns no experience, and leaves with the last
+player. The client draws its name in a pale violet wherever players are listed (`ui/hud.rs`).
+
+## Watching
+
+Since v0.1.71 a lobby can be entered only to watch it (`ClientMessage::Watch`, the WATCH button of
+the lobby browser, `--watch <name>`): the watcher spectates every race, never gets a car, and does
+not count toward the players a race needs. A spectator chooses a camera (see
+[Interface](ui.md#watching)).
+
 ## Giving up
 
 Since v0.1.70 a player racing after the start can give the race up (`ClientMessage::Abandon`, its

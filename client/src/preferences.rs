@@ -145,6 +145,9 @@ pub struct LobbyPreferences {
     pub laps: u8,
     pub min_players: u8,
     pub max_players: u8,
+    /// Since v0.1.71.
+    #[serde(default)]
+    pub bots: u8,
 }
 
 impl Default for LobbyPreferences {
@@ -155,6 +158,7 @@ impl Default for LobbyPreferences {
             laps: DEFAULT_LAPS,
             min_players: DEFAULT_MIN_PLAYERS,
             max_players: DEFAULT_MAX_PLAYERS,
+            bots: 0,
         }
     }
 }
@@ -187,6 +191,7 @@ impl LobbyPreferences {
             laps: settings.laps,
             min_players: settings.min_players,
             max_players: settings.max_players,
+            bots: settings.bots,
         }
     }
 }
@@ -254,6 +259,7 @@ mod tests {
                 laps: 5,
                 min_players: 3,
                 max_players: 4,
+                bots: 0,
             },
             host: Some("localhost".into()),
             vibration: false,
@@ -273,6 +279,7 @@ mod tests {
                 laps: 200,
                 min_players: 12,
                 max_players: 3,
+                bots: 0,
             },
             host: Some("not an address".into()),
             ..default()
@@ -307,6 +314,7 @@ mod tests {
             laps: 3,
             min_players: 2,
             max_players: 8,
+            bots: 0,
         };
         let offered = "Turbo Otter's lobby";
         assert_eq!(LobbyPreferences::of(&settings(offered), offered).name, None);

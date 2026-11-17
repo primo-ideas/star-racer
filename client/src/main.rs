@@ -25,6 +25,7 @@ mod screen;
 mod settings;
 mod sky;
 mod sound;
+mod spectator;
 mod track;
 mod trail;
 mod ui;
@@ -125,6 +126,7 @@ fn main() {
     .add_plugins((
         reconnect::ReconnectPlugin,
         trail::TrailPlugin,
+        spectator::SpectatorPlugin,
         ui::safe_area::SafeAreaPlugin {
             fixed: settings.safe_area,
         },

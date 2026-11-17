@@ -49,7 +49,9 @@ ranked match. Each screen's entities despawn when it is left.
   with left and right, the arrows or a click; since v0.1.69 the three colors are palettes, at the
   user's word "les choix de couleur se feront par une palette": every color of the row at once,
   sixteen paints and twelve neons, the chosen one ringed, picked with a click or stepped along
-  with left and right. What is not won yet (see [Rewards](rewards.md)) is shown and previewed, its
+  with left and right; since v0.1.71 each palette shows the chosen color's name over tiles eight to a
+  row, the chosen tile ringed in white, glowing in its own color and a little larger. What is not won
+  yet (see [Rewards](rewards.md)) is shown and previewed, its
   name dim and `LOCKED · LEVEL 8` under it; the player's level stands small in the card's corner.
   DONE, Escape or B keeps what is chosen of what is unlocked, tells the server if connected
   (`SetLook`), and goes back to the first screen. It needs no connection. Every car drives the
@@ -208,6 +210,21 @@ swap plus size cover what was asked of it), opacity (the controls are already da
 tilt-to-steer mode (it fights the landscape lock and has no dead zone to speak of). A phone with
 a gamepad paired keeps the default gamepad bindings: the table is not shown there. Large and
 swapped together, the cross reaches up into the speed and its gauges on a 390-pixel screen.
+
+## Watching
+
+Since v0.1.71 (the user's word: "Ajoute qu'on puisse rejoindre une partie en spectateur, et avoir un
+controle camera sympa, en freefly, mais qu'on puisse changer de mode aussi, suivre des joueurs, jour
+tout depuis le dessus"), whoever spectates, having come in with WATCH or too late to race, picks a
+camera with V or triangle / Y (`client/src/spectator.rs`), named under the title:
+
+- **CHASE**: behind the car watched; left and right change car, in race order.
+- **ORBIT**: round the car watched, close and low, turning slowly.
+- **TOP**: 70 m over the car watched, a little behind it, easing after it: the race from above.
+- **FREE**: flown anywhere, W, A, S, D or the left stick to move, the arrows, the right stick or the
+  mouse with its right button held to look, Space and Shift or the triggers to climb and sink.
+
+`--camera <mode>` starts with one, `--camera-cycle <seconds>` changes camera and car on its own.
 
 ## Navigation
 

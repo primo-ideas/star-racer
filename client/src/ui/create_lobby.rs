@@ -71,6 +71,7 @@ enum Setting {
     Laps,
     MinPlayers,
     MaxPlayers,
+    Bots,
 }
 
 #[derive(Component)]
@@ -257,6 +258,17 @@ fn spawn_dialog(
                 value: chosen.max_players,
                 min: 1,
                 max: MAX_LOBBY_PLAYERS,
+                wrap: false,
+            },
+        ),
+        (
+            Setting::Bots,
+            "Bots",
+            "Cars the server drives, there from the start.",
+            Stepper {
+                value: chosen.bots,
+                min: 0,
+                max: MAX_LOBBY_PLAYERS - 1,
                 wrap: false,
             },
         ),
@@ -659,11 +671,12 @@ fn confirm(
             .find(|(setting, _)| **setting == wanted)
             .map(|(_, stepper)| stepper.value)
     };
-    let (Some(track), Some(laps), Some(min_players), Some(max_players)) = (
+    let (Some(track), Some(laps), Some(min_players), Some(max_players), Some(bots)) = (
         value(Setting::Track),
         value(Setting::Laps),
         value(Setting::MinPlayers),
         value(Setting::MaxPlayers),
+        value(Setting::Bots),
     ) else {
         return;
     };
@@ -676,6 +689,8 @@ fn confirm(
         laps,
         min_players,
         max_players,
+        // Room is left for the player who opens it.
+        bots: bots.min(max_players.saturating_sub(1)),
     };
     if !settings.is_valid() {
         return;

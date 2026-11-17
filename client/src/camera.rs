@@ -142,12 +142,17 @@ impl Plugin for CameraPlugin {
         .add_systems(
             Update,
             follow_car
+                .in_set(FollowCar)
                 .after(RaceUpdate)
                 .after(sway)
                 .run_if(in_state(Screen::Lobby)),
         );
     }
 }
+
+/// Where the chase camera is placed; a spectator's cameras come after it (see `spectator.rs`).
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct FollowCar;
 
 /// The camera the game is seen through: over the menus' backdrop, then behind the car.
 #[derive(Component)]

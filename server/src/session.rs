@@ -51,6 +51,10 @@ pub struct Player {
     pub device: PublicKey,
     /// How their car looks, as last chosen.
     pub look: CarLook,
+    /// A car the server drives, with no connection behind it (since v0.1.71).
+    pub bot: bool,
+    /// Came in only to watch (since v0.1.71): spectates every race, never gets a car.
+    pub watching: bool,
 }
 
 pub async fn run(mut socket: WebSocket, directory: Directory) -> Result<()> {
@@ -143,6 +147,8 @@ async fn handshake(socket: &mut WebSocket, directory: &Directory) -> Result<Opti
                 guest: true,
                 device: public_key,
                 look: look.checked(),
+                bot: false,
+                watching: false,
             }));
         }
         Login::Device => accounts
@@ -164,6 +170,8 @@ async fn handshake(socket: &mut WebSocket, directory: &Directory) -> Result<Opti
             guest: false,
             device: public_key,
             look: look.checked(),
+            bot: false,
+            watching: false,
         })),
         Err(reason) => reject(socket, reason).await.map(|()| None),
     }
@@ -278,6 +286,13 @@ async fn connected(
                 }
                 Ok(Some(ClientMessage::JoinLobby(lobby))) => {
                     directory.join(lobby, player.clone()).await
+                }
+                Ok(Some(ClientMessage::Watch(lobby))) => {
+                    let watcher = Player {
+                        watching: true,
+                        ..player.clone()
+                    };
+                    directory.join(lobby, watcher).await
                 }
                 Ok(Some(ClientMessage::QuickPlay)) => {
                     directory.quick_play(player.clone()).await

@@ -63,6 +63,18 @@ pub struct Script {
     /// With the autopilot, also press the jump every `JUMP_EVERY` seconds and hold it this long:
     /// a twentieth of a second hops, two seconds fly on the thruster.
     pub jump: Option<f32>,
+    /// Leave the lobby this many times, each `round_seconds` after entering it, and press QUICK
+    /// PLAY again on the first screen, as a player would: for long unattended runs and films.
+    pub rounds: u32,
+    pub round_seconds: f32,
+    /// Rounds left to play once back on the first screen.
+    pub rounds_left: u32,
+    /// Enter the lobby of this name only to watch it, as WATCH does (since v0.1.71).
+    pub watch: Option<String>,
+    /// As a spectator, change camera and car on their own every this many seconds.
+    pub camera_cycle: Option<f32>,
+    /// As a spectator, start with this camera: chase, orbit, top or free.
+    pub camera: Option<String>,
 }
 
 /// How often the autopilot jumps with `--jump`, in seconds.
@@ -283,6 +295,18 @@ pub fn read() -> Settings {
         #[arg(long, requires = "who", conflicts_with = "lobby")]
         create_dialog: bool,
 
+        /// With --guest or --account, enter the lobby of this name only to watch it, as WATCH does.
+        #[arg(long, requires = "who", conflicts_with_all = ["lobby", "create_dialog"])]
+        watch: Option<String>,
+
+        /// As a spectator, change camera and car on their own every this many seconds.
+        #[arg(long)]
+        camera_cycle: Option<f32>,
+
+        /// As a spectator, start with this camera: chase, orbit, top or free.
+        #[arg(long)]
+        camera: Option<String>,
+
         /// With --guest or --account, go straight into a race, as the QUICK PLAY button does.
         #[arg(long, requires = "who", conflicts_with_all = ["lobby", "create_dialog"])]
         quick_play: bool,
@@ -290,6 +314,14 @@ pub fn read() -> Settings {
         /// With --account, enter the ranked queue, as the QUEUE FOR RANKED button does.
         #[arg(long, requires = "account", conflicts_with_all = ["lobby", "create_dialog", "quick_play"])]
         ranked: bool,
+
+        /// Leave the lobby and quick play again this many times (with --quick-play).
+        #[arg(long, default_value_t = 0, requires = "quick_play")]
+        rounds: u32,
+
+        /// Seconds in the lobby before each of the --rounds leaves it.
+        #[arg(long, default_value_t = 30.0)]
+        round_seconds: f32,
 
         /// Open the settings over the first screen.
         #[arg(long, conflicts_with = "who")]
@@ -381,6 +413,12 @@ pub fn read() -> Settings {
             garage: args.garage,
             autopilot: autopilot_style(args.autopilot, args.autopilot_drift),
             jump: args.jump,
+            rounds: args.rounds,
+            round_seconds: args.round_seconds,
+            rounds_left: 0,
+            watch: args.watch,
+            camera_cycle: args.camera_cycle,
+            camera: args.camera,
         },
         touch: args.touch,
         latency: args.latency,
@@ -445,6 +483,12 @@ pub fn read() -> Settings {
             garage: has("garage"),
             autopilot: autopilot_style(has("autopilot"), has("autopilot_drift")),
             jump: get("jump").and_then(|value| value.parse().ok()),
+            rounds: 0,
+            round_seconds: 30.0,
+            rounds_left: 0,
+            watch: get("watch"),
+            camera_cycle: get("camera_cycle").and_then(|value| value.parse().ok()),
+            camera: get("camera"),
         },
         touch: has("touch") || touchscreen(),
         latency: has("latency"),

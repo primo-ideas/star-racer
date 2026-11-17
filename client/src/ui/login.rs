@@ -54,7 +54,8 @@ impl Plugin for LoginPlugin {
             .add_systems(Update, remember_account)
             .add_systems(
                 Update,
-                (carry_out_intent, reroll_shortcut, update_login).run_if(in_state(Screen::Login)),
+                (carry_out_intent, reroll_shortcut, update_login, play_another_round)
+                    .run_if(in_state(Screen::Login)),
             );
     }
 }
@@ -698,6 +699,36 @@ fn remember_account(
         }
     }
 }
+
+/// With `--rounds`, back on the first screen after a round: presses QUICK PLAY, the button
+/// itself, a moment after the screen is up, as a player would.
+fn play_another_round(
+    mut commands: Commands,
+    mut script: ResMut<Script>,
+    connection: Res<Connection>,
+    buttons: Query<Entity, With<QuickPlayButton>>,
+    time: Res<Time<Real>>,
+    mut since: Local<Option<f64>>,
+) {
+    if script.rounds_left == 0 || !matches!(*connection, Connection::Online { .. }) {
+        *since = None;
+        return;
+    }
+    let now = time.elapsed_secs_f64();
+    let first = *since.get_or_insert(now);
+    if now - first < ROUND_PAUSE {
+        return;
+    }
+    if let Ok(button) = buttons.single() {
+        script.rounds_left -= 1;
+        *since = None;
+        info!(left = script.rounds_left, "quick play again, as --rounds asks");
+        commands.trigger(Activate { entity: button });
+    }
+}
+
+/// How long the first screen shows between two `--rounds`, in seconds.
+const ROUND_PAUSE: f64 = 2.5;
 
 /// Does what the player asked for, as soon as they are connected: at once if they already were.
 /// A connection that failed leaves nothing to do; the screen says why.

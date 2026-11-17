@@ -125,7 +125,8 @@ Once welcomed, the player browses lobbies (see [Lobbies](lobbies.md)).
 Client                                        Server
   |<---------------- Lobbies(list) --------------|  right after Welcome, then on every change
   |<---------------- Players(list) --------------|  right after Welcome, then on every change
-  |-- CreateLobby(settings) or JoinLobby(id) --->|
+  |-- CreateLobby(settings), JoinLobby(id) ---->|
+  |   or Watch(id) (since v0.1.71, protocol 40)  |  in only to watch, never a car
   |<------ JoinedLobby { lobby, car, settings } -|  or JoinFailed(reason), and keep browsing
 ```
 

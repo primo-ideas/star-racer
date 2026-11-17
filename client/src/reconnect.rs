@@ -252,6 +252,7 @@ mod tests {
             laps: 3,
             min_players: 2,
             max_players: 8,
+            bots: 0,
         }
     }
 
