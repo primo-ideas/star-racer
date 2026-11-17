@@ -32,9 +32,9 @@ The one structural choice is that **velocity and heading are separate**. Every t
    at first and a little harder as the wheel comes round, whether the stick is flicked or a key
    pressed. The wheel, not the stick, sets a target yaw rate: `speed / turning radius`, scaled by
    it. The turning radius grows with speed, from `turn_radius_slow` to `turn_radius_fast`, so full
-   lock stays controllable at speed. The yaw rate follows that target at `steering_response`,
-   well above the wheel's rate, so it follows the wheel almost at once and only smooths what the
-   wheel does not: the change of radius when a drift starts or ends. The car always steers at
+   lock stays controllable at speed. The yaw rate goes straight for that target, held back only
+   by the car's weight (step 2); until v0.1.57 a `steering_response` smoothed it first, which
+   measured made no difference the weight did not already make. The car always steers at
    least as if it went `min_steering_speed`: there is no reverse, so this is what lets a car stopped
    against a wall turn away from it.
 2. **The car's weight** then holds the rotation back: it changes by no more than
@@ -93,7 +93,7 @@ turns the travel itself, on a curve of its own. **Where the body points** is the
 ends, but it never carries the car anywhere. A slide that moved the car would run it wide of every
 corner by as far as its travel lags its nose; this one does not.
 
-- **Starting.** Above `drift_min_speed`, a press of the drift button with the stick turned at
+- **Starting.** Above 12 m/s (`DRIFT_MIN_SPEED`), a press of the drift button with the stick turned at
   least a fifth of the way throws the car into a drift toward the stick, on the tick it is pressed.
   A press is a press: a button held down since before starts nothing. It is remembered for
   `drift_press_buffer`, 0.25 s since v0.1.35 (0.15 before): a thumb often lands on the button a
@@ -115,11 +115,9 @@ corner by as far as its travel lags its nose; this one does not.
   so it lands on its angle instead of hunting around it. With the shipped 36 degrees, 150 degrees
   per second per second and 45 per second (since v0.1.35; 42, 260 and 75 in v0.1.32 and v0.1.33,
   55, 450 and 110 before), a tap at full lock has the body 6 degrees across after a quarter of a
-  second, 17 after half a second, 28 after three quarters and all 36 at 1 s. Since v0.1.37 the
-  swing has a **knee**: past `drift_swing_knee` (15 degrees) the body swings further out at no
-  more than `drift_swing_knee_rate` (half) of its fastest swing, reaching that slower rate at its
-  acceleration rather than at once, and swings back into line unhindered: 6, 17, 23 and 29
-  degrees at 0.25, 0.5, 0.75 and 1 s (see [Faster still](#faster-still-and-a-knee)). When a drift
+  second, 17 after half a second, 28 after three quarters and all 36 at 1 s. From v0.1.37 to v0.1.56 the
+  swing had a **knee** (see [Faster still](#faster-still-and-a-knee)), gone since it stopped
+  changing anything (see [Fewer drift numbers](#fewer-drift-numbers)). When a drift
   starts, the body takes over whatever slide the car had and the heading becomes the travel, so
   nothing on screen jumps.
 - **Turning.** The stick sets a **signed curvature**: fully to one side turns on
@@ -127,13 +125,13 @@ corner by as far as its travel lags its nose; this one does not.
   of a drift under way: from the press, the curve tightens from the gripping car's to it as the
   body swings out, so a drift turns harder as it gets going rather than all at once, and a car
   breaking away by turning hard carries on on the curve it was gripping on. The curve follows the
-  wheel at `drift_steering_response`, almost at once, and the travel keeps all of its speed as it
+  wheel through the car's weight alone, as gripping does, and the travel keeps all of its speed as it
   turns.
 - **Speed.** A drift costs nothing: without the button, the car keeps its speed however long it
   drifts, as in the recording.
 - **The button.** Never needed after the press, and holding it does three things. It multiplies
   the drift radius by `drift_button_tighten`, pulling the turn tighter than the stick alone can,
-  more and more from the press until it has been held `drift_button_tighten_time`: the tap of a
+  more and more from the press until it has been held 0.4 s (`DRIFT_BUTTON_TIGHTEN_TIME`): the tap of a
   thumb that starts a drift, a tenth of a second or so, barely tightens it, where it used to pull
   the turn 40% tighter for as long as the tap lasted and let it go again. It
   keeps the drift alive when the body comes back into line, so a drift can be carried down a
@@ -145,12 +143,12 @@ corner by as far as its travel lags its nose; this one does not.
 - **Charging.** The drift builds a charge: seconds of drift, counted from half to one and a half
   times real time as the stick goes from centered to fully into the drift. Steering out of the
   drift charges at the slow end, never backwards.
-- **Ending.** The body back within `drift_exit_angle` of the travel, with the stick keeping it
+- **Ending.** The body back within 8 degrees (`DRIFT_EXIT_ANGLE`) of the travel, with the stick keeping it
   there, centered or against the drift, ends the drift and pays out, unless the button is held.
   With the shipped tuning, a drift ends 0.8 s after the stick straightens (0.6 s before v0.1.35,
   the body now swinging back as slowly as it swings out), as the steering unwinds and the body
   swings back into line. Falling
-  below `drift_min_speed` ends it and pays out too.
+  below `DRIFT_MIN_SPEED` ends it and pays out too.
 - **Boost.** Ending the drift converts the charge beyond `drift_min_charge` into
   `drift_boost_rate` seconds of boost per second, up to `drift_max_boost`: with the shipped tuning,
   the full 1.2 s of boost takes two to three and a half seconds of drift. A boost raises the top
@@ -167,7 +165,7 @@ corner by as far as its travel lags its nose; this one does not.
   above a `top_speed` raised to 58.
 - **Losing it.** A drift that hits a wall ends at once and pays nothing. The body settles back
   into line on its own, and the button, still held, starts nothing until it is pressed again. A
-  graze is forgiven: meeting the wall at less than `drift_wall_tolerance`, 3 m/s into it, keeps
+  graze is forgiven: meeting the wall at less than 3 m/s into it (`DRIFT_WALL_TOLERANCE`), keeps
   the drift, though it charges nothing on the ticks it touches. The tail of a car swung 36 degrees (55 then)
   across the road brushes a wall often, and losing two seconds of charge to it was a punishment
   out of proportion.
@@ -601,6 +599,41 @@ Traced at full lock from top speed: the path turns 2, 5, 8, 12, 16, 20 degrees a
 where it turned 3, 9, 15, 20, 25, 29 in v0.1.54, with the strong kick on the path. The autopilot laps
 the Odyssey gripping in 84.2 s and drifting in 81.2 s, clean; six ticks late it now straightens
 out of any drift before a gap, having flown one off the road sideways.
+
+### Fewer drift numbers
+
+On 2026-11-16 (v0.1.57), the drift had 27 numbers in `car.ron` and nobody could say what each
+one still did. Each was measured with the shipped tuning, at full lock from top speed: a drift
+thrown with a tap, thrown with the button held, broken into without it, let go of after a
+second, and carried over through an S. Eleven went:
+
+- **Doing nothing.** `drift_swing_knee` and `drift_swing_knee_rate` changed no figure in any of the
+  five: braking onto 55 degrees at 400 degrees per second per second already keeps the body under
+  the knee's rate past 35 degrees. `steering_response` and `drift_steering_response` at 1000
+  instead of 60 moved nothing by more than a degree: `yaw_acceleration` was already the
+  smoothing.
+- **Three numbers for one effect.** The kick's own rotation, `drift_kick` 25 degrees per second
+  fading at `drift_kick_fade` 320, added about one degree of turn. What turned the car in was
+  `drift_kick_acceleration`, which lifted the car's weight from 200 to 1800 degrees per second per
+  second for the tenth of a second the kick lasted: without it, the path had turned 24 degrees at
+  0.5 s instead of 35. Now `drift_kick_time` (0.1 s, scaled by how far the stick is turned and how
+  fast the car goes) lifts the weight by `DRIFT_KICK_WEIGHT` (nine times) and nothing else. It is
+  close to a switch: anything from 0.06 s gives the same figures, the rotation having reached
+  what the stick asks by then, and 0 is no kick.
+- **Thresholds, not feel.** `drift_min_speed` (12 m/s), `drift_exit_angle` (8 degrees),
+  `drift_button_tighten_time` (0.4 s; its effect never reached 2 degrees) and
+  `drift_wall_tolerance` (3 m/s) became constants beside `DRIFT_PRESS_STICK`. They no longer
+  hot-reload.
+
+What stayed and why: `drift_swing_rate` matters only carrying a drift over through an S, but
+there it does (0.82 s to swing 45 degrees past the line, 0.77 s without it). The figures after,
+against before: tapped, the body at 18, 38 and 55 degrees at 0.1, 0.25 and 0.5 s and the path at
+4, 15 and 34 degrees (5, 16, 35); the path at 110 degrees at 1.5 s, and 94 at 1 s with the button
+held (both unchanged); broken into, unchanged; let go of, 0.47 s and 25 degrees, unchanged; carried
+over, 0.82 s, unchanged. The sharpest change of the rotation from one tick to the next, thrown,
+fell from 27 to 18 degrees per second. `the_shipped_drift_keeps_its_measured_feel` replays these
+on the shipped `car.ron`, the other tests running on an older car of their own
+(`test_support::tuning`).
 
 ### Out of a drift, on a curve
 
