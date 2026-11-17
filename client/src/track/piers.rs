@@ -28,6 +28,8 @@ const HEAD_DROP: f32 = 3.5;
 /// The column under it: how far it reaches across either side, and how long it is along the road.
 const COLUMN_REACH: f32 = 1.7;
 const COLUMN_LENGTH: f32 = 2.2;
+/// How wide an abutment's column is, as a share of its head's reach.
+const ABUTMENT_COLUMN: f32 = 0.55;
 /// How far under the slab's underside the head stands, so the two never draw over each other.
 const HEAD_GAP: f32 = 0.04;
 /// The concrete of the piers: the walls' dark gray, a little bluer.
@@ -48,17 +50,34 @@ pub(super) fn piers(lit: &mut Geometry, neon: &mut Geometry, track: &Track) {
     for index in 0..count {
         let at = PIER_FIRST + index as f32 * PIER_SPACING;
         // No road over a gap, so nothing to carry: the piers either side of it stand back from
-        // the edges.
-        if track.in_gap(at - HEAD_LENGTH) || track.in_gap(at + HEAD_LENGTH) {
+        // the edges, where the abutments stand.
+        let clear = 2.0 * HEAD_LENGTH + 1.0;
+        if track.in_gap(at - clear) || track.in_gap(at) || track.in_gap(at + clear) {
             continue;
         }
-        pier(lit, neon, track, at);
+        pier(lit, neon, track, at, HEAD_REACH, COLUMN_REACH);
+    }
+    // An abutment under each edge of a gap: a pier as wide as the road, its head flush with the
+    // slab's cut end, so the road ends on something rather than in the air.
+    for gap in track.gaps() {
+        for (edge, back) in [(gap.at, -1.0_f32), (gap.at + gap.length, 1.0)] {
+            let at = edge + back * HEAD_LENGTH / 2.0;
+            let reach = track.point_at(at).half_width + WALL_THICKNESS;
+            pier(lit, neon, track, at, reach, reach * ABUTMENT_COLUMN);
+        }
     }
 }
 
 /// The pier `at` meters along the lap: its head, the column under it down to the dark, and the band
 /// of light round the column.
-fn pier(lit: &mut Geometry, neon: &mut Geometry, track: &Track, at: f32) {
+fn pier(
+    lit: &mut Geometry,
+    neon: &mut Geometry,
+    track: &Track,
+    at: f32,
+    head_reach: f32,
+    column_reach: f32,
+) {
     let point = track.point_at(at);
     let place = |along: f32, lateral: f32, height: f32| {
         world::position(
@@ -77,18 +96,18 @@ fn pier(lit: &mut Geometry, neon: &mut Geometry, track: &Track, at: f32) {
     let underside = |along: f32, lateral: f32| {
         track.height_beside(&track.point_at(at + along), lateral) - SLAB - HEAD_GAP
     };
-    let top = ring(HEAD_LENGTH, HEAD_REACH)
+    let top = ring(HEAD_LENGTH, head_reach)
         .map(|(along, lateral)| place(along, lateral, underside(along, lateral)));
     let lowest = top.iter().map(|corner| corner.y).fold(f32::INFINITY, f32::min);
     let neck = lowest - HEAD_DROP;
     let column = |height: f32| {
-        ring(COLUMN_LENGTH, COLUMN_REACH).map(|(along, lateral)| place(along, lateral, height))
+        ring(COLUMN_LENGTH, column_reach).map(|(along, lateral)| place(along, lateral, height))
     };
     lit.solid(column(neck), top, PIER, PIER);
     lit.solid(column(ABYSS), column(neck), DARK, PIER);
 
     let band = |height: f32| {
-        ring(COLUMN_LENGTH + 0.16, COLUMN_REACH + 0.08)
+        ring(COLUMN_LENGTH + 0.16, column_reach + 0.08)
             .map(|(along, lateral)| place(along, lateral, height))
     };
     let band_top = neck - BAND_BELOW;
@@ -193,7 +212,7 @@ mod tests {
         let track = oval();
         let at = 50.0 + 20.0 + (std::f32::consts::PI * 40.0 - 20.0) / 2.0;
         let (mut lit, mut neon) = (Geometry::default(), Geometry::default());
-        pier(&mut lit, &mut neon, &track, at);
+        pier(&mut lit, &mut neon, &track, at, HEAD_REACH, COLUMN_REACH);
         let point = track.point_at(at);
         for lateral in [-HEAD_REACH, HEAD_REACH] {
             let underside = track.height_beside(&point, lateral) - SLAB;

@@ -229,6 +229,23 @@ pub(super) fn gap_lips(lit: &mut Geometry, neon: &mut Geometry, glow: &mut Geome
                     facing,
                     WALL_DARK,
                 );
+                // A line of the same neon along the foot of the cut face, so the slab's end shows
+                // as a lit edge from below and from the far side, not a dark slot.
+                let out = facing * 0.03;
+                neon.quad(
+                    [
+                        across(right, -SLAB) + out,
+                        across(left, -SLAB) + out,
+                        across(left, -SLAB + LIP_FOOT) + out,
+                        across(right, -SLAB + LIP_FOOT) + out,
+                    ],
+                    facing,
+                    Color::LinearRgba(LIP_NEON),
+                );
+            }
+            // Before the lip, chevrons across the whole road pointing over it: jump here.
+            if back < 0.0 {
+                lip_chevrons(neon, track, edge, half);
             }
             // The line across the road at its edge.
             let inside = track.point_at(edge + back * LIP_LINE);
@@ -267,6 +284,50 @@ pub(super) fn gap_lips(lit: &mut Geometry, neon: &mut Geometry, glow: &mut Geome
     }
 }
 
+/// Chevrons over the last meters before a gap's lip, each an arrow across the whole road with its
+/// tip ahead in the middle, in pieces short enough to follow the road's cross-section.
+fn lip_chevrons(neon: &mut Geometry, track: &Track, lip: f32, half: f32) {
+    let reach = half - 1.5;
+    let pieces = 8;
+    for chevron in 0..LIP_CHEVRONS {
+        let tip = lip - LIP_CHEVRON_FIRST - LIP_CHEVRON_SPACING * chevron as f32;
+        // The farther from the lip, the dimmer: they draw the eye on toward it.
+        let fade = 1.0 - 0.28 * chevron as f32;
+        let color = Color::LinearRgba(LIP_NEON * fade);
+        for side in [1.0_f32, -1.0] {
+            for piece in 0..pieces {
+                let share = |step: usize| step as f32 / pieces as f32;
+                let at = |step: usize, stroke: f32| {
+                    let along = tip - LIP_CHEVRON_DEPTH * share(step) + stroke;
+                    on_road(
+                        track,
+                        track.point_at(along),
+                        side * reach * share(step),
+                        2.0 * MARKING_HEIGHT,
+                    )
+                };
+                let corners = [
+                    at(piece, -LIP_CHEVRON_STROKE),
+                    at(piece + 1, -LIP_CHEVRON_STROKE),
+                    at(piece + 1, 0.0),
+                    at(piece, 0.0),
+                ];
+                neon.quad_facing_up(corners, color);
+            }
+        }
+    }
+}
+
+/// How many chevrons stand before a lip, how far before it the first one's tip is and how far apart
+/// they are, how far their arms sweep back from the tip to the road's edges, and how thick their
+/// strokes are, in meters.
+const LIP_CHEVRONS: usize = 3;
+const LIP_CHEVRON_FIRST: f32 = 5.0;
+const LIP_CHEVRON_SPACING: f32 = 11.0;
+const LIP_CHEVRON_DEPTH: f32 = 16.0;
+const LIP_CHEVRON_STROKE: f32 = 1.1;
+/// How tall the neon line along the foot of a lip's cut face is, in meters.
+const LIP_FOOT: f32 = 0.3;
 /// How deep the neon line along a gap's edge is, and how far along the road its light reaches, in
 /// meters, and its colors: the neon brighter than white so it blooms.
 const LIP_LINE: f32 = 0.8;
@@ -369,7 +430,7 @@ pub(super) fn wall_light(glow: &mut Geometry, track: &Track) {
 }
 
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
     use star_racer_sim::track::{Segment, TrackDescription};
 
     use super::*;
@@ -408,7 +469,7 @@ mod tests {
     }
 
     /// The oval with a gap of 10 m 60 m past the line, and a checkpoint at 150 m.
-    fn gapped_oval() -> Track {
+    pub(in crate::track) fn gapped_oval() -> Track {
         use star_racer_sim::track::Gap;
         let mut description = TrackDescription {
             name: "Gapped".into(),

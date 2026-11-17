@@ -3,9 +3,11 @@
 //! Deliberately plain, but built to read speed and position: the road in the dark, walls striped
 //! every few meters so movement shows at the edge of the screen, a dashed centerline, a checkered
 //! start line, kerbs through the turns and the light of the walls on the road (see [`markings`]),
-//! and piers carrying it all down into the dark (see [`piers`]). Neon parts are unlit, so they stay
-//! bright whatever the light.
+//! and piers carrying it all down into the dark (see [`piers`]); over a gap, the walls go on as
+//! the girders of a broken bridge (see [`girders`]). Neon parts are unlit, so they stay bright
+//! whatever the light.
 
+mod girders;
 mod markings;
 mod piers;
 
@@ -238,6 +240,7 @@ fn track_meshes(track: &Track, props: &[Prop]) -> TrackMeshes {
     markings::grid_boxes(&mut lit, track);
     markings::pads(&mut neon, &mut glow, track);
     markings::gap_lips(&mut lit, &mut neon, &mut glow, track);
+    girders::girders(&mut lit, &mut neon, track);
     markings::checkpoints(&mut neon, &mut glow, track);
     markings::wall_light(&mut glow, track);
     let mut scenery = Geometry::default();
@@ -298,8 +301,10 @@ fn underside(geometry: &mut Geometry, track: &Track) {
 fn walls(lit: &mut Geometry, neon: &mut Geometry, track: &Track) {
     for side in [1.0, -1.0] {
         for_each_segment(track, |a, b, distance| {
-            // A breach: the wall is missing, and nothing holds a car in.
-            if track.breached(distance + track.spacing() / 2.0, side) {
+            // A breach: the wall is missing, and nothing holds a car in. Over a gap it goes on as
+            // an open girder instead (see [`girders`]).
+            let middle = distance + track.spacing() / 2.0;
+            if track.breached(middle, side) || track.in_gap(middle) {
                 return;
             }
             let (geometry, color) = if (distance / WALL_STRIPE) as usize % 2 == 0 {

@@ -319,9 +319,15 @@ Since v0.1.49, a track may leave its road out in places, to be jumped (see
 [Simulation](simulation.md#the-jump)): `gaps: [(at: 80.0, length: 14.0)]`, each placed by where it
 begins along the lap and how long it is, from 4 to 200 m (90 until v0.1.51). The road, its underside and everything
 painted on it stop at a gap's edges, and the piers stand back from them; the walls carry on over
-it, the girders of a broken bridge, and hold a car that is no higher than they are. Each edge is the cut face of the slab, a line of hot magenta neon across the road
-at its top and the light of it thrown back along the road (`track/markings.rs`), so a gap reads
-from far off as a bright line with nothing beyond it. A car's shadow and the light under it are
+it and hold a car that is no higher than they are. Since v0.1.67 (the user's word: the gaps looked
+"un peu grossier") they are drawn there as what they are, the girders of a broken bridge
+(`track/girders.rs`): an open Warren truss of the wall's height and outline, its top chord striped
+like the wall, a solid post capping the wall at each end, so the void shows through; before, solid
+wall panels hung over the void with nothing under them. Each edge is the cut face of the slab,
+lined with hot magenta neon across the road at its top and along its foot, its light thrown back
+along the road, and an abutment as wide as the road stands under it (`track/piers.rs`). Before the
+lip, three magenta chevrons across the whole road point over it, dimmer the further back
+(`track/markings.rs`), so a gap reads from far off. A car's shadow and the light under it are
 not drawn over a gap, there being no road to throw them on.
 
 A car that reaches a gap on the road falls through it and comes back at its last checkpoint (see

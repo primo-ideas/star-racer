@@ -10,12 +10,13 @@
 //!   timeline while their car is predicted, and so do their sounds.
 //! - **The car**: a tick as it breaks into a drift, a whoosh as a drift pays its boost, a deeper
 //!   and longer one for the turbo, a soft bell as a charge of turbo fills, a thud on a wall, as
-//!   hard as the hit, a pop as it hops, a thump and a roar as its thruster lights, a knock as it
-//!   lands. Under them, without a break, the drone of `sound/drone.rs`: thrusters, wind
-//!   and the hiss of the drift. The player's own car is heard as it is predicted, on the frame the
+//!   hard as the hit, a bang as it hops (the "PAF" of a four-stroke engine firing), a thump and a
+//!   roar as its thruster lights, a knock as it lands. Under them, without a break, the drone of
+//!   `sound/drone.rs`: thrusters, wind and the hiss of the drift. The player's own car is heard as it is predicted, on the frame the
 //!   press is seen; a spectator hears the car they watch.
 //! - **The menus**: a tick as the focus moves and a click on whatever is pressed.
 
+mod bang;
 mod drone;
 mod tone;
 
@@ -30,6 +31,7 @@ use star_racer_sim::TICK_RATE;
 use star_racer_sim::car::Car;
 use star_racer_sim::race;
 
+use self::bang::Recorded;
 use self::drone::{Controls, Drive, Drone};
 use self::tone::{Noise, Tone};
 use crate::lobby::CurrentLobby;
@@ -60,6 +62,7 @@ impl Plugin for SoundPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(GlobalVolume::new(Volume::Linear(self.volume)))
             .add_audio_source::<Tone>()
+            .add_audio_source::<Recorded>()
             .add_audio_source::<Drone>()
             .init_resource::<LitLights>()
             .init_resource::<MatchAnnounced>()
@@ -100,7 +103,7 @@ struct Sounds {
     /// The car hit a wall.
     hit: Handle<Tone>,
     /// The car hopped off the road, its thruster lit, and it came back down.
-    hop: Handle<Tone>,
+    hop: Handle<Recorded>,
     ignite: Handle<Tone>,
     land: Handle<Tone>,
     /// In the menus: the focus moved, something was pressed.
@@ -111,7 +114,12 @@ struct Sounds {
 }
 
 impl Sounds {
-    fn play(&self, commands: &mut Commands, sound: &Handle<Tone>, volume: f32) {
+    fn play<S: Asset + bevy::audio::Decodable>(
+        &self,
+        commands: &mut Commands,
+        sound: &Handle<S>,
+        volume: f32,
+    ) {
         commands.spawn((
             AudioPlayer(sound.clone()),
             PlaybackSettings::DESPAWN.with_volume(Volume::Linear(volume)),
@@ -122,6 +130,7 @@ impl Sounds {
 fn add_sounds(
     mut commands: Commands,
     mut tones: ResMut<Assets<Tone>>,
+    mut recorded: ResMut<Assets<Recorded>>,
     mut drones: ResMut<Assets<Drone>>,
 ) {
     // Low and round rather than sharp: a blip on G4 with the octave under it and barely any
@@ -228,20 +237,8 @@ fn add_sounds(
             width: 0.9,
         }),
     });
-    // The hop: a short springy pop, a low note bending up under a puff of air.
-    let hop = tones.add(Tone {
-        partials: vec![(140.0, 1.0), (280.0, 0.4)],
-        seconds: 0.18,
-        attack: 0.004,
-        decay: 18.0,
-        slide: 1.8,
-        noise: Some(Noise {
-            level: 0.5,
-            from: 700.0,
-            to: 1600.0,
-            width: 0.7,
-        }),
-    });
+    // The hop: "PAF", the bang of a single-cylinder four-stroke firing (`sound/bang.rs`).
+    let hop = recorded.add(bang::four_stroke_bang());
     // The thruster lighting: a deep thump and a roar of air opening upward, a second push.
     let ignite = tones.add(Tone {
         partials: vec![(62.0, 1.0), (124.0, 0.5)],
@@ -510,7 +507,7 @@ fn play_car(
             );
         }
         if car.is_airborne() && !before.is_airborne() && car.climb > 0.0 {
-            sounds.play(&mut commands, &sounds.hop, 0.7);
+            sounds.play(&mut commands, &sounds.hop, 0.85);
         }
         if car.thrusting && !before.thrusting && !before.ignited {
             sounds.play(&mut commands, &sounds.ignite, 0.9);
@@ -569,10 +566,12 @@ mod tests {
         let mut app = App::new();
         app.init_resource::<Assets<Tone>>()
             .init_resource::<Assets<Drone>>()
+            .init_resource::<Assets<Recorded>>()
             .add_systems(Startup, add_sounds);
         app.update();
         let tones = app.world().resource::<Assets<Tone>>();
-        assert_eq!(tones.len(), 15);
+        assert_eq!(tones.len(), 14);
+        assert_eq!(app.world().resource::<Assets<Recorded>>().len(), 1);
         for (_, tone) in tones.iter() {
             let samples: Vec<f32> = tone.decoder().collect();
             let peak = samples

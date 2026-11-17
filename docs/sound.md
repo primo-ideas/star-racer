@@ -84,7 +84,7 @@ Claude has not heard it: whether it is pleasant over a whole race is the user's 
 | Boost | a boost fires, a drift's or the start's | 0.7 s: noise rising from 0.5 to 3.2 kHz over a note climbing an octave from A2; louder for a longer boost |
 | Turbo | a charge of turbo fires | 1.3 s: the same gesture from an octave lower, wider and louder |
 | Turbo charged | a charge of turbo fills | a small bell, D6 and the fifth over it |
-| Hop | the car leaves the road with a climb | 0.18 s: a pop, a low note bending up under a puff of air |
+| Hop | the car leaves the road with a climb | 0.42 s: "PAF", the bang of a single-cylinder four-stroke firing (`sound/bang.rs`): a pressure pulse with the crack of the spark rings an exhaust pipe tuned to 96 Hz, over a low thump and a breath of exhaust, a faint second firing 0.125 s later, driven into a soft clip. Worked out once at start-up and played back; `cargo test --workspace -- --ignored write_the_bang` writes it to `target/sounds/hop.wav` |
 | Ignition | the thruster lights, once a flight | 0.75 s: a deep thump and a roar of air opening upward |
 | Landing | back on the road from over 0.3 m | 0.2 s: a soft, low knock, louder the higher the fall |
 | Wall | the car hits a wall | a knock falling an octave from 85 Hz with noise falling under it; louder the harder the hit, silent under 1.5 m/s, at most every 0.15 s |
