@@ -4,9 +4,9 @@
 //! all the time, and letting go of the accelerator only coasts. The velocity is kept apart from the
 //! heading, so the car can slide: when it grips, sideways speed dies out at a rate set by the grip.
 //!
-//! The car is **heavy**: its rotation gathers and dies away steadily rather than at once, it is
-//! carried a little wide of where its nose points while it grips, it keeps its momentum above top
-//! speed, and a wall takes speed along it as well as into it.
+//! The car is **heavy**: its rotation gathers and dies away steadily rather than at once, its nose
+//! unscrews into a hard turn while its travel stays close to where it points, it keeps its
+//! momentum above top speed, and a wall takes speed along it as well as into it.
 //!
 //! **Drift** is the heart of the gameplay, in the spirit of Rocket Racing, and a driving mode of its
 //! own: the car skates. A tap of the drift button with the stick turned throws the car into a drift
@@ -284,7 +284,8 @@ pub struct CarTuning {
     /// How quickly the body's swing gathers speed, in degrees per second per second. The body comes
     /// off the travel on the very tick a drift starts, slowly, and swings faster and faster, rather
     /// than lunging round at once; it slows down the same way as it reaches its angle, and swings
-    /// back into line the same way.
+    /// back into line the same way. A drift thrown with the button starts its swing at
+    /// `drift_kick_swing` instead, and only brakes at this rate.
     pub drift_swing_acceleration: f32,
     /// The fastest the body swings, in degrees per second.
     pub drift_swing_rate: f32,
@@ -335,11 +336,12 @@ pub struct CarTuning {
 
     /// The jump, as in Rocket Racing: a press lifts the car off the road at `jump_speed` (m/s),
     /// and what pulls it back down is `air_gravity` (m/s², stronger than the road's `gravity`, so
-    /// a hop is short and snappy). Held past `thrust_delay` (s), the thruster under the car pushes
-    /// up at `thrust_acceleration` (m/s²), less and less as it nears `thrust_ceiling` (m), so it
-    /// climbs and then hovers where the push and the pull meet, for as long as the tank holds:
-    /// `thrust_seconds` of thrust, filled again on the road at `thrust_recharge` seconds per
-    /// second. In the air the car neither feels the slope nor touches a pad.
+    /// a hop is short and snappy). The thrust held in the air, once the hop has had `thrust_delay`
+    /// (s), lights the thruster under the car, which pushes up at `thrust_acceleration` (m/s²),
+    /// less and less as it nears `thrust_ceiling` (m), so it climbs and then hovers where the push
+    /// and the pull meet, for as long as the tank holds: `thrust_seconds` of thrust, filled again on
+    /// the road at `thrust_recharge` seconds per second. In the air the car neither feels the
+    /// slope nor touches a pad.
     pub jump_speed: f32,
     pub air_gravity: f32,
     pub thrust_delay: f32,

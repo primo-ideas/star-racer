@@ -243,7 +243,7 @@ fn drift_through_turns(personality: &Personality, car: &Car, track: &Track) -> C
         // started this close to one, and one under way is straightened out of: the stick never
         // points into it, so the body comes back into line and the drift ends, but it may still
         // point against it, which turns the drift's travel back toward the road. Centered, as
-        // until v0.1.60, the travel ran straight on at whatever angle the drift had it, and a
+        // until v0.1.61, the travel ran straight on at whatever angle the drift had it, and a
         // car driving on late information took off 10 to 40 degrees across the gap.
         if car.is_drifting() {
             let steer = pursue(personality, car, track, DRIFT_LOOK_AHEAD_TIME);
@@ -278,7 +278,7 @@ fn drift_through_turns(personality: &Personality, car: &Car, track: &Track) -> C
 }
 
 /// How far before a gap's lip the autopilot stops drifting, in meters: a drift held into the air
-/// keeps its travel there, and one taken in at an angle flies off the road. 90 until v0.1.60:
+/// keeps its travel there, and one taken in at an angle flies off the road. 90 until v0.1.61:
 /// a drift begun just short of it was not over by the lip at top speed.
 const GAP_STRAIGHT: f32 = 150.0;
 
