@@ -15,9 +15,11 @@ The graphics are deliberately geometric.
 
 ## Playing it
 
-In a browser at <https://star-racer.xyz/>, or downloaded for Windows, Linux or macOS from
-<https://star-racer.xyz/download.html>, which takes the latest [release](https://github.com/primo-ideas/star-racer/releases).
-Every version that goes online is released (see [docs/releases.md](docs/releases.md)).
+**There is no website for now** (since 2026-11-17): the game is not online, and nothing is deployed.
+Build it and play it against a local server (below), or download an earlier client for Windows,
+Linux or macOS from the [releases](https://github.com/primo-ideas/star-racer/releases), the last
+being v0.1.46; with no server online, it too needs `--server` pointed at a local one
+(see [docs/releases.md](docs/releases.md)).
 
 ## Running locally
 

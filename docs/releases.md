@@ -6,6 +6,10 @@ gets a GitHub release with the desktop client to download, and the site offers i
 
 ## When a release is made
 
+**On hold since 2026-11-17**, with the deployment ([deploy.md](deploy.md)): there is no website for
+now, so no version goes online, and by the rule below none is released. The last release is
+`v0.1.46`; `download.html` is not served anywhere.
+
 **Every deployed version is released.** Deploying is the moment a version becomes the one people
 play, so it is the one to download too: after `deploy.ps1` succeeds and the live site checks out,
 Claude pushes the tag `vX.Y.Z` of the deployed commit (`git tag vX.Y.Z <commit>` then

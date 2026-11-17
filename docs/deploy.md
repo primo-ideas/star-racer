@@ -1,6 +1,10 @@
 # Deployment
 
-Star Racer runs on the maintainer's Scaleway machine, at <https://primo-ideas.xyz/star-racer/>. The
+**On hold since 2026-11-17: there is no website for now** (the user's word), and the domains
+`star-racer.xyz` and `primo-ideas.xyz` no longer point anywhere, so nothing is deployed. The
+workflow and the scripts stay as they are, for when a site comes back; this page describes them.
+
+Star Racer ran on the maintainer's Scaleway machine, at <https://primo-ideas.xyz/star-racer/>. The
 machine is set up once, by a script that lives outside this repository because it sets up the
 whole host; after that a deployment only replaces the build.
 
