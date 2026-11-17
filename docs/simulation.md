@@ -884,6 +884,23 @@ That margin also turned out to be a latency detector. The first drivable client 
 A player would have felt the same delay without being able to name it.
 
 
+### The late drifting lap
+
+`shipped_tracks_are_drivable` drives every shipped track live and six ticks late, gripping and
+drifting. Since v0.1.59 the drifting lap six ticks late must get round but may fall; every other
+lap must not. That lap is chaotic on the Odyssey: driving on what it saw a tenth of a second ago,
+the autopilot sometimes reaches a gap's lip with a drift still under way (it starts straightening
+90 m before, `GAP_STRAIGHT`, or breaks into one by turning hard on late information), leaves the
+road at an angle, and the drift held through the air carries it past the far edge. Whether it does
+on a given lap depends on the last bits of the arithmetic: measured on 2026-11-17 over twelve
+copies of the shipped car whose `top_speed` differed by a millionth or two, v0.1.55 fell in one
+and v0.1.57 in three at six ticks late, and most of them at eight. The test runner's math library
+gives other bits than a desktop's from the first tick, so CI failed at v0.1.54 and v0.1.57 while
+both passed locally. Steering more gently near a gap, or straightening from 140 or 200 m, moved
+the falls from one delay to another without removing them. Gripping late never fell, so a client
+always has a clean way round, which is what the test still demands; a drifting autopilot that
+copes with late information is work of its own.
+
 ### Personalities
 
 Since v0.1.43 (2026-11-13, the user's word "Ajoute de la variance dans les bots, car sur la video,
