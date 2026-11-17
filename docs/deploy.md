@@ -1,12 +1,11 @@
 # Deployment
 
-**On hold since 2026-11-17: there is no website for now** (the user's word), and the domains
-`star-racer.xyz` and `primo-ideas.xyz` no longer point anywhere, so nothing is deployed. The
-workflow and the scripts stay as they are, for when a site comes back; this page describes them.
-
-Star Racer ran on the maintainer's Scaleway machine, at <https://primo-ideas.xyz/star-racer/>. The
-machine is set up once, by a script that lives outside this repository because it sets up the
-whole host; after that a deployment only replaces the build.
+Star Racer runs on the maintainer's Scaleway machine, at <https://star-racer.xyz/>, served at the
+root of that domain (see [the machine as it is since 2026-11-17](#the-machine-since-2026-11-17)).
+The site was down for part of 2026-11-17, the machine reinstalled; `primo-ideas.xyz` no longer
+points at it. The machine is set up once, by a script that lives outside this repository because
+it sets up the whole host, or by hand in the same layout; after that a deployment only replaces
+the build.
 
 There are two ways to deploy, and they do the same three things to the machine:
 
@@ -115,7 +114,49 @@ The port is 8081 and not the default 8080, which belongs to the other game on th
 Nothing there writes to `/var/www/html` itself: the document root and whatever landing page sits
 in it belong to the site.
 
-### The machine as it is since November 2026
+### The machine since 2026-11-17
+
+The machine was reinstalled again on 2026-11-17 (Ubuntu 26.04, one core, 950 MB): Apache and a
+certbot certificate for `star-racer.xyz` only, its TLS virtual host
+(`sites-available/000-default-le-ssl.conf`) serving `/var/www/html`, plain HTTP redirecting to it,
+and nothing of the game. The game was set up by hand that day, in the setup script's layout: the
+`star-racer` system user and home, `/var/www/html/star-racer/`, and the unit:
+
+```ini
+# /etc/systemd/system/star-racer.service
+[Service]
+User=star-racer
+Group=star-racer
+WorkingDirectory=/home/star-racer
+ExecStart=/home/star-racer/star-racer-server --data-dir /home/star-racer/data --port 8081
+Environment=RUST_LOG=info
+Restart=on-failure
+RestartSec=2
+```
+
+The game is served at the root of the domain, so the page finds its server at `/ws`. The TLS
+virtual host gained one line, `Include /etc/apache2/star-racer.conf`, after certbot's own (the file
+before it is kept beside it, `.before-star-racer.<date>`), and `proxy` and `proxy_http` were
+enabled:
+
+```apache
+# /etc/apache2/star-racer.conf
+DocumentRoot /var/www/html/star-racer
+<Location "/ws">
+	ProxyPass "http://127.0.0.1:8081/ws" upgrade=websocket
+</Location>
+<Directory "/var/www/html/star-racer">
+	Options -Indexes
+	AllowOverride None
+	Require all granted
+	AddType application/wasm .wasm
+</Directory>
+```
+
+`deploy.ps1` defaults to this machine since then (`root@star-racer.xyz`, the page at the root).
+What follows is the machine before.
+
+### The machine from November 2026 to 2026-11-17
 
 The machine was reinstalled on 2026-11-05 (Ubuntu 26.04, one core, under a gigabyte of memory),
 with Apache, a certbot certificate and another site, and nothing of the game. The setup script was

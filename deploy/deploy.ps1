@@ -13,11 +13,11 @@
 #   ./deploy/deploy.ps1 -Server root@other.host  somewhere else
 
 param(
-    [string]$Server = 'root@primo-ideas.xyz',
+    [string]$Server = 'root@star-racer.xyz',
     [string]$Key = "$HOME\.ssh\id_ed25519",
     # Only used to fetch the page back at the end: where the game is served is the machine's
     # Apache configuration to decide, not this script's.
-    [string]$WebPath = '/star-racer',
+    [string]$WebPath = '',
     [switch]$SkipBuild,
     # Uploads the archive and stops there, without unpacking or installing it: for a run meant
     # only to carry the build over, the install being done by hand afterwards.
