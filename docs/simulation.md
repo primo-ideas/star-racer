@@ -901,6 +901,18 @@ the falls from one delay to another without removing them. Gripping late never f
 always has a clean way round, which is what the test still demands; a drifting autopilot that
 copes with late information is work of its own.
 
+Since v0.1.60 the autopilot is much less often caught out. Every fall measured had taken off
+drifting, its travel 10 to 40 degrees off the road: within `GAP_STRAIGHT` of a lip it centered
+the stick, and a centered drift runs straight on at the angle it had. It now steers a drift there
+with its usual pursuit, never into the drift, so the body still comes back into line and the drift
+ends, but against it, which turns the travel back toward the road; and it starts straightening
+150 m before the lip instead of 90, a drift begun just short of 90 m not being over by the lip at
+top speed. Over the same twelve copies of the car, the drifting lap fell 3 times six ticks late,
+2 at seven and 11 at eight; now 0, 2 and 2, and once in 40 copies six ticks late. The live laps
+are unchanged (the Odyssey drifting in 81.2 s). Steering more gently near a gap while gripping,
+and letting a drift held through the air be steered like a gripping car, were tried and helped
+nothing. The test still lets the late drifting lap fall: rarer is not never.
+
 ### Personalities
 
 Since v0.1.43 (2026-11-13, the user's word "Ajoute de la variance dans les bots, car sur la video,
