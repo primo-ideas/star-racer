@@ -108,6 +108,17 @@ the frame rate.
 Generated nicknames (`nickname.rs`) are an adjective and a noun from the game's world ("Neon
 Falcon", "Drifting Hexagon"); a test checks every combination is a valid nickname.
 
+### The player's card
+
+Since v1.0.0-rc2 (the user's word: "Tu feras que son rank (ou unranked) et son niveau, soient souvent
+bien visibles et jolis"), `ui/player_card.rs`: a pill with a gem glowing in the tier's color (bronze,
+silver, gold, platinum, diamond, champion), the tier, the rating and the place, or UNRANKED for a
+guest and for an account in its placement games (with how many it has played), then LVL and the
+level over a thin neon bar of the way to the next. Shown once the server has welcomed the player:
+in the top right corner of the first screen, the garage and the editor; at the top of the lobby
+list, in the middle (on a phone, right of the title); under the lobby's name in a lobby, except
+while a race is on.
+
 ## Look
 
 Dark translucent panels over the dark scene, with one neon blue accent shared with the track.

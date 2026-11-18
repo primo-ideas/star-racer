@@ -457,7 +457,10 @@ fn small_button(
     (button_of_size(fonts, kind, label, size), SmallButton(size))
 }
 
-fn on_tab(activate: On<Activate>, tabs: Query<&TabButton>, mut editor: ResMut<Editor>) {
+fn on_tab(activate: On<Activate>, tabs: Query<&TabButton>, editor: Option<ResMut<Editor>>) {
+    let Some(mut editor) = editor else {
+        return;
+    };
     if let Ok(tab) = tabs.get(activate.entity) {
         editor.tab = tab.0;
         editor.selected = (tab.0 == Tab::Road).then_some(Item::Road);
@@ -466,7 +469,10 @@ fn on_tab(activate: On<Activate>, tabs: Query<&TabButton>, mut editor: ResMut<Ed
     }
 }
 
-fn on_add(activate: On<Activate>, adds: Query<&AddButton>, mut editor: ResMut<Editor>) {
+fn on_add(activate: On<Activate>, adds: Query<&AddButton>, editor: Option<ResMut<Editor>>) {
+    let Some(mut editor) = editor else {
+        return;
+    };
     let Ok(add) = adds.get(activate.entity) else {
         return;
     };
@@ -480,7 +486,10 @@ fn on_add(activate: On<Activate>, adds: Query<&AddButton>, mut editor: ResMut<Ed
     editor.changed();
 }
 
-fn on_item(activate: On<Activate>, items: Query<&ItemButton>, mut editor: ResMut<Editor>) {
+fn on_item(activate: On<Activate>, items: Query<&ItemButton>, editor: Option<ResMut<Editor>>) {
+    let Some(mut editor) = editor else {
+        return;
+    };
     if let Ok(item) = items.get(activate.entity) {
         editor.selected = Some(item.0);
         if let Some(at) = model::at(&editor.draft, item.0) {
@@ -491,7 +500,10 @@ fn on_item(activate: On<Activate>, items: Query<&ItemButton>, mut editor: ResMut
     }
 }
 
-fn on_field(activate: On<Activate>, buttons: Query<&FieldButton>, mut editor: ResMut<Editor>) {
+fn on_field(activate: On<Activate>, buttons: Query<&FieldButton>, editor: Option<ResMut<Editor>>) {
+    let Some(mut editor) = editor else {
+        return;
+    };
     let (Ok(button), Some(item)) = (buttons.get(activate.entity), editor.selected) else {
         return;
     };
@@ -508,7 +520,7 @@ fn on_field(activate: On<Activate>, buttons: Query<&FieldButton>, mut editor: Re
 fn on_action(
     activate: On<Activate>,
     actions: Query<&Action>,
-    mut editor: ResMut<Editor>,
+    editor: Option<ResMut<Editor>>,
     network: Res<Network>,
     mut tracks: ResMut<Tracks>,
     mut images: ResMut<Assets<Image>>,
@@ -516,6 +528,9 @@ fn on_action(
     mut next: ResMut<NextState<Screen>>,
 ) {
     let Ok(action) = actions.get(activate.entity) else {
+        return;
+    };
+    let Some(mut editor) = editor else {
         return;
     };
     match *action {

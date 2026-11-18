@@ -11,6 +11,7 @@ pub mod leaderboard;
 mod lobbies;
 mod login;
 pub mod navigation;
+mod player_card;
 pub mod safe_area;
 mod settings;
 pub mod theme;
@@ -50,6 +51,7 @@ impl Plugin for UiPlugin {
             touch::TouchPlugin,
             back::BackPlugin,
             leaderboard::LeaderboardPlugin,
+            player_card::PlayerCardPlugin,
             settings::SettingsPlugin,
             garage::GaragePlugin,
         ))
