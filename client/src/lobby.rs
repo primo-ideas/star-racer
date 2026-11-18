@@ -399,8 +399,13 @@ fn follow_script(
                 track: track.clone(),
                 laps: lobby.laps,
                 min_players: lobby.min_players,
-                max_players: 8,
-                bots: 0,
+                // With bots, as many cars as a lobby holds.
+                max_players: if lobby.bots > 0 {
+                    star_racer_protocol::MAX_LOBBY_PLAYERS
+                } else {
+                    8
+                },
+                bots: lobby.bots.min(star_racer_protocol::MAX_LOBBY_PLAYERS - 1),
             })
         }
     };

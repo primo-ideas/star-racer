@@ -118,6 +118,9 @@ pub struct ScriptedLobby {
     pub track: Option<String>,
     pub laps: u8,
     pub min_players: u8,
+    /// Cars driven by the server, added when the lobby is created; the lobby then holds as many
+    /// as it can.
+    pub bots: u8,
 }
 
 const DEFAULT_VOLUME: f32 = 0.7;
@@ -296,6 +299,10 @@ pub fn read() -> Settings {
         #[arg(long, default_value_t = DEFAULT_MIN_PLAYERS, requires = "who")]
         min_players: u8,
 
+        /// Bots added to the lobby created by --lobby (up to 15).
+        #[arg(long, default_value_t = 0, requires = "who")]
+        bots: u8,
+
         /// With --guest or --account, open the lobby creation dialog once connected.
         #[arg(long, requires = "who", conflicts_with = "lobby")]
         create_dialog: bool,
@@ -427,6 +434,7 @@ pub fn read() -> Settings {
                 track: args.track,
                 laps: args.laps,
                 min_players: args.min_players,
+                bots: args.bots,
             }),
             create_dialog: args.create_dialog,
             quick_play: args.quick_play,
@@ -501,6 +509,7 @@ pub fn read() -> Settings {
                 track: get("track"),
                 laps: number(get("laps"), DEFAULT_LAPS),
                 min_players: number(get("min_players"), DEFAULT_MIN_PLAYERS),
+                bots: number(get("bots"), 0),
             }),
             create_dialog: has("create_dialog"),
             quick_play: has("quick_play"),

@@ -53,3 +53,24 @@ the kick comes in, the launch and the first drifts, a bot's drift seen in ORBIT,
 above in TOP, the flight over the leap's girders in the break, the turbo at 314 km/h and the flight
 over the rift as the second bass line comes in, more of TOP, and a last drift under the title, STAR
 RACER and star-racer.xyz in the game's font over a dark band, before the fade.
+
+## The short
+
+In v0.1.77, at the user's word ("Refais moi une vidéo de présentation plus courte, sans voir les
+menus [...] Ca doit tenir sous les 20MB limite de discord. Tu mettras la masse bot"),
+`tools/film/make-short.sh` cuts a film of 36.6 seconds at 1920×1080 and 30 frames a second, 18.2
+MB, for Discord: `target/film2/star-racer-short.mp4` (not versioned). No menu: a full grid of
+sixteen cars, its start lights, an S start, the course from above, drifts, a flight over the void,
+cars side by side, and the title.
+
+The two takes were recorded at 1920×1080 (about 25 frames a second) against a local server, the
+same way as the film's: one client holding a lobby with `--lobby "Grand Prix" --laps 3
+--min-players 16 --bots 14` (`--bots`, added for it, puts bots in the lobby `--lobby` creates; the
+lobby then holds sixteen), so the race waits for the filming client, which joins it and races from
+the grid (take **a**, 80 s); then a spectator with `--watch "Grand Prix" --camera orbit
+--camera-cycle 7` (take **b**, 70 s). Bots count among the players: with fewer players to start,
+the race leaves before the filming client arrives, and it only watches.
+
+`tools/film/short-cuts.txt` lists the shots, nine of them over 20 bars, on the film's acid techno
+from bar 4, where the kick comes in. The video is encoded in two passes at 3.8 Mb/s, so the size is
+known beforehand.
