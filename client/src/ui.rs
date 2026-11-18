@@ -10,13 +10,13 @@ pub mod hud;
 pub mod leaderboard;
 mod lobbies;
 mod login;
-mod navigation;
+pub mod navigation;
 pub mod safe_area;
 mod settings;
 pub mod theme;
 pub mod thumbnail;
 pub mod touch;
-mod widgets;
+pub mod widgets;
 
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;

@@ -566,8 +566,13 @@ fn update_dialog(
                     }
                 }
                 (TrackPreview::Name, Some(mut text), _) => {
-                    if text.0 != track.description.name {
-                        text.0 = track.description.name.clone();
+                    // A circuit published from the editor says whose it is.
+                    let name = match &track.author {
+                        Some(author) => format!("{}  ·  by {author}", track.description.name),
+                        None => track.description.name.clone(),
+                    };
+                    if text.0 != name {
+                        text.0 = name;
                     }
                 }
                 (TrackPreview::Length, Some(mut text), _) => {

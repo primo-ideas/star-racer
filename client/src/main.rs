@@ -11,6 +11,7 @@ mod car_model;
 mod city;
 mod controls;
 mod dice;
+mod editor;
 mod geometry;
 mod latency;
 mod lobby;
@@ -128,6 +129,7 @@ fn main() {
         reconnect::ReconnectPlugin,
         trail::TrailPlugin,
         burst::BurstPlugin,
+        editor::EditorPlugin,
         spectator::SpectatorPlugin,
         ui::safe_area::SafeAreaPlugin {
             fixed: settings.safe_area,

@@ -265,7 +265,7 @@ pub(crate) fn spawn_writer(path: PathBuf, what: &'static str) -> mpsc::Unbounded
     sender
 }
 
-fn write_whole(path: &Path, text: &str) -> Result<()> {
+pub(crate) fn write_whole(path: &Path, text: &str) -> Result<()> {
     let temporary = path.with_extension("ron.tmp");
     std::fs::write(&temporary, text).with_context(|| format!("writing {}", temporary.display()))?;
     std::fs::rename(&temporary, path).with_context(|| format!("replacing {}", path.display()))?;

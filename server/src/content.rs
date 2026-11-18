@@ -5,6 +5,9 @@
 //!   car.ron            car tuning, reloaded while the server runs
 //!   tracks/<key>.ron   one file per track, named by its key
 //! ```
+//!
+//! And, beside the ladder, the circuits players published from the level editor (since
+//! v1.0.0-rc2), `user-tracks/user-<name>.ron` by default (see [`UserTracks`]).
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -14,10 +17,14 @@ use std::time::{Duration, SystemTime};
 
 use anyhow::{Context, Result, bail};
 use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
+use star_racer_protocol::{MAX_TRACK_ITEMS, MAX_TRACK_LENGTH, PublishError};
 use star_racer_sim::car::CarTuning;
 use star_racer_sim::track::{Track, TrackDescription};
 use tokio::sync::watch;
 use tracing::{info, warn};
+
+use crate::session::PlayerId;
 
 pub const CAR_TUNING_FILE: &str = "car.ron";
 pub const TRACKS_DIR: &str = "tracks";
@@ -32,6 +39,8 @@ pub type Tracks = BTreeMap<String, Arc<LoadedTrack>>;
 pub struct LoadedTrack {
     pub description: TrackDescription,
     pub track: Track,
+    /// Who published it from the level editor; `None` for the game's own.
+    pub author: Option<Author>,
 }
 
 /// Loads every `.ron` file of the tracks directory. A server without tracks has nothing to race on,
@@ -60,7 +69,11 @@ pub fn load_track(path: &Path) -> Result<LoadedTrack> {
     let description: TrackDescription = read_ron(path)?;
     let track =
         Track::build(&description).with_context(|| format!("invalid track {}", path.display()))?;
-    Ok(LoadedTrack { description, track })
+    Ok(LoadedTrack {
+        description,
+        track,
+        author: None,
+    })
 }
 
 /// Loads the car tuning, which must suit every track.
@@ -149,6 +162,155 @@ fn modified_time(path: &Path) -> Option<SystemTime> {
         .ok()
 }
 
+/// The key every circuit published from the level editor starts with (since v1.0.0-rc2), so it
+/// never takes the key of one of the game's own.
+pub const USER_TRACK_PREFIX: &str = "user-";
+
+/// A circuit published from the level editor, as its file holds it: who published it, and the
+/// circuit.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct UserTrackFile {
+    /// The author's identity, in hexadecimal: only they may publish it again.
+    author: String,
+    author_name: String,
+    description: TrackDescription,
+}
+
+/// Where the circuits published from the level editor are kept, one file each, outside the data
+/// directory a deployment replaces. `None` keeps them in memory, for tests.
+#[derive(Debug, Clone)]
+pub struct UserTracks {
+    dir: Option<PathBuf>,
+}
+
+impl UserTracks {
+    pub fn kept_in(dir: PathBuf) -> Self {
+        Self { dir: Some(dir) }
+    }
+
+    #[cfg(test)]
+    pub fn in_memory() -> Self {
+        Self { dir: None }
+    }
+
+    /// Every circuit published so far. No directory is none published; a file that does not
+    /// load, or no longer builds, is reported and left out rather than stopping the server.
+    pub fn load(&self) -> Tracks {
+        let mut tracks = Tracks::new();
+        let Some(dir) = &self.dir else {
+            return tracks;
+        };
+        let Ok(entries) = fs::read_dir(dir) else {
+            return tracks;
+        };
+        for path in entries.flatten().map(|entry| entry.path()) {
+            if path.extension().is_none_or(|extension| extension != "ron") {
+                continue;
+            }
+            let Some(key) = path.file_stem().and_then(|stem| stem.to_str()) else {
+                continue;
+            };
+            let loaded = read_ron::<UserTrackFile>(&path).and_then(|file| {
+                let author = crate::ranking::player_id(&file.author)
+                    .context("the author is not an identity")?;
+                let track = Track::build(&file.description)
+                    .with_context(|| format!("invalid track {}", path.display()))?;
+                Ok(LoadedTrack {
+                    description: file.description,
+                    track,
+                    author: Some(Author {
+                        id: author,
+                        name: file.author_name,
+                    }),
+                })
+            });
+            match loaded {
+                Ok(loaded) => {
+                    tracks.insert(key.to_owned(), Arc::new(loaded));
+                }
+                Err(problem) => warn!("published track left out: {problem:#}"),
+            }
+        }
+        tracks
+    }
+
+    /// Writes the circuit `key` to its file, replacing the one before.
+    pub fn save(&self, key: &str, author: &Author, description: &TrackDescription) -> Result<()> {
+        let Some(dir) = &self.dir else {
+            return Ok(());
+        };
+        fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
+        let file = UserTrackFile {
+            author: crate::ranking::hex(&author.id.0),
+            author_name: author.name.clone(),
+            description: description.clone(),
+        };
+        let text = ron::ser::to_string_pretty(&file, ron::ser::PrettyConfig::default())
+            .context("writing the track")?;
+        crate::ranking::write_whole(&dir.join(format!("{key}.ron")), &text)
+    }
+}
+
+/// Who published a circuit from the level editor.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Author {
+    pub id: PlayerId,
+    pub name: String,
+}
+
+/// The key a circuit named `name` is published under: its name in lower case, every run of other
+/// characters than letters and digits a dash, after [`USER_TRACK_PREFIX`]. `None` for a name that
+/// is not a valid one for a lobby, or holds no letter or digit.
+pub fn user_track_key(name: &str) -> Option<String> {
+    if !star_racer_protocol::is_valid_lobby_name(name) {
+        return None;
+    }
+    let mut slug = String::new();
+    for character in name.trim().chars().flat_map(char::to_lowercase) {
+        if character.is_ascii_alphanumeric() {
+            slug.push(character);
+        } else if !slug.is_empty() && !slug.ends_with('-') {
+            slug.push('-');
+        }
+    }
+    let slug = slug.trim_end_matches('-');
+    (!slug.is_empty()).then(|| format!("{USER_TRACK_PREFIX}{slug}"))
+}
+
+/// Builds a circuit from the level editor, refusing what a lobby could not race: too much of
+/// anything, a lap too long, a circuit that does not build, or one the car does not fit.
+pub fn check_user_track(
+    description: &TrackDescription,
+    tuning: &CarTuning,
+) -> Result<Track, PublishError> {
+    let lists = [
+        description.segments.len(),
+        description.elevation.len(),
+        description.narrows.len(),
+        description.scenery.len(),
+        description.pads.len(),
+        description.gaps.len(),
+        description.checkpoints.len(),
+        description.breaches.len(),
+    ];
+    if lists.iter().any(|count| *count > MAX_TRACK_ITEMS) {
+        return Err(PublishError::TooBig);
+    }
+    let track =
+        Track::build(description).map_err(|error| PublishError::Invalid(error.to_string()))?;
+    if track.length() > MAX_TRACK_LENGTH {
+        return Err(PublishError::TooBig);
+    }
+    if tuning.collision_radius >= track.narrowest_half_width() {
+        return Err(PublishError::Invalid(format!(
+            "the road is {:.1} m wide where it pinches in: the car needs more than {:.1} m",
+            track.narrowest_half_width() * 2.0,
+            tuning.collision_radius * 2.0
+        )));
+    }
+    Ok(track)
+}
+
 fn read_ron<T: DeserializeOwned>(path: &Path) -> Result<T> {
     let text =
         fs::read_to_string(path).with_context(|| format!("cannot read {}", path.display()))?;
@@ -164,6 +326,30 @@ mod tests {
 
     fn data_dir() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("data")
+    }
+
+    /// A published circuit is written to its file and read back with its author; a key's name
+    /// is its name in lower case with dashes, and a name with no letter nor digit makes none.
+    #[test]
+    fn published_tracks_are_kept_and_read_back() {
+        assert_eq!(user_track_key("Ada's  Loop!").as_deref(), Some("user-ada-s-loop"));
+        assert_eq!(user_track_key("--"), None);
+        let dir = std::env::temp_dir().join(format!("star-racer-user-tracks-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let kept = UserTracks::kept_in(dir.clone());
+        assert!(kept.load().is_empty(), "no directory is no track");
+        let tracks = load_tracks(&data_dir()).unwrap();
+        let (_, odyssey) = tracks.iter().next().unwrap();
+        let author = Author {
+            id: PlayerId([7; 32]),
+            name: "Ada".into(),
+        };
+        kept.save("user-mine", &author, &odyssey.description).unwrap();
+        let loaded = kept.load();
+        let mine = &loaded["user-mine"];
+        assert_eq!(mine.author.as_ref(), Some(&author));
+        assert_eq!(mine.description, odyssey.description);
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// Every shipped track loads, and the autopilot laps it with the shipped car: drifting without

@@ -9,13 +9,15 @@ use axum::extract::ws::{Message, WebSocket};
 use star_racer_protocol::auth::{self, PublicKey};
 use star_racer_protocol::ranked::QueueStatus;
 use star_racer_protocol::{
-    self as protocol, CarLook, ClientMessage, Identity, JoinError, Login, PROTOCOL_VERSION, RejectReason,
+    self as protocol, CarLook, ClientMessage, Identity, JoinError, Login, PROTOCOL_VERSION,
+    PublishError, RejectReason,
     ServerMessage, is_valid_nickname, is_valid_password, names, rewards,
 };
 use tokio::sync::oneshot;
 use tokio::time::timeout;
 use tracing::info;
 
+use crate::content::Author;
 use crate::directory::{Directory, OnlineGuard, Replaced};
 use crate::lobby::Membership;
 
@@ -204,6 +206,7 @@ async fn connected(
     let mut players = directory.online_players();
     let mut leaderboard = directory.leaderboard();
     let mut queue_size = directory.queue_size();
+    let mut track_list = directory.track_list();
     lobbies.mark_changed();
     players.mark_changed();
     leaderboard.mark_changed();
@@ -270,6 +273,17 @@ async fn connected(
             }
             // Only browsing players are told who is connected: it is the lobby browser that
             // shows them.
+            // A circuit published: everyone browsing gets the new list (since v1.0.0-rc2).
+            changed = track_list.changed() => {
+                if changed.is_err() {
+                    return "the server is stopping".into();
+                }
+                let list = track_list.borrow_and_update().as_ref().clone();
+                if let Err(error) = send(socket, &ServerMessage::Tracks(list)).await {
+                    return error.to_string();
+                }
+                continue;
+            }
             changed = players.changed() => {
                 if changed.is_err() {
                     return "the server is stopping".into();
@@ -296,6 +310,24 @@ async fn connected(
                 }
                 Ok(Some(ClientMessage::QuickPlay)) => {
                     directory.quick_play(player.clone()).await
+                }
+                Ok(Some(ClientMessage::TryTrack(description))) => {
+                    directory.try_track(description, player.clone()).await
+                }
+                Ok(Some(ClientMessage::PublishTrack(description))) => {
+                    let published = if player.guest {
+                        Err(PublishError::AccountRequired)
+                    } else {
+                        let author = Author {
+                            id: player.id,
+                            name: player.nickname.clone(),
+                        };
+                        directory.publish_track(description, author).await
+                    };
+                    if let Err(error) = send(socket, &ServerMessage::Published(published)).await {
+                        return error.to_string();
+                    }
+                    continue;
                 }
                 Ok(Some(ClientMessage::QueueRanked)) if player.guest => {
                     Err(JoinError::AccountRequired)
@@ -470,6 +502,8 @@ async fn play(socket: &mut WebSocket, membership: Membership, replaced: &mut Rep
                 // The garage is reached from the menus only; one sent from a lobby waits for the
                 // next.
                 Ok(Some(ClientMessage::SetLook(_))) => {}
+                // Sent from the editor before the client knew it was in a lobby.
+                Ok(Some(ClientMessage::TryTrack(_) | ClientMessage::PublishTrack(_))) => {}
                 Ok(Some(_)) => break Ending::Lost("unexpected message".into()),
                 Ok(None) => break Ending::Lost("connection closed".into()),
                 Err(error) => break Ending::Lost(error.to_string()),

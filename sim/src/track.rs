@@ -14,8 +14,9 @@ use std::fmt;
 
 use bitcode::{Decode, Encode};
 use glam::{DVec2, Vec2};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
+pub mod editing;
 pub mod scenery;
 
 use self::scenery::{Prop, Side};
@@ -52,7 +53,7 @@ const MAX_GRADE: f32 = 25.0;
 /// widest spacing of the centerline points, between which heights are interpolated linearly.
 const ALONG_STEP: f32 = 0.5;
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Encode, Decode)]
 #[serde(deny_unknown_fields)]
 pub struct TrackDescription {
     pub name: String,
@@ -90,7 +91,7 @@ pub struct TrackDescription {
 /// the girders of a broken bridge, and still hold a car in; a car on the road when it reaches the
 /// lip falls through, and comes back at the last checkpoint it passed. A hop clears a short one,
 /// the thruster a long one.
-#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize, Encode, Decode)]
 #[serde(deny_unknown_fields)]
 pub struct Gap {
     /// Meters along the lap from the start line where the road stops.
@@ -143,7 +144,7 @@ impl Gap {
 /// A breach: a stretch where the wall on one side of the road is missing. Nothing holds a car
 /// in there: it drives off the edge of the road and falls, onto another part of the road if one
 /// lies below and ahead, which is what a shortcut is, or into the dark.
-#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize, Encode, Decode)]
 #[serde(deny_unknown_fields)]
 pub struct Breach {
     /// Meters along the lap from the start line where the wall stops.
@@ -178,7 +179,7 @@ impl Breach {
 ///
 /// Placed like a [`Narrows`], by its distance along the lap, and across the road by its offset
 /// from the centerline, so it keeps its place when the road around it is redrawn.
-#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize, Encode, Decode)]
 #[serde(deny_unknown_fields)]
 pub struct Pad {
     /// Meters along the lap from the start line where the pad begins.
@@ -228,7 +229,7 @@ impl Pad {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize, Encode, Decode)]
 #[serde(deny_unknown_fields)]
 pub enum Segment {
     Straight {
@@ -263,7 +264,7 @@ pub enum Segment {
 /// slope of the parabola through that height and its two neighbors: the grade never jumps, and the
 /// road crests near a height above both its neighbors and bottoms out near one below them. The
 /// curve runs on from the last height round to the first, so the relief of a lap closes on itself.
-#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize, Encode, Decode)]
 #[serde(deny_unknown_fields)]
 pub struct Elevation {
     /// Meters along the lap from the start line.
@@ -386,7 +387,7 @@ impl HeightProfile {
 /// A narrows is placed by its distance along the lap, the way a prop of the [`scenery`] is, rather
 /// than on a segment: it keeps its place when the road around it is redrawn, and the editor to come
 /// can drag one along the road.
-#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize, Encode, Decode)]
 #[serde(deny_unknown_fields)]
 pub struct Narrows {
     /// Meters along the lap from the start line where the narrow stretch begins.
@@ -1060,6 +1061,16 @@ struct Piece {
 
 impl CurvatureProfile {
     fn new(description: &TrackDescription) -> Result<Self, TrackError> {
+        let (profile, total_angle) = Self::open(description)?;
+        if (total_angle.abs() - 360.0).abs() > ANGLE_TOLERANCE {
+            return Err(TrackError::NotALoop { total_angle });
+        }
+        Ok(profile)
+    }
+
+    /// The profile of the segments whether or not they close a loop, and the angle they turn
+    /// through in all, in degrees: what an editor draws while a circuit is still open.
+    fn open(description: &TrackDescription) -> Result<(Self, f32), TrackError> {
         if !(description.width.is_finite() && description.width > 0.0) {
             return Err(TrackError::InvalidWidth);
         }
@@ -1145,10 +1156,6 @@ impl CurvatureProfile {
             }
         }
 
-        if (total_angle.abs() - 360.0).abs() > ANGLE_TOLERANCE {
-            return Err(TrackError::NotALoop { total_angle });
-        }
-
         let starts = pieces
             .iter()
             .scan(0.0, |distance, piece| {
@@ -1157,7 +1164,7 @@ impl CurvatureProfile {
                 Some(start)
             })
             .collect();
-        Ok(Self { pieces, starts })
+        Ok((Self { pieces, starts }, total_angle))
     }
 
     fn length(&self) -> f64 {

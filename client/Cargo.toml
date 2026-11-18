@@ -1,6 +1,6 @@
 [package]
 name = "star-racer-client"
-version = "1.0.0-rc1"
+version = "1.0.0-rc2"
 edition = "2024"
 license = "Unlicense"
 

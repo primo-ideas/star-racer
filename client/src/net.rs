@@ -19,7 +19,8 @@ use star_racer_protocol::auth;
 use star_racer_protocol::ranked::{LeaderboardEntry, QueueStatus, RankedProfile};
 use star_racer_protocol::{
     self as protocol, CarId, CarLook, ClientMessage, Identity, JoinError, LobbyId, LobbySettings,
-    LobbyState, LobbySummary, Login, OnlinePlayer, PROTOCOL_VERSION, RejectReason, ServerMessage,
+    LobbyState, LobbySummary, Login, OnlinePlayer, PROTOCOL_VERSION, PublishError, RejectReason,
+    ServerMessage,
     Snapshot, TrackInfo,
 };
 use tokio::sync::{mpsc as async_mpsc, oneshot};
@@ -76,6 +77,10 @@ pub enum NetEvent {
         received: Instant,
     },
     Rejected(RejectReason),
+    /// Every track again, one having been published (since v1.0.0-rc2).
+    Tracks(Vec<TrackInfo>),
+    /// What became of a circuit sent to be published from the editor.
+    Published(Result<String, PublishError>),
     /// Always the last event of a session.
     Disconnected(String),
 }
@@ -361,6 +366,8 @@ async fn run_session(
                         number,
                         received: Instant::now(),
                     },
+                    ServerMessage::Tracks(tracks) => NetEvent::Tracks(tracks),
+                    ServerMessage::Published(result) => NetEvent::Published(result),
                     ServerMessage::Rejected(reason) => {
                         let _ = events.send(NetEvent::Rejected(reason));
                         return Ok("rejected by server".into());
@@ -503,6 +510,8 @@ fn log_event(event: &NetEvent) {
         } => info!(%lobby, %car, name = %settings.name, "entered a lobby"),
         NetEvent::JoinFailed(error) => warn!(?error, "could not enter the lobby"),
         NetEvent::Rejected(reason) => warn!(?reason, "rejected by server"),
+        NetEvent::Tracks(tracks) => info!(tracks = tracks.len(), "tracks listed again"),
+        NetEvent::Published(result) => info!(?result, "circuit published"),
         NetEvent::Disconnected(reason) => warn!(%reason, "disconnected from server"),
         NetEvent::Lobbies(_)
         | NetEvent::Players(_)

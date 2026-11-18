@@ -7,6 +7,7 @@ the current status; these pages explain *why* the code looks the way it does.
 - [Protocol](protocol.md) — wire format, versioning, handshake, authentication.
 - [Simulation](simulation.md) — conventions, the car model and its tuning, drift, walls, autopilot.
 - [Tracks](tracks.md) — the track file format, transitions, scenery, validation, built geometry.
+- [Level editor](editor.md) — the editor in the game, closing the road by itself, trying and publishing circuits.
 - [Lobbies](lobbies.md) — lobby settings and phases, race rules, how the server runs them.
 - [Quick play and ranked](ranked.md) — finding a race at once, the queue, matchmaking, ratings.
 - [Rewards](rewards.md) — experience, levels, and the cars, trails and horns they unlock.

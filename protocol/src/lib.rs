@@ -20,7 +20,7 @@ pub mod ranked;
 pub mod rewards;
 
 /// Bump on every incompatible protocol change.
-pub const PROTOCOL_VERSION: u32 = 43;
+pub const PROTOCOL_VERSION: u32 = 44;
 
 /// Local server port. In production, the reverse proxy terminates TLS and forwards here.
 pub const DEFAULT_PORT: u16 = 8080;
@@ -110,7 +110,24 @@ pub enum ClientMessage {
     /// The player sounds their horn. Only in a lobby with a car; everyone there hears it, through
     /// [`CarSnapshot::honks`]. The server lets one through every [`HONK_EVERY_TICKS`].
     Honk,
+    /// From the level editor (since v1.0.0-rc2): races the player alone on this circuit, in a
+    /// lobby of its own nobody else sees, as [`TRY_TRACK`]. Answered as a join is, the circuit
+    /// refused with [`JoinError::InvalidTrack`].
+    TryTrack(TrackDescription),
+    /// From the level editor: puts this circuit on the server for every lobby to race on, under a
+    /// key made from its name, or replaces the one the player published under that name before.
+    /// Answered with [`ServerMessage::Published`]; an account's, never a guest's.
+    PublishTrack(TrackDescription),
 }
+
+/// The key of the track a lobby opened by [`ClientMessage::TryTrack`] races on: the client knows
+/// it already, having sent it.
+pub const TRY_TRACK: &str = "~try";
+
+/// The most segments, and of each other list, a published circuit may hold.
+pub const MAX_TRACK_ITEMS: usize = 400;
+/// The longest a published circuit's lap may be, in meters.
+pub const MAX_TRACK_LENGTH: f32 = 20_000.0;
 
 /// The least time between two honks of one car, in ticks: a third of a second.
 pub const HONK_EVERY_TICKS: u32 = 20;
@@ -164,6 +181,24 @@ pub enum ServerMessage {
         xp: u32,
     },
     Rejected(RejectReason),
+    /// Every track, again, when one was published (since v1.0.0-rc2), in the order of
+    /// [`ServerMessage::Welcome`].
+    Tracks(Vec<TrackInfo>),
+    /// What became of a [`ClientMessage::PublishTrack`]: the key it races under, or why not.
+    Published(Result<String, PublishError>),
+}
+
+/// Why a circuit was not published.
+#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
+pub enum PublishError {
+    /// Guests cannot publish.
+    AccountRequired,
+    /// Another player's circuit, or one of the game's, has that name.
+    NameTaken,
+    /// The circuit does not build, or the car does not fit it: why, as the simulation says.
+    Invalid(String),
+    /// Over [`MAX_TRACK_ITEMS`] of something, or a lap over [`MAX_TRACK_LENGTH`].
+    TooBig,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
@@ -283,6 +318,8 @@ pub enum JoinError {
     UnknownTrack,
     /// Ranked is for players with an account: a guest asked to queue.
     AccountRequired,
+    /// A circuit to try (see [`ClientMessage::TryTrack`]) that does not build or does not fit the car.
+    InvalidTrack,
 }
 
 #[derive(Debug, Clone, PartialEq, Encode, Decode)]
@@ -290,6 +327,8 @@ pub struct TrackInfo {
     /// What lobby settings name the track by.
     pub key: String,
     pub description: TrackDescription,
+    /// Who published it from the level editor (since v1.0.0-rc2); `None` for the game's own.
+    pub author: Option<String>,
 }
 
 /// Identifies a lobby for as long as it exists.
@@ -685,6 +724,7 @@ mod tests {
                     checkpoints: vec![90.0, 300.0],
                     breaches: Vec::new(),
                 },
+                author: Some("Zoë".into()),
             }],
             identity: Identity {
                 name: "Zoë".into(),

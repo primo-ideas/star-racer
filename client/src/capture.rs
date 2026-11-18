@@ -48,6 +48,7 @@ struct CaptureSettings {
 enum Target {
     Login,
     Garage,
+    Editor,
     Lobbies,
     Lobby,
 }
@@ -64,8 +65,11 @@ impl Plugin for CapturePlugin {
             || script.quick_play
             || script.ranked
             || script.watch.is_some()
+            || script.editor_try
         {
             Target::Lobby
+        } else if script.editor {
+            Target::Editor
         } else if script.login.is_some() {
             Target::Lobbies
         } else if script.garage {
@@ -127,6 +131,7 @@ fn capture_when_rendered(
     let settled = match settings.target {
         Target::Login => *screen.get() == Screen::Login,
         Target::Garage => *screen.get() == Screen::Garage,
+        Target::Editor => *screen.get() == Screen::Editor,
         Target::Lobbies => *screen.get() == Screen::Lobbies && list.loaded,
         Target::Lobby => {
             *screen.get() == Screen::Lobby

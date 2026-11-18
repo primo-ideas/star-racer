@@ -117,6 +117,11 @@ connection is dropped without a reply.
   walls from them; props are decoration the client builds, which the server sends and never
   simulates.
 
+Since v1.0.0-rc2 the list grows: a circuit published from the level editor reaches every browsing
+player as the whole list again, `ServerMessage::Tracks`, and `TrackInfo::author` names who published
+it; trying and publishing one are `ClientMessage::TryTrack` and `PublishTrack` (see
+[Level editor](editor.md)).
+
 ## Browsing lobbies
 
 Once welcomed, the player browses lobbies (see [Lobbies](lobbies.md)).

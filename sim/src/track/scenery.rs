@@ -12,7 +12,7 @@
 //! prop stands at the level of the road beside it, however high the relief carries the road there.
 
 use bitcode::{Decode, Encode};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// Tallest, longest or widest a prop may be, in meters. Past this a file is more likely wrong than
 /// ambitious.
@@ -29,7 +29,7 @@ const MIN_CLEARANCE: f32 = 4.0;
 const MIN_TUNNEL_CLEARANCE: f32 = 7.0;
 
 /// Which side of the road a prop stands on, looking along the driving direction.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Encode, Decode)]
 pub enum Side {
     Left,
     Right,
@@ -54,7 +54,7 @@ impl Side {
 /// against the wall, and no prop ever overhangs the road.
 ///
 /// The sizes have defaults, so a file writes only what it wants different.
-#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize, Encode, Decode)]
 #[serde(deny_unknown_fields)]
 pub enum Prop {
     /// An arch over the road, its legs standing just outside the walls. The landmark of a circuit:

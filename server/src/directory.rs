@@ -9,19 +9,22 @@
 //! The connected players are kept here too, and published the same way: a browsing player sees
 //! who else is on the server and whether they are on the list or in a lobby.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use star_racer_protocol::ranked::{LeaderboardEntry, RankedProfile};
-use star_racer_protocol::{JoinError, LobbyId, LobbySettings, OnlinePlayer, Presence, TrackInfo};
+use star_racer_protocol::{
+    JoinError, LobbyId, LobbySettings, OnlinePlayer, Presence, PublishError, TRY_TRACK, TrackInfo,
+};
+use star_racer_sim::track::TrackDescription;
 use star_racer_sim::car::CarTuning;
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio::time::{self, MissedTickBehavior};
 use tracing::{error, info};
 
 use crate::accounts::Accounts;
-use crate::content::{LoadedTrack, Tracks};
+use crate::content::{self, Author, LoadedTrack, Tracks, UserTracks};
 use crate::lobby::{
     self, Entrant, InfoStatus, LobbyEvent, LobbyHandle, LobbyInfo, LobbyKind, Membership, Timings,
 };
@@ -51,7 +54,7 @@ pub struct Directory {
     lobbies: watch::Receiver<Arc<Vec<LobbyInfo>>>,
     leaderboard: watch::Receiver<Arc<Vec<LeaderboardEntry>>>,
     queue_size: watch::Receiver<u16>,
-    tracks: Arc<Vec<TrackInfo>>,
+    tracks: watch::Receiver<Arc<Vec<TrackInfo>>>,
     online: Online,
     accounts: Accounts,
 }
@@ -83,6 +86,18 @@ enum Command {
         player: PlayerId,
         reply: oneshot::Sender<(RankedProfile, u32)>,
     },
+    /// Opens a lobby only `player` sees, racing `description` (see `ClientMessage::TryTrack`).
+    Try {
+        description: Box<TrackDescription>,
+        player: Player,
+        reply: oneshot::Sender<Result<Membership, JoinError>>,
+    },
+    /// Publishes `description` for every lobby (see `ClientMessage::PublishTrack`).
+    Publish {
+        description: Box<TrackDescription>,
+        author: Author,
+        reply: oneshot::Sender<Result<String, PublishError>>,
+    },
 }
 
 /// Where quick play sends a player.
@@ -102,9 +117,11 @@ struct Queued {
 }
 
 impl Directory {
-    /// Starts the directory on its own task. Lobbies race on `tracks`, driven with `tuning`.
+    /// Starts the directory on its own task. Lobbies race on `tracks` and on the circuits players
+    /// published, kept in `user_tracks`, driven with `tuning`.
     pub fn spawn(
-        tracks: Tracks,
+        mut tracks: Tracks,
+        user_tracks: UserTracks,
         tuning: watch::Receiver<CarTuning>,
         timings: Timings,
         ratings: Ratings,
@@ -116,16 +133,17 @@ impl Directory {
         let (leaderboard_sender, leaderboard) = watch::channel(Arc::new(ratings.leaderboard()));
         let (queue_size_sender, queue_size) = watch::channel(0);
         let (events, event_receiver) = mpsc::unbounded_channel();
-        let track_infos = tracks
-            .iter()
-            .map(|(key, loaded)| TrackInfo {
-                key: key.clone(),
-                description: loaded.description.clone(),
-            })
-            .collect();
+        for (key, loaded) in user_tracks.load() {
+            info!(key, name = loaded.track.name(), "published track loaded");
+            tracks.entry(key).or_insert(loaded);
+        }
+        let (track_list, track_infos) = watch::channel(Arc::new(track_infos(&tracks)));
 
         let registry = Registry {
             tracks,
+            user_tracks,
+            track_list,
+            trying: BTreeSet::new(),
             tuning,
             timings,
             next_id: 0,
@@ -145,7 +163,7 @@ impl Directory {
             lobbies,
             leaderboard,
             queue_size,
-            tracks: Arc::new(track_infos),
+            tracks: track_infos,
             online: Online::default(),
             accounts,
         }
@@ -167,7 +185,48 @@ impl Directory {
     }
 
     pub fn tracks(&self) -> Vec<TrackInfo> {
-        self.tracks.as_ref().clone()
+        self.tracks.borrow().as_ref().clone()
+    }
+
+    /// Every track, updated whenever one is published.
+    pub fn track_list(&self) -> watch::Receiver<Arc<Vec<TrackInfo>>> {
+        self.tracks.clone()
+    }
+
+    /// Opens a lobby where `player` races `description` alone (see `ClientMessage::TryTrack`).
+    pub async fn try_track(
+        &self,
+        description: TrackDescription,
+        player: Player,
+    ) -> Result<Membership, JoinError> {
+        let (reply, opened) = oneshot::channel();
+        let command = Command::Try {
+            description: Box::new(description),
+            player,
+            reply,
+        };
+        self.commands
+            .send(command)
+            .await
+            .map_err(|_| JoinError::NoSuchLobby)?;
+        opened.await.map_err(|_| JoinError::NoSuchLobby)?
+    }
+
+    /// Publishes `description` from `author` for every lobby, and answers its key.
+    pub async fn publish_track(
+        &self,
+        description: TrackDescription,
+        author: Author,
+    ) -> Result<String, PublishError> {
+        let (reply, published) = oneshot::channel();
+        let command = Command::Publish {
+            description: Box::new(description),
+            author,
+            reply,
+        };
+        let stopping = || PublishError::Invalid("the server is stopping".into());
+        self.commands.send(command).await.map_err(|_| stopping())?;
+        published.await.map_err(|_| stopping())?
     }
 
     /// Every lobby, updated whenever one changes.
@@ -294,6 +353,11 @@ fn quick_play_score(info: &LobbyInfo) -> Option<u8> {
 
 struct Registry {
     tracks: Tracks,
+    user_tracks: UserTracks,
+    /// Every track as the sessions hand it to the players.
+    track_list: watch::Sender<Arc<Vec<TrackInfo>>>,
+    /// The lobbies opened to try a circuit from the level editor, which nobody else sees.
+    trying: BTreeSet<LobbyId>,
     tuning: watch::Receiver<CarTuning>,
     timings: Timings,
     next_id: u32,
@@ -366,6 +430,20 @@ impl Registry {
             Command::Profile { player, reply } => {
                 let _ = reply.send((self.ratings.profile(player), self.progress.xp(player)));
             }
+            Command::Try {
+                description,
+                player,
+                reply,
+            } => {
+                let _ = reply.send(self.try_track(*description, player));
+            }
+            Command::Publish {
+                description,
+                author,
+                reply,
+            } => {
+                let _ = reply.send(self.publish_track(*description, author));
+            }
         }
     }
 
@@ -412,10 +490,90 @@ impl Registry {
         id
     }
 
-    /// The track a new lobby races on, in turn among all of them.
+    /// The track a new quick play lobby or ranked match races on, in turn among the game's own:
+    /// the circuits players published are raced in the lobbies they open.
     fn next_track(&self) -> Option<(&String, &Arc<LoadedTrack>)> {
-        let turn = self.next_id as usize % self.tracks.len().max(1);
-        self.tracks.iter().nth(turn)
+        let official = || self.tracks.iter().filter(|(_, loaded)| loaded.author.is_none());
+        let turn = self.next_id as usize % official().count().max(1);
+        official().nth(turn)
+    }
+
+    /// Opens a lobby of one where `player` races `description`, which nobody else sees: one lap,
+    /// again and again, until they leave.
+    fn try_track(
+        &mut self,
+        description: TrackDescription,
+        player: Player,
+    ) -> Result<Membership, JoinError> {
+        let track = content::check_user_track(&description, &self.tuning.borrow())
+            .map_err(|_| JoinError::InvalidTrack)?;
+        let loaded = Arc::new(LoadedTrack {
+            description,
+            track,
+            author: None,
+        });
+        let id = self.next_lobby_id();
+        let settings = LobbySettings {
+            name: format!("Try {}", id.0),
+            track: TRY_TRACK.to_owned(),
+            laps: 1,
+            min_players: 1,
+            max_players: 1,
+            bots: 0,
+        };
+        info!(lobby = %id, player = %player.id, "trying a circuit");
+        let (membership, info) = lobby::spawn(
+            id,
+            settings,
+            loaded,
+            self.tuning.clone(),
+            self.timings,
+            LobbyKind::Custom,
+            player,
+            self.events.clone(),
+        );
+        self.trying.insert(id);
+        self.lobbies.insert(id, (membership.lobby.clone(), info));
+        Ok(membership)
+    }
+
+    /// Publishes `description` from `author` under the key its name makes, replacing what they
+    /// published under it before, and tells every session the new list.
+    fn publish_track(
+        &mut self,
+        description: TrackDescription,
+        author: Author,
+    ) -> Result<String, PublishError> {
+        let key = content::user_track_key(&description.name)
+            .ok_or_else(|| PublishError::Invalid("the circuit needs a name of 1 to 32 characters, with a letter or a digit".into()))?;
+        let name = description.name.trim().to_lowercase();
+        let taken = self.tracks.iter().any(|(other, loaded)| {
+            let theirs = loaded.author.as_ref().is_some_and(|other| other.id == author.id);
+            (other == &key || loaded.description.name.trim().to_lowercase() == name) && !theirs
+        });
+        if taken {
+            return Err(PublishError::NameTaken);
+        }
+        let track = content::check_user_track(&description, &self.tuning.borrow())?;
+        let user_tracks = self.user_tracks.clone();
+        let (file_key, file_author, file_description) = (key.clone(), author.clone(), description.clone());
+        tokio::task::spawn_blocking(move || {
+            if let Err(problem) = user_tracks.save(&file_key, &file_author, &file_description) {
+                error!("the published track {file_key} could not be saved: {problem:#}");
+            }
+        });
+        info!(key, author = %author.name, length = track.length(), "track published");
+        self.tracks.insert(
+            key.clone(),
+            Arc::new(LoadedTrack {
+                description,
+                track,
+                author: Some(author),
+            }),
+        );
+        self.track_list
+            .send_replace(Arc::new(track_infos(&self.tracks)));
+        Ok(key)
     }
 
     fn quick_play(&mut self, player: Player, open: bool) -> Result<QuickPlayed, JoinError> {
@@ -544,6 +702,7 @@ impl Registry {
             }
             LobbyEvent::Closed(id) => {
                 self.lobbies.remove(&id);
+                self.trying.remove(&id);
             }
             LobbyEvent::MatchFinished(placed) => {
                 self.ratings.apply(&placed);
@@ -564,7 +723,7 @@ impl Registry {
         let list = self
             .lobbies
             .values()
-            .filter(|(_, info)| !info.ranked)
+            .filter(|(_, info)| !info.ranked && !self.trying.contains(&info.id))
             .map(|(_, info)| info.clone())
             .collect();
         self.list.send_replace(Arc::new(list));
@@ -731,4 +890,16 @@ impl Drop for OnlineGuard {
     fn drop(&mut self) {
         self.online.disconnect(self.player, self.connection);
     }
+}
+
+/// Every track as the players are given it, in the order of their keys.
+fn track_infos(tracks: &Tracks) -> Vec<TrackInfo> {
+    tracks
+        .iter()
+        .map(|(key, loaded)| TrackInfo {
+            key: key.clone(),
+            description: loaded.description.clone(),
+            author: loaded.author.as_ref().map(|author| author.name.clone()),
+        })
+        .collect()
 }

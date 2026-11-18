@@ -556,6 +556,12 @@ fn spawn_login(
                 ))
                 .insert(small(170.0))
                 .observe(ask_for_leaderboard);
+                // Not on a phone: the editor is laid out for a mouse and a wide screen.
+                if !touchscreen.0 {
+                    row.spawn((ActionButton, button(&fonts, ButtonKind::Quiet, "EDITOR")))
+                        .insert(small(120.0))
+                        .observe(open_editor);
+                }
                 // Needs nobody to come in as and no server: always there, as the settings are.
                 row.spawn(button(&fonts, ButtonKind::Quiet, "GARAGE"))
                     .insert(small(120.0))
@@ -670,7 +676,9 @@ fn connect_scripted(
         ScriptedLogin::Account { create: true, .. } => LoginMode::Create,
         ScriptedLogin::Account { .. } => LoginMode::SignIn,
     };
-    *intent = if script.quick_play {
+    *intent = if script.editor {
+        Intent::Editor
+    } else if script.quick_play {
         Intent::QuickPlay
     } else if script.ranked {
         Intent::Ranked
@@ -795,6 +803,7 @@ fn carry_out_intent(
         Intent::QuickPlay => network.send(ClientMessage::QuickPlay),
         Intent::Ranked => network.send(ClientMessage::QueueRanked),
         Intent::Leaderboard => leaderboard.open = true,
+        Intent::Editor => next_screen.set(Screen::Editor),
     }
 }
 
@@ -939,6 +948,11 @@ fn browse(_: On<Activate>, mut start: Start, ladder: Res<Ladder>) {
 
 fn ask_for_leaderboard(_: On<Activate>, mut start: Start) {
     start.go(Intent::Leaderboard);
+}
+
+/// The level editor needs the server, to try and to publish: connected first, as for the lobbies.
+fn open_editor(_: On<Activate>, mut start: Start) {
+    start.go(Intent::Editor);
 }
 
 fn select_mode(

@@ -9,7 +9,7 @@ use star_racer_protocol::ranked::{LeaderboardEntry, RankedProfile};
 use star_racer_protocol::rewards::{self, Reward};
 use star_racer_protocol::{
     CarId, ClientMessage, JoinError, LobbyId, LobbyPhase, LobbyPlayer, LobbySettings, LobbyState,
-    LobbySummary, OnlinePlayer, PlayerStatus, RatingChange,
+    LobbySummary, OnlinePlayer, PlayerStatus, RatingChange, TRY_TRACK, TrackInfo,
 };
 use star_racer_sim::track::{Track, TrackDescription};
 
@@ -52,9 +52,49 @@ pub struct TrackEntry {
     pub track: Arc<Track>,
     /// The track seen from above, for lists and pickers.
     pub thumbnail: Handle<Image>,
+    /// Who published it from the level editor; `None` for the game's own.
+    pub author: Option<String>,
 }
 
 impl Tracks {
+    /// Takes the server's list of tracks in place of the last one, keeping the circuit being tried
+    /// from the editor.
+    pub fn store(&mut self, infos: &[TrackInfo], images: &mut Assets<Image>) {
+        self.0.retain(|key, _| key == TRY_TRACK);
+        for info in infos {
+            match Track::build(&info.description) {
+                Ok(track) => {
+                    let thumbnail = images.add(thumbnail::render(&track));
+                    self.0.insert(
+                        info.key.clone(),
+                        TrackEntry {
+                            description: info.description.clone(),
+                            track: Arc::new(track),
+                            thumbnail,
+                            author: info.author.clone(),
+                        },
+                    );
+                }
+                Err(error) => error!(key = %info.key, "the server sent an invalid track: {error}"),
+            }
+        }
+    }
+
+    /// Keeps the circuit the editor sends to be tried, under [`TRY_TRACK`], so the lobby that races
+    /// it can draw it.
+    pub fn store_try(&mut self, description: &TrackDescription, track: Track, images: &mut Assets<Image>) {
+        let thumbnail = images.add(thumbnail::render(&track));
+        self.0.insert(
+            TRY_TRACK.to_owned(),
+            TrackEntry {
+                description: description.clone(),
+                track: Arc::new(track),
+                thumbnail,
+                author: None,
+            },
+        );
+    }
+
     /// The track's name, or its key if the server did not send it.
     pub fn name<'a>(&'a self, key: &'a str) -> &'a str {
         self.0
@@ -183,6 +223,7 @@ pub fn join_error_text(error: JoinError) -> &'static str {
         JoinError::InvalidSettings => "The server refused these lobby settings.",
         JoinError::UnknownTrack => "The server does not have this track.",
         JoinError::AccountRequired => "Ranked is for players with an account: sign in to play it.",
+        JoinError::InvalidTrack => "The server refused this circuit: it does not build, or the car does not fit it.",
     }
 }
 
@@ -216,25 +257,7 @@ fn receive_lobby_events(
     for event in events.read() {
         match event {
             NetEvent::Welcome { tracks: infos, .. } => {
-                tracks.0.clear();
-                for info in infos {
-                    match Track::build(&info.description) {
-                        Ok(track) => {
-                            let thumbnail = images.add(thumbnail::render(&track));
-                            tracks.0.insert(
-                                info.key.clone(),
-                                TrackEntry {
-                                    description: info.description.clone(),
-                                    track: Arc::new(track),
-                                    thumbnail,
-                                },
-                            );
-                        }
-                        Err(error) => {
-                            error!(key = %info.key, "the server sent an invalid track: {error}")
-                        }
-                    }
-                }
+                tracks.store(infos, &mut images);
                 *list = LobbyList::default();
                 online.0.clear();
                 current.0 = None;
@@ -248,6 +271,7 @@ fn receive_lobby_events(
                 };
             }
             NetEvent::Players(players) => online.0 = players.clone(),
+            NetEvent::Tracks(infos) => tracks.store(infos, &mut images),
             NetEvent::JoinedLobby {
                 lobby,
                 car,
@@ -304,7 +328,7 @@ fn receive_lobby_events(
                 online.0.clear();
                 ladder.queue = None;
             }
-            NetEvent::Snapshot { .. } | NetEvent::Pong { .. } => {}
+            NetEvent::Snapshot { .. } | NetEvent::Pong { .. } | NetEvent::Published(_) => {}
         }
     }
 }

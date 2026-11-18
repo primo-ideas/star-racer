@@ -128,60 +128,14 @@ fn spawn_track(
         return;
     };
     let track = Arc::clone(&entry.track);
-
-    // Colors come from the vertices; the materials only set how the surfaces take light.
-    let TrackMeshes {
-        lit,
-        scenery,
-        neon,
-        glow,
-        triangles,
-        landmarks,
-    } = track_meshes(&track, &entry.description.scenery);
-    let lit_material = materials.add(StandardMaterial {
-        perceptual_roughness: 0.9,
-        ..default()
-    });
-    let neon_material = materials.add(StandardMaterial {
-        unlit: true,
-        ..default()
-    });
-    commands.spawn((
+    let (triangles, landmarks) = spawn_scene(
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+        &track,
+        &entry.description.scenery,
         TrackScene,
-        Mesh3d(meshes.add(lit)),
-        MeshMaterial3d(lit_material),
-    ));
-    // The scenery casts no shadow: under a tunnel the road stays as readable as anywhere else, and
-    // the city is not drawn again into the shadow maps every frame. Nor does it shine: seen along
-    // its faces, as the road shows them, a building would catch the light whatever its color, and
-    // the city has to stay dark behind its neon.
-    let scenery_material = materials.add(StandardMaterial {
-        perceptual_roughness: 1.0,
-        reflectance: 0.0,
-        ..default()
-    });
-    commands.spawn((
-        TrackScene,
-        Mesh3d(meshes.add(scenery)),
-        MeshMaterial3d(scenery_material),
-        NotShadowCaster,
-    ));
-    commands.spawn((
-        TrackScene,
-        Mesh3d(meshes.add(neon)),
-        MeshMaterial3d(neon_material),
-    ));
-    // The light the walls throw on the road, added to whatever it falls on.
-    commands.spawn((
-        TrackScene,
-        Mesh3d(meshes.add(glow)),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            unlit: true,
-            alpha_mode: AlphaMode::Add,
-            ..default()
-        })),
-        NotShadowCaster,
-    ));
+    );
     city::spawn(
         &mut commands,
         &mut meshes,
@@ -202,6 +156,73 @@ fn spawn_track(
     );
     commands.insert_resource(CurrentTrack(track));
     commands.insert_resource(Roofs::of(&entry.description.scenery));
+}
+
+/// Builds the road, its walls and markings and the scenery of `props` around `track`, each
+/// entity marked with `marker`, and answers how many triangles that took and where the scenery
+/// left room for the city. The race's scene, and the level editor's (since v1.0.0-rc2).
+pub fn spawn_scene(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    track: &Track,
+    props: &[Prop],
+    marker: impl Component + Clone,
+) -> (usize, Landmarks) {
+    // Colors come from the vertices; the materials only set how the surfaces take light.
+    let TrackMeshes {
+        lit,
+        scenery,
+        neon,
+        glow,
+        triangles,
+        landmarks,
+    } = track_meshes(track, props);
+    let lit_material = materials.add(StandardMaterial {
+        perceptual_roughness: 0.9,
+        ..default()
+    });
+    let neon_material = materials.add(StandardMaterial {
+        unlit: true,
+        ..default()
+    });
+    commands.spawn((
+        marker.clone(),
+        Mesh3d(meshes.add(lit)),
+        MeshMaterial3d(lit_material),
+    ));
+    // The scenery casts no shadow: under a tunnel the road stays as readable as anywhere else, and
+    // the city is not drawn again into the shadow maps every frame. Nor does it shine: seen along
+    // its faces, as the road shows them, a building would catch the light whatever its color, and
+    // the city has to stay dark behind its neon.
+    let scenery_material = materials.add(StandardMaterial {
+        perceptual_roughness: 1.0,
+        reflectance: 0.0,
+        ..default()
+    });
+    commands.spawn((
+        marker.clone(),
+        Mesh3d(meshes.add(scenery)),
+        MeshMaterial3d(scenery_material),
+        NotShadowCaster,
+    ));
+    commands.spawn((
+        marker.clone(),
+        Mesh3d(meshes.add(neon)),
+        MeshMaterial3d(neon_material),
+    ));
+    // The light the walls throw on the road, added to whatever it falls on.
+    commands.spawn((
+        marker,
+        Mesh3d(meshes.add(glow)),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            unlit: true,
+            alpha_mode: AlphaMode::Add,
+            ..default()
+        })),
+        NotShadowCaster,
+    ));
+    (triangles, landmarks)
 }
 
 fn remove_track(mut commands: Commands, scenes: Query<Entity, With<TrackScene>>) {

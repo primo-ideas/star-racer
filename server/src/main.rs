@@ -49,6 +49,10 @@ struct Args {
     /// Where every player's experience is kept, beside the ladder and for the same reason.
     #[arg(long, default_value = "progress.ron")]
     progress: PathBuf,
+    /// Where the circuits players publish from the level editor are kept, one file each, beside the
+    /// ladder and for the same reason.
+    #[arg(long, default_value = "user-tracks")]
+    user_tracks: PathBuf,
 }
 
 /// Plain text and loopback only: in production, the reverse proxy terminates TLS and forwards here.
@@ -78,6 +82,7 @@ async fn main() -> Result<()> {
     let accounts = Accounts::load(args.accounts)?;
     let directory = Directory::spawn(
         tracks,
+        content::UserTracks::kept_in(args.user_tracks),
         tuning_file.watch(tuning),
         Timings::default(),
         ratings,

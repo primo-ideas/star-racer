@@ -16,7 +16,7 @@ use star_racer_protocol::ranked::{QueueStatus, RankedProfile};
 use star_racer_protocol::{
     self as protocol, CarId, CarLook, ClientMessage, Identity, JoinError, LobbyId, LobbyPhase,
     LobbySettings, LobbyState, LobbyStatus, LobbySummary, Login, OnlinePlayer, PROTOCOL_VERSION,
-    PlayerStatus, Presence, RejectReason, ServerMessage, Snapshot, TrackInfo, WS_PATH,
+    PlayerStatus, Presence, PublishError, RejectReason, ServerMessage, Snapshot, TrackInfo, WS_PATH,
 };
 use star_racer_sim::car::{Car, CarInput};
 use tokio::net::{TcpListener, TcpStream};
@@ -50,6 +50,7 @@ async fn start_server_with(timings: Timings) -> String {
     let (_, tuning) = watch::channel(tuning);
     let directory = Directory::spawn(
         tracks,
+        crate::content::UserTracks::in_memory(),
         tuning,
         timings,
         Ratings::in_memory(),
@@ -1118,4 +1119,96 @@ async fn matched_within(socket: &mut Client, limit: Duration) -> bool {
         }
     };
     timeout(limit, found).await.is_ok()
+}
+
+/// A circuit from the level editor: the oval of the tests, renamed.
+fn drafted(name: &str, tracks: &[TrackInfo]) -> star_racer_sim::track::TrackDescription {
+    let mut description = tracks[0].description.clone();
+    description.name = name.into();
+    description
+}
+
+/// The level editor's circuits (since v1.0.0-rc2): one tried races in a lobby nobody else sees;
+/// one published by an account is listed again to every browsing player under its own key with
+/// its author, a guest's is refused, as are another player's name and a circuit that does not
+/// build; republished by its author, it is replaced.
+#[tokio::test]
+async fn circuits_from_the_editor_are_tried_and_published() {
+    let url = start_server().await;
+    let (mut watcher, tracks, _) = browse(&url).await;
+
+    // Tried: a lobby of one, which the list never shows.
+    let (mut guest, _, _) = browse(&url).await;
+    send(&mut guest, &ClientMessage::TryTrack(drafted("Mine", &tracks))).await;
+    let tried = wait_for(&mut guest, "the lobby", |message| match message {
+        ServerMessage::JoinedLobby { settings, .. } => Some(settings),
+        _ => None,
+    })
+    .await;
+    assert_eq!(tried.track, star_racer_protocol::TRY_TRACK);
+    assert_eq!(tried.max_players, 1);
+    let lobbies = next_lobbies(&mut watcher).await;
+    assert!(lobbies.iter().all(|lobby| lobby.settings.track != star_racer_protocol::TRY_TRACK));
+    // A circuit that does not build is refused.
+    send(&mut guest, &ClientMessage::LeaveLobby).await;
+    let mut broken = drafted("Broken", &tracks);
+    broken.segments.pop();
+    assert_eq!(
+        enter(&mut guest, ClientMessage::TryTrack(broken)).await,
+        Err(JoinError::InvalidTrack)
+    );
+
+    // A guest cannot publish.
+    send(&mut guest, &ClientMessage::PublishTrack(drafted("Mine", &tracks))).await;
+    let published = wait_for(&mut guest, "the answer", |message| match message {
+        ServerMessage::Published(result) => Some(result),
+        _ => None,
+    })
+    .await;
+    assert_eq!(published, Err(PublishError::AccountRequired));
+
+    // An account can, and everyone browsing is told.
+    let mut ada = welcome_as(&url, "Ada").await;
+    let publish = |name: &str| ClientMessage::PublishTrack(drafted(name, &tracks));
+    send(&mut ada, &publish("Ada's Loop")).await;
+    let answer = |message| match message {
+        ServerMessage::Published(result) => Some(result),
+        _ => None,
+    };
+    let key = wait_for(&mut ada, "the answer", answer).await.unwrap();
+    assert_eq!(key, "user-ada-s-loop");
+    let listed = wait_for(&mut watcher, "the new list", |message| match message {
+        ServerMessage::Tracks(list) => Some(list),
+        _ => None,
+    })
+    .await;
+    let entry = listed.iter().find(|info| info.key == key).expect("listed");
+    assert_eq!(entry.author.as_deref(), Some("Ada"));
+    assert_eq!(listed.len(), tracks.len() + 1);
+    // Lobbies race it.
+    let created = enter(
+        &mut watcher,
+        ClientMessage::CreateLobby(LobbySettings {
+            track: key.clone(),
+            ..settings("On Ada's", 1, 4)
+        }),
+    )
+    .await;
+    assert!(created.is_ok(), "{created:?}");
+
+    // Its name is Ada's: someone else gets NameTaken, Ada replaces it.
+    let mut bob = welcome_as(&url, "Bob").await;
+    send(&mut bob, &publish("ADA'S LOOP")).await;
+    assert_eq!(
+        wait_for(&mut bob, "the answer", answer).await,
+        Err(PublishError::NameTaken)
+    );
+    send(&mut ada, &publish("Ada's Loop")).await;
+    assert_eq!(wait_for(&mut ada, "the answer", answer).await, Ok(key));
+    // And the game's own names are nobody's.
+    send(&mut bob, &publish(&tracks[0].description.name)).await;
+    assert_eq!(
+        wait_for(&mut bob, "the answer", answer).await,
+        Err(PublishError::NameTaken)
+    );
 }

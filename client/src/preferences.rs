@@ -222,6 +222,11 @@ impl StoredPreferences {
         &self.current
     }
 
+    /// Where the choices are kept, for what else is kept beside them: the level editor's draft.
+    pub fn store(&self) -> &IdentityStore {
+        &self.store
+    }
+
     /// Changes the choices and writes them out. Failing to store them is not worth interrupting a
     /// player over: they lose the memory, not the game.
     pub fn update(&mut self, change: impl FnOnce(&mut Preferences)) {
