@@ -68,15 +68,22 @@ ranked match. Each screen's entities despawn when it is left.
 - **Create a lobby** (`create_lobby.rs`): a dialog over the browser, with a name and four steppers
   (track, laps, players to start, maximum players), all with defaults. The browser is hidden while
   it is open, so navigation cannot wander behind it.
-- **Lobby** (`hud.rs`, over the 3D race): the lobby name, the phase ("waiting for players", the
+- **Lobby** (`hud.rs`, over the 3D race): the circuit's name large in neon at the top left, the
+  lobby's name and its laps under it (since v0.1.74), the phase ("waiting for players", the
   lap), the four start lights over the grid (a row of circles on a dark pill, lighting up one a
   second: three amber that pop as they light, then the start itself, green, blazing larger with a
   ring bursting out of it, each with its own sound, see [Sound](sound.md)), the start grade (S to E) for three seconds
-  after it, the lap and race time, the standings or the player list, the speed with the drift or
-  boost gauge over it, the turbo meter over that (three bars, one per charge, a full one bright
-  magenta and the one filling dim, its name lit once there is a charge to fire, and a TURBO BOOST
-  gauge running down while one fires) and the drift charge as an arc of green segments on the road around the back
-  of the car (see [Simulation](simulation.md#drift)), the results between races, the other players' names above their cars, a
+  after it, the lap and race time, the standings or the player list, the speed, three gauges as arcs
+  of one circle around the car near the middle of the screen (`gauges.rs`, since v0.1.74, the
+  user's word "regrouper barre de turbo, barre de drift et barre de thrust vers le centre de
+  l'écran, sous forme d'arc de cercle"): DRIFT on the left, filling green with the charge, then
+  amber as BOOST with the boost it paid; TURBO underneath, one stretch per charge, a full one
+  bright magenta and the one filling dim, white while one fires; THRUST on the right, the tank,
+  quiet while full on the road and lit in the air or filling. Bevy's UI having no arc, each is a
+  row of short segments laid end to end along the circle and turned with it. A checkpoint passed
+  is a quiet CHECKPOINT under the lap time, fading out, without its number (BACK ON TRACK the
+  same after a fall); the count before a car off its course is brought back stays large. And the drift charge as an arc of green segments on the road around the back
+  of the car (see [Simulation](simulation.md#drift)), the results between races, the other players' names above their cars (a bot's smaller), a
   confirmation before leaving, and, on F3, the latency figures (see [Latency](latency.md)).
   Spectators see whom they watch and switch cars with left and right.
 
@@ -309,8 +316,8 @@ changes beyond sizes:
   phone's own lists do (`scroll_on_drag`): whichever ancestor of what the finger touched scrolls
   vertically moves by the finger's travel, divided by the interface's scale. A finger that slid
   more than 12 pixels on its way was scrolling, and lifting it taps nothing (`TouchTravel`).
-- **The race HUD moves out of the thumbs' way.** The speed, its gauge and the turbo meter leave
-  the bottom left corner for under the lobby's name; the frame rate leaves the bottom right for the bottom edge,
+- **The race HUD moves out of the thumbs' way.** The speed leaves the bottom left corner for
+  under the lobby's name, and the gauges' circle is drawn smaller; the frame rate leaves the bottom right for the bottom edge,
   between the two thumbs; the standings move down to make room for a **LEAVE** button, which a
   screen with no Escape key and no Start button needs.
 - **No key hints anywhere.** `hint_row` hides itself on a touchscreen, and the HUD does not ask

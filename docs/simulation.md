@@ -190,7 +190,7 @@ a drift exactly as it predicts the rest.
 
 The tuning stays on the server, so the snapshots carry two gauges the server works out for the HUD:
 the boost that ending the drift now would give, and the boost left, both as shares of
-`drift_max_boost`. The client draws the first twice: as the green DRIFT gauge over the speed, and
+`drift_max_boost`. The client draws the first twice: as the green DRIFT arc of the HUD, and
 as Rocket Racing does, an arc of green segments on the road around the back of the player's car,
 lit from the middle outward as the charge builds and gone when the car is not drifting. The arc
 follows the travel rather than the body, so it stays under the car and square to the camera.
@@ -220,7 +220,7 @@ request "Add a turbo bar").
 The meter starts every race empty, the cars being put back on the grid. It is carried in the car
 (`turbo`, `turbo_boost`, `turbo_button`), so the client predicts a turbo as it predicts a drift,
 and a snapshot adds the gauge of what is left of the charge being fired. The HUD draws the meter
-as three bars over the speed (see [Interface](ui.md)).
+as an arc of three stretches under the car (see [Interface](ui.md)).
 
 To be judged by the user: how quickly it fills, what a charge is worth, and whether a wall should
 cost some of it.
@@ -517,8 +517,8 @@ and reconciled like the rest; the server checks that `jump_speed`, `air_gravity`
 On screen the car rises by its altitude along the road's own up while its shadow and the light
 under it stay on the road, shrinking with the height (`stay_on_the_road` in `race.rs`); a flame
 points down from under the hull while the thruster burns; the chase camera rises 0.7 of the
-height with the car, so the car is seen lifting off; and the HUD shows a THRUST gauge, the tank,
-while the car is in the air or the tank is filling. What the jump is for, the rift says
+height with the car, so the car is seen lifting off; and the HUD shows the tank as its THRUST arc,
+lit while the car is in the air or the tank is filling. What the jump is for, the rift says
 (v0.1.49): its road is missing in four places (see [Tracks](tracks.md#gaps)).
 
 ### Hop, then thrust
@@ -751,7 +751,7 @@ light under the car are drawn only where there is road to throw them on.
 
 A car passes the next gate of the lap, and only the next, when a tick carries it across forward by
 less than `MAX_STEP`, over the road: gates are passed in order or not at all, and never from
-beside the road. The HUD names each one passed: CHECKPOINT 2/11.
+beside the road. The HUD says quietly that one was passed, without its number.
 
 ### Accelerating, no brake
 

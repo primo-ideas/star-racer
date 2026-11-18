@@ -5,6 +5,7 @@ mod back;
 mod backdrop;
 mod create_lobby;
 mod garage;
+mod gauges;
 pub mod hud;
 pub mod leaderboard;
 mod lobbies;

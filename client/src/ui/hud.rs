@@ -1,7 +1,7 @@
 //! Everything drawn over the race: the lobby's phase, the start lights and how well the player
-//! started, the lap and time, the standings, the speed, the drift and boost gauge, the turbo
-//! meter, the results, the other players' names above their cars, and the dialog to leave the
-//! lobby.
+//! started, the lap and time, the standings, the speed, the drift, turbo and thrust gauges
+//! (drawn by `gauges`), the results, the other players' names above their cars, and the dialog to
+//! leave the lobby.
 //!
 //! Each frame builds a [`HudModel`], what the HUD should say, from the lobby state and the race as
 //! displayed; a single pass then writes it into the text entities. The start lights and race times
@@ -20,6 +20,7 @@ use star_racer_sim::TICK_RATE;
 use star_racer_sim::car::ASTRAY_SECONDS;
 use star_racer_sim::race::{self, RaceStanding, StartGrade};
 
+use super::gauges::{Gauges, update_gauges};
 use super::navigation::MenuInput;
 use super::safe_area::SafeInset;
 use super::theme::{self, Fonts};
@@ -27,19 +28,19 @@ use super::touch::Touchscreen;
 use super::widgets::{ButtonKind, button, hint, hint_row, panel};
 use crate::bindings::{Action, Input};
 use crate::camera::MainCamera;
-use crate::preferences::StoredPreferences;
-use crate::latency::{Latency, LatencyOverlay};
 use crate::car_model::CarModel;
+use crate::latency::{Latency, LatencyOverlay};
 use crate::lobby::PlayerProgress;
-use crate::sound::horn::HORNS;
-use crate::trail::TRAILS;
-use star_racer_protocol::rewards::{self, Reward};
 use crate::lobby::{CurrentLobby, Membership, Tracks, leave_lobby};
 use crate::net::Network;
+use crate::preferences::StoredPreferences;
 use crate::race::{RaceUpdate, RaceView};
 use crate::screen::{AfterLobby, Screen};
+use crate::sound::horn::HORNS;
 use crate::track::CurrentTrack;
+use crate::trail::TRAILS;
 use crate::world;
+use star_racer_protocol::rewards::{self, Reward};
 
 /// Rows of the standings and of the results: the most players a lobby holds.
 const ROWS: usize = star_racer_protocol::MAX_LOBBY_PLAYERS as usize;
@@ -67,6 +68,17 @@ struct GateFlash {
 /// Names are shown above cars closer than this, in meters.
 const NAMEPLATE_DISTANCE: f32 = 120.0;
 const NAMEPLATE_WIDTH: f32 = 220.0;
+/// The size of a name above a car, and of a bot's, smaller: the players are who matters.
+const NAMEPLATE_SIZE: f32 = 15.0;
+const BOT_NAMEPLATE_SIZE: f32 = 11.5;
+
+fn nameplate_size(kind: Kind) -> f32 {
+    if kind == Kind::Bot {
+        BOT_NAMEPLATE_SIZE
+    } else {
+        NAMEPLATE_SIZE
+    }
+}
 
 /// The color a player's name is written in: the player's own stands out, and a guest's is
 /// dimmer than an account's, which is how a guest is told apart in a race.
@@ -112,12 +124,14 @@ impl Plugin for HudPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(FrameTimeDiagnosticsPlugin::default())
             .init_resource::<LeaveDialog>()
+            .init_resource::<Gauges>()
             .add_systems(OnEnter(Screen::Lobby), spawn_hud)
             .add_systems(OnExit(Screen::Lobby), close_leave_dialog)
             .add_systems(
                 Update,
                 (
                     update_hud,
+                    update_gauges,
                     update_nameplates,
                     leave_shortcuts,
                     show_leave_dialog,
@@ -142,11 +156,11 @@ enum Slot {
     LobbyTrack,
     Title,
     Subtitle,
+    /// A checkpoint passed, or the car brought back to one: a quiet line under the lap.
+    GateNotice,
     StartGrade,
     StartLabel,
     Speed,
-    GaugeLabel,
-    TurboLabel,
     StandingsTitle,
     StandingPosition(usize),
     StandingName(usize),
@@ -172,30 +186,12 @@ struct StartLight(u32);
 #[derive(Component)]
 struct StartRing;
 
-/// The filled part of a bar.
-#[derive(Component)]
-enum Fill {
-    /// The drift, boost and turbo gauge.
-    Gauge,
-    /// One charge of the turbo meter, counted from the left.
-    Turbo(usize),
-}
-
-/// Width of the drift and boost gauge, and of the turbo meter, in pixels.
-const GAUGE_WIDTH: f32 = 220.0;
-/// Between two charges of the turbo meter, in pixels.
-const TURBO_GAP: f32 = 5.0;
-/// How many charges the turbo meter shows.
-const TURBO_CHARGES: usize = star_racer_sim::car::TURBO_CHARGES as usize;
-
 /// A part of the HUD shown only at times.
 #[derive(Component, Clone, Copy, PartialEq, Eq, Hash)]
 enum Block {
     StartLights,
     StartGrade,
     Speed,
-    Gauge,
-    Turbo,
     Standings,
     StandingRow(usize),
     Results,
@@ -214,10 +210,8 @@ struct HudModel {
     shown: HashSet<Block>,
     /// How many start lights are lit, and seconds since the last of them lit up.
     lights: (u32, f32),
-    /// How full the drift, boost or turbo gauge is, from 0 to 1, and its color.
-    gauge: (f32, Color),
-    /// The turbo meter, in charges, and whether a charge is being fired.
-    turbo: (f32, bool),
+    /// What the arcs around the car read.
+    gauges: Gauges,
 }
 
 impl HudModel {
@@ -262,7 +256,8 @@ fn spawn_hud(
             },
         ))
         .with_children(|root| {
-            // Top left: where the player is.
+            // Top left: where the player is, the circuit first and large, then the lobby and its
+            // laps.
             root.spawn(Node {
                 position_type: PositionType::Absolute,
                 left: px(26),
@@ -271,14 +266,19 @@ fn spawn_hud(
                 ..default()
             })
             .with_children(|corner| {
-                corner.spawn(text(
-                    Slot::LobbyName,
-                    fonts.display(pick(26.0, 21.0)),
-                    theme::TEXT,
+                corner.spawn((
+                    Slot::LobbyTrack,
+                    Text::default(),
+                    fonts.display(pick(30.0, 22.0)),
+                    TextColor(theme::NEON),
+                    TextShadow {
+                        offset: Vec2::new(2.0, 2.0),
+                        color: theme::NEON.with_alpha(0.35),
+                    },
                 ));
                 corner.spawn(text(
-                    Slot::LobbyTrack,
-                    fonts.text(pick(14.0, 12.0), 500),
+                    Slot::LobbyName,
+                    fonts.text(pick(14.0, 12.0), 600),
                     theme::TEXT_DIM,
                 ));
             });
@@ -303,6 +303,18 @@ fn spawn_hud(
                     Slot::Subtitle,
                     fonts.text(pick(17.0, 14.0), 500),
                     theme::TEXT_DIM,
+                ));
+                banner.spawn((
+                    // No shadow: it would linger as the words fade.
+                    Slot::GateNotice,
+                    Text::default(),
+                    fonts.caption(pick(13.0, 11.0)),
+                    TextColor(theme::GREEN),
+                    theme::CAPTION_SPACING,
+                    Node {
+                        margin: UiRect::top(px(4)),
+                        ..default()
+                    },
                 ));
             });
 
@@ -473,100 +485,8 @@ fn spawn_hud(
                 }
             });
 
-            // Beside the speed: the drift charge, then the boost it gave.
-            let mut gauge = Node {
-                position_type: PositionType::Absolute,
-                left: px(pick(30.0, 27.0)),
-                flex_direction: FlexDirection::Column,
-                row_gap: px(6),
-                ..default()
-            };
-            // On a desk the speed sits in the bottom corner with the gauge over it; under a thumb
-            // that corner is taken, so both move up under the lobby's name.
-            if touchscreen.0 {
-                gauge.top = px(118);
-            } else {
-                gauge.bottom = px(104);
-            }
-            root.spawn((Block::Gauge, gauge)).with_children(|gauge| {
-                gauge.spawn((
-                    text(Slot::GaugeLabel, fonts.caption(15.0), theme::NEON),
-                    theme::CAPTION_SPACING,
-                ));
-                gauge
-                    .spawn((
-                        Node {
-                            width: px(GAUGE_WIDTH),
-                            height: px(8),
-                            border_radius: BorderRadius::MAX,
-                            ..default()
-                        },
-                        BackgroundColor(theme::NEON_FAINT),
-                    ))
-                    .with_child((
-                        Fill::Gauge,
-                        Node {
-                            width: percent(0),
-                            height: percent(100),
-                            border_radius: BorderRadius::MAX,
-                            ..default()
-                        },
-                        BackgroundColor(theme::NEON),
-                    ));
-            });
-
-            // Over the gauge on a desk, under it on a phone: the turbo meter, one bar per charge,
-            // there for as long as there is a car to drive.
-            let mut turbo = Node {
-                position_type: PositionType::Absolute,
-                left: px(pick(30.0, 27.0)),
-                flex_direction: FlexDirection::Column,
-                row_gap: px(6),
-                ..default()
-            };
-            if touchscreen.0 {
-                turbo.top = px(156);
-            } else {
-                turbo.bottom = px(146);
-            }
-            root.spawn((Block::Turbo, turbo)).with_children(|turbo| {
-                turbo.spawn((
-                    text(Slot::TurboLabel, fonts.caption(15.0), theme::MAGENTA),
-                    theme::CAPTION_SPACING,
-                ));
-                turbo
-                    .spawn(Node {
-                        width: px(GAUGE_WIDTH),
-                        height: px(8),
-                        column_gap: px(TURBO_GAP),
-                        ..default()
-                    })
-                    .with_children(|charges| {
-                        for charge in 0..TURBO_CHARGES {
-                            charges
-                                .spawn((
-                                    Node {
-                                        flex_grow: 1.0,
-                                        flex_basis: px(0),
-                                        height: percent(100),
-                                        border_radius: BorderRadius::MAX,
-                                        ..default()
-                                    },
-                                    BackgroundColor(theme::MAGENTA.with_alpha(0.1)),
-                                ))
-                                .with_child((
-                                    Fill::Turbo(charge),
-                                    Node {
-                                        width: percent(0),
-                                        height: percent(100),
-                                        border_radius: BorderRadius::MAX,
-                                        ..default()
-                                    },
-                                    BackgroundColor(theme::MAGENTA),
-                                ));
-                        }
-                    });
-            });
+            // Around the car, near the middle: the drift, turbo and thrust gauges as arcs.
+            super::gauges::spawn_gauges(root, &fonts, touchscreen.0);
 
             // Bottom left on a desk, top left under a thumb: the speed.
             let mut speed = Node {
@@ -869,17 +789,17 @@ fn update_hud(
             &mut BoxShadow,
             &mut UiTransform,
         ),
-        Without<Fill>,
+        Without<Block>,
     >,
     mut rings: Query<(&mut UiTransform, &mut BorderColor), (With<StartRing>, Without<StartLight>)>,
     mut blocks: Query<(&Block, &mut Node)>,
-    mut fills: Query<(&Fill, &mut Node, &mut BackgroundColor), Without<Block>>,
-    (time, mut flash, progress, held, spectator): (
+    (time, mut flash, progress, held, spectator, mut gauges): (
         Res<Time>,
         Local<GateFlash>,
         Res<PlayerProgress>,
         Res<crate::controls::HeldActions>,
         Res<crate::spectator::SpectatorCamera>,
+        ResMut<Gauges>,
     ),
 ) {
     let Some(membership) = &current.0 else {
@@ -887,6 +807,7 @@ fn update_hud(
     };
     let track_length = track.as_ref().map_or(1.0, |track| track.0.length());
     let mut model = build_model(membership, &view, &tracks, track_length, *touchscreen);
+    *gauges = std::mem::take(&mut model.gauges);
     reward_line(&mut model, membership, &progress);
     // Watching: which camera, under whom.
     if membership.own_status() == Some(PlayerStatus::Spectating) {
@@ -914,10 +835,14 @@ fn update_hud(
             format!("{:.0}%", share * 100.0),
             theme::AMBER,
         );
-        model.text(Slot::StartLabel, action.label().to_uppercase(), theme::AMBER);
+        model.text(
+            Slot::StartLabel,
+            action.label().to_uppercase(),
+            theme::AMBER,
+        );
     }
-    // A checkpoint passed, or the car brought back to one after a fall, is announced where the
-    // start grade is, once that is gone.
+    // A checkpoint passed, or the car brought back to one after a fall, is announced under the lap;
+    // off its course, the count before it is brought back is shown where the start grade is.
     if let (Some(car), Some(track)) = (view.own_car, track.as_ref()) {
         let now = time.elapsed_secs();
         let state = (car.checkpoint, car.respawns);
@@ -949,21 +874,15 @@ fn update_hud(
         } else if let Some((since, fell)) = flash.since
             && now - since < GATE_FLASH_SECONDS
             && checkpoints > 0
-            && !model.shown.contains(&Block::StartGrade)
         {
-            model.shown.insert(Block::StartGrade);
-            // The gate the car passed last, or came back to: the line is the start.
-            let gate = match car.checkpoint {
-                0 => "START".to_owned(),
-                checkpoint => format!("{checkpoint}/{checkpoints}"),
-            };
+            // Quietly, under the lap, and fading out: the gate's number is not said.
             let (label, color) = if fell {
                 ("BACK ON TRACK", theme::MAGENTA)
             } else {
                 ("CHECKPOINT", theme::GREEN)
             };
-            model.text(Slot::StartGrade, gate, color);
-            model.text(Slot::StartLabel, label, color);
+            let fade = (1.0 - ((now - since) / GATE_FLASH_SECONDS).powi(2)).clamp(0.0, 1.0);
+            model.text(Slot::GateNotice, label, color.with_alpha(0.85 * fade));
         }
     } else {
         *flash = GateFlash::default();
@@ -1050,19 +969,6 @@ fn update_hud(
         }
         border.set_if_neq(BorderColor::all(theme::GREEN.with_alpha(1.0 - burst)));
     }
-    for (fill, mut node, mut color) in &mut fills {
-        let (fill, fill_color) = match fill {
-            Fill::Gauge => model.gauge,
-            Fill::Turbo(charge) => turbo_charge(model.turbo.0, *charge),
-        };
-        let width = percent(fill.clamp(0.0, 1.0) * 100.0);
-        if node.width != width {
-            node.width = width;
-        }
-        if color.0 != fill_color {
-            color.0 = fill_color;
-        }
-    }
     for (block, mut node) in &mut blocks {
         let display = if model.shown.contains(block) {
             Display::Flex
@@ -1075,19 +981,6 @@ fn update_hud(
     }
 }
 
-/// How full the bar of one charge of the turbo meter is, the meter holding `turbo` charges, and
-/// its color: a whole charge is lit, one still filling is dim, so what can be fired is read at a
-/// glance.
-fn turbo_charge(turbo: f32, charge: usize) -> (f32, Color) {
-    let fill = (turbo - charge as f32).clamp(0.0, 1.0);
-    let color = if fill >= 1.0 {
-        theme::MAGENTA
-    } else {
-        theme::MAGENTA.with_alpha(0.45)
-    };
-    (fill, color)
-}
-
 fn build_model(
     membership: &Membership,
     view: &RaceView,
@@ -1097,17 +990,18 @@ fn build_model(
 ) -> HudModel {
     let mut model = HudModel::default();
     let settings = &membership.settings;
-    model.text(Slot::LobbyName, settings.name.clone(), theme::TEXT);
     model.text(
         Slot::LobbyTrack,
-        format!(
-            "{}  ·  {} {}",
-            tracks.name(&settings.track),
-            settings.laps,
-            if settings.laps == 1 { "lap" } else { "laps" }
-        ),
-        theme::TEXT_DIM,
+        tracks.name(&settings.track).to_uppercase(),
+        theme::NEON,
     );
+    let lobby = format!(
+        "{}  ·  {} {}",
+        settings.name,
+        settings.laps,
+        if settings.laps == 1 { "lap" } else { "laps" }
+    );
+    model.text(Slot::LobbyName, lobby.clone(), theme::TEXT_DIM);
 
     if let Some(car) = view.own_car {
         model.shown.insert(Block::Speed);
@@ -1127,49 +1021,27 @@ fn build_model(
             });
         }
         if let Some(snapshot) = view.own_snapshot {
-            let firing = snapshot.car.turbo_boost > 0.0;
-            model.shown.insert(Block::Turbo);
-            model.turbo = (snapshot.car.turbo, firing);
-            // Lit once there is a charge to fire, and white while one fires.
-            let label = if firing {
-                theme::TEXT
-            } else if snapshot.car.turbo >= 1.0 {
-                theme::MAGENTA
+            let car = &snapshot.car;
+            let gauges = &mut model.gauges;
+            gauges.shown = true;
+            gauges.turbo = (car.turbo, car.turbo_boost > 0.0);
+            // The drift arc holds the charge while drifting, then the boost it paid out.
+            (gauges.drift, gauges.drift_active) = if car.is_drifting() {
+                ((snapshot.drift_gauge, theme::GREEN, "DRIFT"), true)
+            } else if car.boost > 0.0 {
+                ((snapshot.boost_gauge, theme::AMBER, "BOOST"), true)
             } else {
-                theme::TEXT_FAINT
+                ((0.0, theme::GREEN, "DRIFT"), false)
             };
-            model.text(Slot::TurboLabel, "TURBO", label);
-            if snapshot.car.is_drifting() {
-                model.shown.insert(Block::Gauge);
-                model.text(Slot::GaugeLabel, "DRIFT", theme::GREEN);
-                model.gauge = (snapshot.drift_gauge, theme::GREEN);
-            } else if firing {
-                model.shown.insert(Block::Gauge);
-                model.text(Slot::GaugeLabel, "TURBO BOOST", theme::MAGENTA);
-                model.gauge = (snapshot.turbo_gauge, theme::MAGENTA);
-            } else if let Some(tuning) = membership
+            if let Some(tuning) = membership
                 .state
                 .as_ref()
                 .map(|state| &state.tuning)
-                .filter(|tuning| {
-                    tuning.thrust_seconds > 0.0
-                        && (snapshot.car.is_airborne()
-                            || snapshot.car.thrust < tuning.thrust_seconds - 1e-3)
-                })
+                .filter(|tuning| tuning.thrust_seconds > 0.0)
             {
-                // In the air, or the tank still filling after a flight: what is left of it.
-                model.shown.insert(Block::Gauge);
-                let color = if snapshot.car.thrusting {
-                    theme::TEXT
-                } else {
-                    theme::NEON
-                };
-                model.text(Slot::GaugeLabel, "THRUST", color);
-                model.gauge = (snapshot.car.thrust / tuning.thrust_seconds, theme::NEON);
-            } else if snapshot.car.boost > 0.0 {
-                model.shown.insert(Block::Gauge);
-                model.text(Slot::GaugeLabel, "BOOST", theme::AMBER);
-                model.gauge = (snapshot.boost_gauge, theme::AMBER);
+                // Lit in the air, or while the tank fills after a flight.
+                let active = car.is_airborne() || car.thrust < tuning.thrust_seconds - 1e-3;
+                gauges.thrust = (car.thrust / tuning.thrust_seconds, active, car.thrusting);
             }
         }
     } else if !touchscreen.0 {
@@ -1186,7 +1058,7 @@ fn build_model(
     let seconds_until = |target: u32| (f64::from(target) - tick) / f64::from(TICK_RATE);
     let own_status = membership.own_status();
     if state.ranked {
-        model.text(Slot::LobbyName, settings.name.clone(), theme::MAGENTA);
+        model.text(Slot::LobbyName, lobby, theme::MAGENTA);
     }
 
     match &state.phase {
@@ -1273,14 +1145,15 @@ fn build_model(
             end_tick,
             ratings,
             ..
-
         } => {
             model.shown.insert(Block::Results);
             for (row, result) in results.iter().take(ROWS).enumerate() {
                 model.shown.insert(Block::ResultRow(row));
                 let own = result.car == membership.car;
                 let position_color = if row == 0 { theme::AMBER } else { theme::TEXT };
-                let guest = membership.player(result.car).map_or(Kind::Account, Kind::of);
+                let guest = membership
+                    .player(result.car)
+                    .map_or(Kind::Account, Kind::of);
                 let name_color = name_color(own, guest);
                 model.text(
                     Slot::ResultPosition(row),
@@ -1488,7 +1361,14 @@ fn update_nameplates(
     track: Option<Res<CurrentTrack>>,
     ui_scale: Res<UiScale>,
     cameras: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
-    mut plates: Query<(Entity, &Nameplate, &mut Node, &mut Text, &mut TextColor)>,
+    mut plates: Query<(
+        Entity,
+        &Nameplate,
+        &mut Node,
+        &mut Text,
+        &mut TextColor,
+        &mut TextFont,
+    )>,
 ) {
     let (Some(membership), Ok((camera, camera_transform)), Some(track)) =
         (&current.0, cameras.single(), track)
@@ -1517,7 +1397,7 @@ fn update_nameplates(
         wanted.insert(snapshot.id, (on_screen / ui_scale.0, nickname, guest));
     }
 
-    for (entity, plate, mut node, mut text, mut color) in &mut plates {
+    for (entity, plate, mut node, mut text, mut color, mut font) in &mut plates {
         match wanted.remove(&plate.0) {
             Some((position, nickname, guest)) => {
                 node.left = px(position.x - NAMEPLATE_WIDTH / 2.0);
@@ -1526,6 +1406,10 @@ fn update_nameplates(
                     text.0 = nickname;
                 }
                 color.0 = name_color(false, guest);
+                let size = FontSize::Px(nameplate_size(guest));
+                if font.font_size != size {
+                    font.font_size = size;
+                }
             }
             None => commands.entity(entity).despawn(),
         }
@@ -1535,7 +1419,7 @@ fn update_nameplates(
             Nameplate(car),
             DespawnOnExit(Screen::Lobby),
             Text::new(nickname),
-            fonts.text(15.0, 600),
+            fonts.text(nameplate_size(guest), 600),
             TextColor(name_color(false, guest)),
             theme::TEXT_SHADOW,
             TextLayout::justify(Justify::Center),
