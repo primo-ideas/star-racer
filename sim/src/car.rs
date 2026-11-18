@@ -855,10 +855,9 @@ impl Car {
                 // A press on the very tick the road runs out still jumps.
                 self.climb += tuning.jump_speed;
             } else if thrust_pressed && self.thrust > 0.0 {
-                // Star Fly alone, pressed on the road: the thruster lights at once and lifts the
-                // car, with neither the hop nor the ignition's kick (since v0.1.78; before, it
-                // did nothing until a jump).
-                self.ignited = true;
+                // Star Fly alone, pressed on the road: the thruster lights at once, its kick
+                // included, and lifts the car off on the very tick (since v0.1.80; in v0.1.78 it
+                // lit without the kick, and the car crept off the road).
                 self.airtime = tuning.thrust_delay;
             } else if road {
                 return;
@@ -875,8 +874,14 @@ impl Car {
                 -tuning.air_roll_lift * pitch
             };
         }
-        let sunk = inside && self.is_falling();
-        if input.thrust && self.airtime > tuning.thrust_delay && self.thrust > 0.0 && !sunk {
+        // Under the slab of the road the thruster can do nothing; in a gap, or beyond the walls,
+        // nothing stands over the car, and it can climb back out of a fall (since v0.1.80; before,
+        // a car that had sunk under the lip of a gap could no longer fly).
+        let sunk = inside && road && self.is_falling();
+        // Held with the jump, from its press, the thrust waits for the top of the hop, so a tap
+        // only hops; pressed on its own, it lights at once.
+        let ready = self.airtime >= tuning.thrust_delay || !input.jump;
+        if input.thrust && ready && self.thrust > 0.0 && !sunk {
             if !self.ignited {
                 // The ignition: a second push, after the hop.
                 self.ignited = true;
@@ -1514,8 +1519,8 @@ mod tests {
         assert!((car.thrust - tuning().thrust_seconds).abs() < 1e-3, "{}", car.thrust);
     }
 
-    /// The jump and the thrust are two inputs: the thrust alone on the road lifts the car without
-    /// a hop or a kick, and with the jump, held from the press, it waits for the hop to have
+    /// The jump and the thrust are two inputs: the thrust alone on the road lifts the car at once,
+    /// with the kick of its ignition on the very tick (since v0.1.80), and with the jump, held from the press, it waits for the hop to have
     /// risen before it lights, with a kick that is felt as a second push: the climb jumps up on
     /// the tick it lights.
     #[test]
@@ -1529,9 +1534,9 @@ mod tests {
             assert!(car.is_airborne() && car.thrusting, "the thrust alone did not lift the car");
         }
         assert!(car.altitude > 1.0, "the thrust alone rose only {} m", car.altitude);
-        // No kick: the climb grows from nothing rather than jumping on its first tick.
+        // The kick: off the road on the very tick, climbing fast.
         let first_climb = first_climb.unwrap();
-        assert!(first_climb < 1.0, "it lifted off at {first_climb} m/s");
+        assert!(first_climb > 5.0, "it lifted off at {first_climb} m/s");
         // Held down through a landing, it does not lift the car again: it takes a new press.
         let mut car = at_top_speed(&track);
         run(&mut car, ACCELERATE.with_thrust(true), 6.0, &track);
@@ -1769,6 +1774,66 @@ mod tests {
         assert_eq!(car.altitude, 0.0);
         assert!((car.velocity.length() - RESPAWN_SPEED_SHARE * tuning().top_speed).abs() < 0.1);
         assert_eq!(car.turbo, 2.0);
+    }
+
+    /// A car that drops into a gap without jumping can still fly out of it: Star Fly, pressed on
+    /// its own once the car has sunk well under the lip, lights at once and carries it back up
+    /// onto the road beyond (until v0.1.80 the thruster was dead under the lip).
+    #[test]
+    fn star_fly_climbs_back_out_of_a_fall() {
+        let track = gapped(60.0);
+        let mut car = flying_start();
+        let mut lowest = 0.0_f32;
+        let mut lit_after = None;
+        for tick in 0..ticks(8.0) {
+            let at = track_distance(&track, &car);
+            // Down into the gap with nothing pressed, then the thrust alone, held.
+            let fly = car.altitude < -3.0 || lit_after.is_some();
+            if fly && lit_after.is_none() {
+                lit_after = Some(tick);
+            }
+            car.step(ACCELERATE.with_thrust(fly && (90.0..170.0).contains(&at)), &tuning(), &track);
+            lowest = lowest.min(car.altitude);
+            if lit_after == Some(tick) {
+                assert!(car.thrusting, "Star Fly did not light in the fall");
+            }
+        }
+        assert!(lowest < -3.0, "it never fell: {lowest} m");
+        assert_eq!(car.respawns, 0, "Star Fly did not bring the car back out of the gap");
+        assert_eq!(car.altitude, 0.0);
+        assert!(track_distance(&track, &car) > 170.0);
+    }
+
+    /// Under the slab of the road there is nothing to fly to: a car that has sunk under the road
+    /// itself cannot thrust up through it.
+    #[test]
+    fn star_fly_does_not_climb_through_the_road() {
+        let track = gapped(30.0);
+        let mut car = flying_start();
+        let mut thrust_under_road = false;
+        for _ in 0..ticks(3.0) {
+            car.step(ACCELERATE.with_thrust(car.altitude < -1.0), &tuning(), &track);
+            let here = track.project(car.position);
+            let under_road = track.within_walls(&here) && !track.in_gap(here.distance);
+            thrust_under_road |= car.thrusting && under_road && car.is_falling();
+            if car.respawns > 0 {
+                break;
+            }
+        }
+        assert!(!thrust_under_road, "the thruster pushed the car up under the road");
+    }
+
+    /// Star Fly pressed on its own during a hop lights at once, without waiting for the top of
+    /// the hop as the thrust held with the jump does.
+    #[test]
+    fn star_fly_pressed_in_a_hop_lights_at_once() {
+        let track = Track::build(&open_track()).unwrap();
+        let mut car = at_top_speed(&track);
+        car.step(ACCELERATE.with_jump(true), &tuning(), &track);
+        car.step(ACCELERATE, &tuning(), &track);
+        assert!(car.is_airborne() && !car.thrusting);
+        car.step(ACCELERATE.with_thrust(true), &tuning(), &track);
+        assert!(car.thrusting, "Star Fly waited for the top of the hop");
     }
 
     /// A hop clears a short gap, not a long one; the thruster clears the long one.

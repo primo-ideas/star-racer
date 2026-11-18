@@ -69,7 +69,9 @@ ranked match. Each screen's entities despawn when it is left.
   (track, laps, players to start, maximum players), all with defaults. The browser is hidden while
   it is open, so navigation cannot wander behind it.
 - **Lobby** (`hud.rs`, over the 3D race): the circuit's name large in neon at the top left, the
-  lobby's name and its laps under it (since v0.1.74), the phase ("waiting for players", the
+  lobby's name and its laps under it (since v0.1.74), the circuit's name again, larger, over the start
+  lights with its laps and length while the grid lines up, fading out in the last 0.6 s before the
+  start (since v0.1.80, `INTRO_OUT_SECONDS`), the phase ("waiting for players", the
   lap), the four start lights over the grid (a row of circles on a dark pill, lighting up one a
   second: three amber that pop as they light, then the start itself, green, blazing larger with a
   ring bursting out of it, each with its own sound, see [Sound](sound.md)), the start grade (S to E) for three seconds

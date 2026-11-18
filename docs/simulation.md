@@ -716,6 +716,24 @@ The drift test (`the_shipped_drift_keeps_its_measured_feel`) holds the new figur
 at 81 degrees after a second, the body at 36, no speed lost, the charge 1.67 times a tap's, and an
 S carried over on the button in 0.6 s to 30 degrees past the line.
 
+### Star Fly, at once and out of a fall
+
+In v0.1.80 (protocol 42), the user's word: "si on se laisse tomber dans le vide, on ne peut plus
+utiliser le star fly" and "on sent comme un input lag dans le saut/thrust". Nothing in the
+network was late (input to screen stays about 33 ms); the waits were in the simulation:
+
+- **A fall.** The thruster was dead once the car had sunk 0.6 m (`LIP`) under the road's level
+  between the walls, which a car rolling into a gap does about 0.15 s after the lip. It is now dead
+  only under the slab of the road itself; in a gap, as beyond the walls, Star Fly lights and can
+  carry the car back up onto the road (`star_fly_climbs_back_out_of_a_fall`), and the gap's
+  landing rule is unchanged (a car still under the lip when it reaches the road has hit its edge).
+- **Star Fly from the road** lit without the ignition's kick, so the car crept off the road
+  (under 1 m/s of climb on its first tick). It now lights with the kick: 7 m/s up on the very
+  tick of the press.
+- **Star Fly pressed on its own in the air**, during a hop or a fall, lights at once. Only the
+  thrust held together with the jump, from the jump's press, waits `thrust_delay`, so a tap of a
+  key or button doing both still only hops; that wait is 0.15 s instead of 0.2.
+
 ### Out of a drift, on a curve
 
 Until v0.1.53, a drift whose stick came back to the center ran on straight while its body alone

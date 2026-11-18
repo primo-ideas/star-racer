@@ -54,6 +54,10 @@ const LIGHT_SIZE: f32 = 54.0;
 /// How long the start grade stays after the start, in seconds.
 const START_GRADE_SECONDS: f64 = 3.0;
 
+/// How long before the start the circuit's name, in the middle of the screen on the grid, fades
+/// out, in seconds, leaving the place to the start grade.
+const INTRO_OUT_SECONDS: f64 = 0.6;
+
 /// Seconds a checkpoint passed, or a car brought back to one, is announced for.
 const GATE_FLASH_SECONDS: f32 = 1.4;
 
@@ -154,6 +158,10 @@ pub struct LeaveDialog {
 enum Slot {
     LobbyName,
     LobbyTrack,
+    /// The circuit's name in the middle of the screen, while the grid lines up, and under it its
+    /// laps and length.
+    IntroTrack,
+    IntroDetails,
     Title,
     Subtitle,
     /// A checkpoint passed, or the car brought back to one: a quiet line under the lap.
@@ -189,6 +197,8 @@ struct StartRing;
 /// A part of the HUD shown only at times.
 #[derive(Component, Clone, Copy, PartialEq, Eq, Hash)]
 enum Block {
+    /// The circuit's name, large in the middle of the screen at the start of a race.
+    Intro,
     StartLights,
     StartGrade,
     Speed,
@@ -315,6 +325,38 @@ fn spawn_hud(
                         margin: UiRect::top(px(4)),
                         ..default()
                     },
+                ));
+            });
+
+            // Over the start lights, where the start grade comes after: the circuit's name as the
+            // grid lines up, fading out just before the start. No shadow: it would linger as it
+            // fades.
+            root.spawn((
+                Block::Intro,
+                Pickable::IGNORE,
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: px(0),
+                    right: px(0),
+                    top: px(pick(100.0, 66.0)),
+                    flex_direction: FlexDirection::Column,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+            ))
+            .with_children(|intro| {
+                intro.spawn((
+                    Slot::IntroTrack,
+                    Text::default(),
+                    fonts.display(pick(72.0, 34.0)),
+                    TextColor(theme::NEON),
+                ));
+                intro.spawn((
+                    Slot::IntroDetails,
+                    Text::default(),
+                    fonts.caption(pick(18.0, 13.0)),
+                    TextColor(theme::TEXT),
+                    theme::CAPTION_SPACING,
                 ));
             });
 
@@ -1098,6 +1140,26 @@ fn build_model(
             if lit > 0 && (until_start > 0.0 || -until_start < GO_SECONDS) {
                 model.shown.insert(Block::StartLights);
                 model.lights = (lit, since);
+            }
+
+            // The circuit's name in the middle while the grid lines up, gone by the start.
+            if own_status != Some(PlayerStatus::Spectating) && until_start > 0.0 {
+                let alpha = (until_start / INTRO_OUT_SECONDS).min(1.0) as f32;
+                if alpha > 0.0 {
+                    model.shown.insert(Block::Intro);
+                    model.text(
+                        Slot::IntroTrack,
+                        tracks.name(&settings.track).to_uppercase(),
+                        theme::NEON.with_alpha(alpha),
+                    );
+                    let laps = settings.laps;
+                    let details = format!(
+                        "{laps} {}  ·  {:.2} KM",
+                        if laps == 1 { "LAP" } else { "LAPS" },
+                        track_length / 1000.0
+                    );
+                    model.text(Slot::IntroDetails, details, theme::TEXT.with_alpha(0.85 * alpha));
+                }
             }
 
             let race_seconds = (-until_start).max(0.0);

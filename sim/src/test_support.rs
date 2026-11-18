@@ -95,7 +95,7 @@ pub fn tuning() -> CarTuning {
         turbo_acceleration: 45.0,
         jump_speed: 10.0,
         air_gravity: 50.0,
-        thrust_delay: 0.2,
+        thrust_delay: 0.15,
         thrust_acceleration: 95.0,
         thrust_ceiling: 8.0,
         thrust_seconds: 1.5,
