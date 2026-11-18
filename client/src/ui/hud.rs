@@ -235,6 +235,7 @@ fn spawn_hud(
     fonts: Res<Fonts>,
     touchscreen: Res<Touchscreen>,
     preferences: Res<StoredPreferences>,
+    mut arc_materials: ResMut<Assets<super::gauges::ArcMaterial>>,
 ) {
     let controls = preferences.get().controls;
     // A phone is a short screen held close, with a thumb over each bottom corner: everything is
@@ -528,7 +529,7 @@ fn spawn_hud(
             });
 
             // Around the car, near the middle: the drift, turbo and thrust gauges as arcs.
-            super::gauges::spawn_gauges(root, &fonts, touchscreen.0);
+            super::gauges::spawn_gauges(root, &fonts, &mut arc_materials, touchscreen.0);
 
             // Bottom left on a desk, top left under a thumb: the speed.
             let mut speed = Node {

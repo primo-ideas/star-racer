@@ -51,6 +51,7 @@ impl Plugin for UiPlugin {
             touch::TouchPlugin,
             back::BackPlugin,
             leaderboard::LeaderboardPlugin,
+            gauges::GaugesPlugin,
             player_card::PlayerCardPlugin,
             settings::SettingsPlugin,
             garage::GaragePlugin,

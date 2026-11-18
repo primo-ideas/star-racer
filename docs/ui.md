@@ -26,7 +26,11 @@ ranked match. Each screen's entities despawn when it is left.
   played under or a generated one, and the two ways into a race as big as the screen allows:
   **QUICK PLAY**, and **QUEUE FOR RANKED** under it with where the player stands on the ladder
   (see [Quick play and ranked](ranked.md)). A race is one press away from the moment the game
-  opens, even with a gamepad, which cannot type; Enter in the field is quick play. While queued,
+  opens, even with a gamepad, which cannot type. Since v1.0.0-rc3 (the user's word "Sépare le sign
+  in du fait de rentrer dans une partie") signing in is a press of its own: on the SIGN IN and NEW
+  ACCOUNT tabs a SIGN IN or CREATE ACCOUNT button beside the password, and Enter in either field,
+  connect without going anywhere, and QUICK PLAY, ranked and the rest stay grey until the card says
+  who the player is (a guest needs no such step; until then Enter in the field was quick play). While queued,
   the ranked button counts the time and cancels. The dice button rolls another nickname. The last
   nickname is saved next to the identity key when the player presses a button. Since v0.1.68 (the
   user's word "Allège le menu d'accueil") the title stands alone, with no line under it, a guest
@@ -88,10 +92,13 @@ ranked match. Each screen's entities despawn when it is left.
   its name; THRUST on the right, the tank, lit in the air or filling, red under a quarter, and since
   v1.0.0-rc1 not drawn at all while full on the road. Bevy's UI having no arc, each is a row of short segments laid end
   to end along the circle and turned with it; what is lit glows, its leading end brighter (since v0.1.78, the user's word
-  "Améliore largement le visuel des jauges et intègre y le chargement du drift"). Since v1.0.0-rc1
-  each is one thin line of neon (4 pixels, 3 on a phone) in a light outline, at the user's word
-  "Fais que les jauges ne soient qu'une ligne neon jolie avec une outline légère"; a darker track
-  twice as thick held them before. A checkpoint passed
+  "Améliore largement le visuel des jauges et intègre y le chargement du drift"). In v1.0.0-rc1
+  each became one thin line of neon in a light outline ("Fais que les jauges ne soient qu'une ligne
+  neon jolie avec une outline légère"); since v1.0.0-rc3 ("Je veux des lignes beaucoup plus jolies
+  pour les jauges, des courbes neon en gros") each is a real curve drawn by a shader of its own
+  (`ui/arc.wgsl`, an `ArcMaterial` per arc): a round-ended line 15 pixels thick (9 on a phone),
+  white-hot along its middle and at its lit end, in a glow fading out around it, the turbo's cut into
+  its three charges. A checkpoint passed
   is a quiet CHECKPOINT under the lap time, fading out, without its number (BACK ON TRACK the
   same after a fall); the count before a car off its course is brought back stays large. The arc of green segments on the road around the
   back of the car that showed the charge until v0.1.78 is gone, folded into the DRIFT arc. The

@@ -111,6 +111,11 @@ struct PasswordCaption;
 #[derive(Component)]
 struct ActionButton;
 
+/// Signs in, or creates the account, without going anywhere (since v1.0.0-rc3, the user's word
+/// "Sépare le sign in du fait de rentrer dans une partie").
+#[derive(Component)]
+struct SignInButton;
+
 #[derive(Component)]
 struct QuickPlayButton;
 
@@ -348,7 +353,32 @@ fn spawn_login(
                 },
             ));
         })
-        .add_child(password_box)
+        .with_children(|panel| {
+            // The password and the way in on one line, so the card is no taller than before.
+            panel
+                .spawn(Node {
+                    column_gap: px(8),
+                    align_items: AlignItems::Stretch,
+                    ..default()
+                })
+                .add_child(password_box)
+                .with_children(|row| {
+                    row.spawn((
+                        SignInButton,
+                        button_of_size(&fonts, ButtonKind::Secondary, "SIGN IN", pick(15.0, 13.0)),
+                    ))
+                    .insert(Node {
+                        flex_shrink: 0.0,
+                        padding: UiRect::axes(px(14), px(6)),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        border: px(1.5).all(),
+                        border_radius: BorderRadius::all(px(theme::RADIUS_SMALL)),
+                        ..default()
+                    })
+                    .observe(sign_in);
+                });
+        })
         .id();
 
     let identity_half = commands
@@ -457,9 +487,9 @@ fn spawn_login(
         .add_children(&[identity_half, actions_half])
         .id();
 
-    // Enter in a field is QUICK PLAY.
-    commands.entity(name_field).observe(quick_play);
-    commands.entity(password_field).observe(quick_play);
+    // Enter in a field signs in: it never starts a race (since v1.0.0-rc3).
+    commands.entity(name_field).observe(sign_in);
+    commands.entity(password_field).observe(sign_in);
 
     commands
         .spawn((
@@ -925,6 +955,11 @@ impl Start<'_, '_> {
     }
 }
 
+/// Signs in, or creates the account, and stays on this screen: entering a race is another press.
+fn sign_in(_: On<Activate>, mut start: Start) {
+    start.go(Intent::None);
+}
+
 fn quick_play(_: On<Activate>, mut start: Start) {
     start.go(Intent::QuickPlay);
 }
@@ -1089,9 +1124,9 @@ fn help(shown: Shown, mode: LoginMode, name: &str, password: &str) -> (String, C
             let chars = name.chars().count();
             if chars == 0 {
                 let text = if mode == LoginMode::Create {
-                    "Pick the name other players will see."
+                    "Pick the name other players will see, then CREATE ACCOUNT."
                 } else {
-                    "Your account name and password."
+                    "Your account name and password, then SIGN IN."
                 };
                 (text.into(), theme::TEXT_DIM)
             } else if name.trim() != name {
@@ -1138,10 +1173,15 @@ fn update_login(
     preferences: Res<StoredPreferences>,
     time: Res<Time<Real>>,
     action_buttons: Query<
-        (Entity, Has<InteractionDisabled>, Has<RankedButton>),
-        With<ActionButton>,
+        (
+            Entity,
+            Has<InteractionDisabled>,
+            Has<RankedButton>,
+            Has<SignInButton>,
+            &Children,
+        ),
+        Or<(With<ActionButton>, With<SignInButton>)>,
     >,
-    ranked_buttons: Query<&Children, With<RankedButton>>,
     mut tabs: Query<(&ModeTab, &mut ButtonKind)>,
     mut panels: Query<(
         &mut Node,
@@ -1235,7 +1275,7 @@ fn update_login(
         || RANKED_LABEL.to_owned(),
         |queue| searching_label(now - queue.since),
     );
-    for children in &ranked_buttons {
+    for (_, _, _, _, children) in action_buttons.iter().filter(|button| button.2) {
         for child in children {
             if let Ok(mut text) = texts.p3().get_mut(*child) {
                 set(&mut text, label.clone());
@@ -1288,10 +1328,30 @@ fn update_login(
     }
 
     let ready = request(account.as_deref(), *mode, &guest_name.0, &name, &password).is_some();
-    for (button, disabled, ranked) in &action_buttons {
+    // Signing in is its own press: until it is done, nothing takes an account anywhere.
+    let signing_in = shown == Shown::Account;
+    let sign_in_label = if *mode == LoginMode::Create {
+        "CREATE ACCOUNT"
+    } else {
+        "SIGN IN"
+    };
+    for (button, disabled, _, _, children) in action_buttons.iter().filter(|button| button.3) {
+        for child in children {
+            if let Ok(mut text) = texts.p3().get_mut(*child) {
+                set(&mut text, sign_in_label.to_owned());
+            }
+        }
+        let enabled = ready && !connecting && signing_in;
+        if enabled && disabled {
+            commands.entity(button).remove::<InteractionDisabled>();
+        } else if !enabled && !disabled {
+            commands.entity(button).insert(InteractionDisabled);
+        }
+    }
+    for (button, disabled, ranked, _, _) in action_buttons.iter().filter(|button| !button.3) {
         // Leaving the queue is always possible.
-        let enabled =
-            (ready && !connecting && !(ranked && as_guest)) || (ranked && ladder.queue.is_some());
+        let enabled = (ready && !connecting && !signing_in && !(ranked && as_guest))
+            || (ranked && ladder.queue.is_some());
         if enabled && disabled {
             commands.entity(button).remove::<InteractionDisabled>();
         } else if !enabled && !disabled {
