@@ -18,6 +18,7 @@ mod lobby;
 mod net;
 mod nickname;
 mod prediction;
+mod quality;
 mod preferences;
 mod race;
 #[cfg(not(target_arch = "wasm32"))]
@@ -130,6 +131,7 @@ fn main() {
         trail::TrailPlugin,
         burst::BurstPlugin,
         editor::EditorPlugin,
+        quality::QualityPlugin,
         spectator::SpectatorPlugin,
         ui::safe_area::SafeAreaPlugin {
             fixed: settings.safe_area,

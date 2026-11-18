@@ -195,7 +195,10 @@ fn lay_trails(
         seen.push(trail.car);
         trail.look = look_of(trail.car);
         let (at, road, on_road) = tail(&snapshot.car);
-        lay(&mut trail, at, road, on_road, now);
+        // Only while drifting (since v1.0.0-rc4, the user's word "Pense bien à n'activer la
+        // visualisation du sillon que pendant le drift"): the mark a skid leaves, nothing else.
+        let drifting = snapshot.car.is_drifting();
+        lay(&mut trail, at, road, on_road && drifting, now);
         let effect = Effect::of(trail.look.trail);
         let color = TRAIL_COLORS[usize::from(trail.look.trail_color)].1;
         let points: Vec<TrailPoint> = trail.points.iter().copied().collect();

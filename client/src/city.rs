@@ -134,6 +134,11 @@ impl Landmarks {
 }
 
 /// A lane of traffic, slid along its world direction at its speed, by up to one pattern's length.
+/// What moves in the city's light, its traffic and its searchlights, which the lower graphics
+/// levels leave out (see `quality.rs`).
+#[derive(Component)]
+pub struct CityLight;
+
 #[derive(Component)]
 struct Traffic {
     direction: Vec3,
@@ -248,6 +253,7 @@ fn spawn_traffic(
                     direction: lane.direction,
                     speed: lane.speed,
                 },
+                CityLight,
             ));
         }
     }
@@ -363,6 +369,7 @@ fn spawn_searchlights(
             NotShadowCaster,
             Transform::from_translation(*foot).with_rotation(light.rotation(0.0)),
             light,
+            CityLight,
         ));
     }
 }

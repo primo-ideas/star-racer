@@ -34,11 +34,20 @@ impl Plugin for SettingsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<SettingsDialog>()
             .init_resource::<Listening>()
+            .add_plugins(super::sound_graphics::plugin)
             .add_systems(OnEnter(Screen::Login), open_scripted)
             .add_systems(OnExit(Screen::Login), close)
             .add_systems(
                 Update,
-                (listen, close_on_back, show, refresh)
+                (
+                    listen,
+                    close_on_back,
+                    super::sound_graphics::close_on_back,
+                    show,
+                    refresh,
+                    super::sound_graphics::show,
+                    super::sound_graphics::refresh,
+                )
                     .chain()
                     .run_if(in_state(Screen::Login)),
             );
@@ -153,9 +162,16 @@ struct Help;
 struct CloseButton;
 
 /// `--settings` opens the dialog at once, for unattended looks at it.
-fn open_scripted(mut script: ResMut<Script>, mut dialog: ResMut<SettingsDialog>) {
+fn open_scripted(
+    mut script: ResMut<Script>,
+    mut dialog: ResMut<SettingsDialog>,
+    mut sub: ResMut<super::sound_graphics::SoundGraphicsDialog>,
+) {
     if std::mem::take(&mut script.settings) {
         dialog.open = true;
+    }
+    if std::mem::take(&mut script.sound_graphics) {
+        sub.open = true;
     }
 }
 
@@ -164,8 +180,14 @@ fn close(mut dialog: ResMut<SettingsDialog>, mut listening: ResMut<Listening>) {
     *listening = Listening::default();
 }
 
-fn close_on_back(input: MenuInput, mut dialog: ResMut<SettingsDialog>, listening: Res<Listening>) {
-    if dialog.open && !listening.active() && !listening.just_ended && input.back() {
+fn close_on_back(
+    input: MenuInput,
+    mut dialog: ResMut<SettingsDialog>,
+    listening: Res<Listening>,
+    sub: Res<super::sound_graphics::SoundGraphicsDialog>,
+) {
+    // Back closes the sub-menu first, which sees it after this.
+    if dialog.open && !sub.open && !listening.active() && !listening.just_ended && input.back() {
         dialog.open = false;
     }
 }
@@ -193,7 +215,7 @@ fn reset(
     preferences.update(|preferences| {
         preferences.controls = Bindings::default();
         preferences.touch = TouchOptions::default();
-        preferences.vibration = true;
+        preferences.vibration = false;
     });
 }
 
@@ -547,6 +569,10 @@ fn spawn_dialog(
             buttons
                 .spawn(button(fonts, ButtonKind::Quiet, "RESET TO DEFAULTS"))
                 .observe(reset);
+            // The sub-menu of the volumes and the graphics (since v1.0.0-rc4).
+            buttons
+                .spawn(button(fonts, ButtonKind::Secondary, "GRAPHICS & SOUND"))
+                .observe(super::sound_graphics::open);
             buttons
                 .spawn((CloseButton, button(fonts, ButtonKind::Primary, "CLOSE")))
                 .observe(close_button);
@@ -840,9 +866,10 @@ mod tests {
     #[test]
     fn a_choice_steps_through_its_values_and_comes_round() {
         let mut preferences = Preferences::default();
-        assert_eq!(Choice::Vibration.value(&preferences), "ON");
-        Choice::Vibration.step(&mut preferences);
+        // Off by default since v1.0.0-rc4.
         assert_eq!(Choice::Vibration.value(&preferences), "OFF");
+        Choice::Vibration.step(&mut preferences);
+        assert_eq!(Choice::Vibration.value(&preferences), "ON");
 
         assert_eq!(Choice::Side.value(&preferences), "LEFT");
         Choice::Side.step(&mut preferences);

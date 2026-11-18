@@ -108,7 +108,7 @@ const TRACK_SIDE_HEIGHT: f32 = 9.0;
 /// The glow around what is brightest. Only what stands above the threshold glows, and the glow is
 /// added on top of the image rather than taken from what glows, so the dark road, the buildings and
 /// the cars stay as crisp as they were, and the neon, drawn at full brightness, wears a halo.
-const BLOOM: Bloom = Bloom {
+pub(crate) const BLOOM: Bloom = Bloom {
     intensity: 0.2,
     low_frequency_boost: 0.55,
     low_frequency_boost_curvature: 0.9,
@@ -145,6 +145,12 @@ impl Plugin for CameraPlugin {
                 .in_set(FollowCar)
                 .after(RaceUpdate)
                 .after(sway)
+                .run_if(in_state(Screen::Lobby)),
+        )
+        .add_systems(
+            PostUpdate,
+            hide_cars_at_the_lens
+                .before(bevy::transform::TransformSystems::Propagate)
                 .run_if(in_state(Screen::Lobby)),
         );
     }
@@ -800,5 +806,32 @@ mod tests {
                 );
             }
         }
+    }
+}
+
+/// How close to the camera another car may come before it is not drawn, in meters: nearer, it
+/// fills the picture from inside (since v1.0.0-rc4: the short film showed a car swept across the
+/// lens, and a wheel the size of the screen).
+const LENS_CLEARANCE: f32 = 4.5;
+
+/// Hides every car but the one followed while it is within [`LENS_CLEARANCE`] of the camera,
+/// whichever camera that is: the chase camera behind a car overtaking, a spectator's orbit.
+fn hide_cars_at_the_lens(
+    view: Res<RaceView>,
+    cameras: Query<&Transform, With<MainCamera>>,
+    mut cars: Query<(&crate::race::CarVisual, &Transform, &mut Visibility), Without<MainCamera>>,
+) {
+    let Ok(camera) = cameras.single() else {
+        return;
+    };
+    let followed = view.followed.map(|(id, _)| id);
+    for (visual, place, mut visibility) in &mut cars {
+        let near = Some(visual.0) != followed
+            && place.translation.distance(camera.translation) < LENS_CLEARANCE;
+        visibility.set_if_neq(if near {
+            Visibility::Hidden
+        } else {
+            Visibility::Inherited
+        });
     }
 }

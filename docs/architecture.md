@@ -209,7 +209,7 @@ in v0.1.68): six stylized cars of the future, all built the same way in `car_mod
 fins, thrusters), all 4.4 to 5 m long, all hovering, all driving the same. The first three are
 free, the others won (see [Rewards](rewards.md)):
 
-- **COMET**, a low coupé, a long wedge of a nose, the cabin set back, a duck tail;
+- **COMET**, a rocket of a car, narrow, tapering to one big thruster, a single fin on its spine (a low coupé with a duck tail until v1.0.0-rc4, too like the BOLT for the user);
 - **BOLT**, a muscle car, a long bonnet, broad shoulders, fat rear wheels and a big wing on struts;
 - **PULSE**, a compact, short and round, a bubble of a cabin, big wheels at its corners;
 - **PHANTOM**, a hypercar, the lowest of all, its canopy forward, twin fins at the tail;
@@ -295,6 +295,13 @@ pushes at 35 and the tightest drift turns the car at about 90. The finish shots,
 ride with the car, feel none of it.
 
 ## The trail
+
+Since v1.0.0-rc4 a trail is laid only while its car drifts ("Pense bien à n'activer la visualisation
+du sillon que pendant le drift"): the mark a skid leaves, and no more the long streaks a full grid
+drew across the road. Since then too, a car within 4.5 m of the camera, other than the one
+followed, is not drawn (`camera::hide_cars_at_the_lens`): the short film showed one swept across
+the lens, and a wheel the size of the screen; and the bots of a lobby each get a name nobody else
+there has (two of each stood in a full grid's standings).
 
 Since v0.1.68 (the user's word: "un liseret de couleur stylisé, et dans le thème, derrière la
 voiture, comme si c'était une trace de dérapage. Couleur et effets customisables dans le meme menu

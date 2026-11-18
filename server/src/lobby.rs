@@ -584,9 +584,23 @@ impl Lobby {
             trail_color: (seed / 13 % u32::from(protocol::CAR_TRAIL_COLORS)) as u8,
             horn: (seed / 17 % u32::from(rewards::FREE)) as u8,
         };
+        // A name nobody in the lobby has (since v1.0.0-rc4: a full grid showed two of each in the
+        // standings), from the pool in turn after the seed's, then numbered past its end.
+        let taken = |name: &str| self.members.iter().any(|member| member.player.nickname == name);
+        let first = seed as usize % BOT_NAMES.len();
+        let nickname = (0..BOT_NAMES.len())
+            .map(|step| format!("BOT {}", BOT_NAMES[(first + step) % BOT_NAMES.len()]))
+            .find(|name| !taken(name))
+            .unwrap_or_else(|| {
+                let base = BOT_NAMES[first];
+                (2..)
+                    .map(|n| format!("BOT {base} {n}"))
+                    .find(|name| !taken(name))
+                    .expect("some number is free")
+            });
         let player = Player {
             id: PlayerId(id),
-            nickname: format!("BOT {}", BOT_NAMES[(seed as usize) % BOT_NAMES.len()]),
+            nickname,
             guest: true,
             device: id,
             look,
@@ -1654,6 +1668,25 @@ mod tests {
         assert_eq!(names.len(), 2);
         assert!(names.iter().all(|name| name.starts_with("BOT ")));
         tick_until(&mut lobby, 10.0, |lobby| matches!(lobby.phase, Phase::Racing(_)));
+    }
+
+    /// A grid full of bots has no name twice (since v1.0.0-rc4: the short film's standings had
+    /// two of several), past the pool's twelve names too.
+    #[test]
+    fn bots_have_names_of_their_own() {
+        let mut lobby = new_lobby(settings(1, 16, 16), quick_timings());
+        join(&mut lobby, 1);
+        while lobby.add_bot() {}
+        let names: Vec<String> = lobby
+            .state()
+            .players
+            .iter()
+            .filter(|player| player.bot)
+            .map(|player| player.nickname.clone())
+            .collect();
+        assert_eq!(names.len(), 15);
+        let unique: std::collections::BTreeSet<&String> = names.iter().collect();
+        assert_eq!(unique.len(), names.len(), "{names:?}");
     }
 
     /// Giving the race up after the start retires the player, whose car drives itself; the race

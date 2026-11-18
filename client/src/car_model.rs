@@ -5,7 +5,7 @@
 //! simulation's and the simulation knows nothing of looks. The first three are free, the others
 //! won by playing (see `protocol::rewards`):
 //!
-//! - **COMET**: a low coupé, a long wedge of a nose, the cabin set back, a duck tail.
+//! - **COMET**: a rocket of a car, narrow, tapering to one big thruster, a single fin on its spine.
 //! - **BOLT**: a muscle car, a long bonnet, broad shoulders, fat rear wheels and a big wing.
 //! - **PULSE**: a compact, short and round, a bubble of a cabin, big wheels at its corners.
 //! - **PHANTOM** (won): a hypercar, the lowest of all, its canopy forward, twin fins at the tail.
@@ -75,7 +75,7 @@ impl CarModel {
     /// A line about it, for the garage.
     pub fn blurb(self) -> &'static str {
         match self {
-            Self::Comet => "A low coupé, all nose, with a duck tail.",
+            Self::Comet => "A rocket of a car, narrow, one fin, one big thruster.",
             Self::Bolt => "Broad shoulders, fat wheels and a big wing.",
             Self::Pulse => "Short and round, big wheels at its corners.",
             Self::Phantom => "The lowest of all, twin fins at its tail.",
@@ -255,38 +255,32 @@ const WHEEL_CLEARANCE: f32 = 0.22;
 /// The sides of a wheel's disc: few, so a grid of cars stays cheap to draw.
 const WHEEL_SIDES: usize = 8;
 
-// Comet: a low coupé, a long wedge of a nose, the cabin set back, a duck tail.
+// Comet: a rocket of a car, a teardrop seen from above, narrow, its tail tapering to a round
+// point round one big thruster, a single fin standing on its spine, small wheels; nothing like
+// the Bolt's square shoulders and wing (since v1.0.0-rc4, the user's word: "La voiture comet et
+// bolt se ressemblent trop"; it was a low coupé with a duck tail).
 const COMET: Design = Design {
     body: &[
-        section(-2.20, 0.82, 0.36, 0.78),
-        section(-1.70, 0.98, 0.30, 0.82),
-        section(-0.60, 0.96, 0.28, 0.78),
-        section(0.70, 0.92, 0.28, 0.70),
-        section(1.70, 0.74, 0.29, 0.58),
-        section(2.35, 0.40, 0.31, 0.46),
-        section(2.62, 0.06, 0.34, 0.40),
+        section(-2.25, 0.30, 0.42, 0.66),
+        section(-1.98, 0.56, 0.36, 0.74),
+        section(-1.40, 0.76, 0.30, 0.78),
+        section(-0.30, 0.82, 0.28, 0.74),
+        section(0.90, 0.76, 0.28, 0.64),
+        section(1.80, 0.52, 0.29, 0.52),
+        section(2.40, 0.22, 0.31, 0.42),
+        section(2.68, 0.04, 0.33, 0.38),
     ],
     cabin: &[
-        section(-1.55, 0.50, 0.76, 0.84),
-        section(-0.95, 0.62, 0.77, 1.10),
-        section(0.05, 0.60, 0.74, 1.08),
-        section(0.75, 0.44, 0.66, 0.74),
+        section(-0.95, 0.38, 0.74, 0.80),
+        section(-0.45, 0.50, 0.73, 1.06),
+        section(0.35, 0.48, 0.70, 1.02),
+        section(0.95, 0.30, 0.64, 0.70),
     ],
-    axles: [axle(1.45, 1.06, 0.34, 0.26), axle(-1.45, 1.10, 0.36, 0.30)],
-    wings: &[Wing {
-        back: -2.22,
-        front: -1.95,
-        height: 0.86,
-        span: 0.84,
-        struts: false,
-        end_plates: false,
-    }],
-    fins: &[],
-    nozzles: &[
-        nozzle(-2.22, 0.55, -0.42, 0.18, 0.09),
-        nozzle(-2.22, 0.55, 0.42, 0.18, 0.09),
-    ],
-    stripe: &[(0.9, 2.3)],
+    axles: [axle(1.50, 0.98, 0.30, 0.22), axle(-1.35, 1.02, 0.32, 0.24)],
+    wings: &[],
+    fins: &[(-2.15, -1.05, 1.16, 0.0)],
+    nozzles: &[nozzle(-2.27, 0.55, 0.0, 0.26, 0.14)],
+    stripe: &[(-2.1, 2.5)],
     light_bar: None,
 };
 

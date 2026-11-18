@@ -116,6 +116,11 @@ struct ActionButton;
 #[derive(Component)]
 struct SignInButton;
 
+/// Greyed once the server has said nobody is on the ladder yet (since v1.0.0-rc4, the user's
+/// word "grise le bouton leaderboard quand il n'y a rien a afficher").
+#[derive(Component)]
+struct LeaderboardButton;
+
 #[derive(Component)]
 struct QuickPlayButton;
 
@@ -582,6 +587,7 @@ fn spawn_login(
                     .observe(browse);
                 row.spawn((
                     ActionButton,
+                    LeaderboardButton,
                     button(&fonts, ButtonKind::Quiet, "LEADERBOARD"),
                 ))
                 .insert(small(170.0))
@@ -1179,6 +1185,7 @@ fn update_login(
             Has<RankedButton>,
             Has<SignInButton>,
             &Children,
+            Has<LeaderboardButton>,
         ),
         Or<(With<ActionButton>, With<SignInButton>)>,
     >,
@@ -1275,7 +1282,7 @@ fn update_login(
         || RANKED_LABEL.to_owned(),
         |queue| searching_label(now - queue.since),
     );
-    for (_, _, _, _, children) in action_buttons.iter().filter(|button| button.2) {
+    for (_, _, _, _, children, _) in action_buttons.iter().filter(|button| button.2) {
         for child in children {
             if let Ok(mut text) = texts.p3().get_mut(*child) {
                 set(&mut text, label.clone());
@@ -1335,7 +1342,7 @@ fn update_login(
     } else {
         "SIGN IN"
     };
-    for (button, disabled, _, _, children) in action_buttons.iter().filter(|button| button.3) {
+    for (button, disabled, _, _, children, _) in action_buttons.iter().filter(|button| button.3) {
         for child in children {
             if let Ok(mut text) = texts.p3().get_mut(*child) {
                 set(&mut text, sign_in_label.to_owned());
@@ -1348,9 +1355,14 @@ fn update_login(
             commands.entity(button).insert(InteractionDisabled);
         }
     }
-    for (button, disabled, ranked, _, _) in action_buttons.iter().filter(|button| !button.3) {
+    // Nothing on the ladder, as the server last said: nothing to show.
+    let empty_ladder = ladder.profile.is_some() && ladder.leaderboard.is_empty();
+    for (button, disabled, ranked, _, _, leaderboard) in
+        action_buttons.iter().filter(|button| !button.3)
+    {
         // Leaving the queue is always possible.
-        let enabled = (ready && !connecting && !signing_in && !(ranked && as_guest))
+        let enabled = (ready && !connecting && !signing_in && !(ranked && as_guest)
+            && !(leaderboard && empty_ladder))
             || (ranked && ladder.queue.is_some());
         if enabled && disabled {
             commands.entity(button).remove::<InteractionDisabled>();

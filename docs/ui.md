@@ -182,6 +182,14 @@ SETTINGS, on the first screen, opens a dialog over it (`ui/settings.rs`; `--sett
 once). What it holds is stored with the other choices, written out as it changes, and in force
 from the next lobby entered.
 
+Since v1.0.0-rc4: vibration is off until switched on ("vibration off par défaut"), and GRAPHICS &
+SOUND, beside RESET, opens a sub-menu over the settings (`ui/sound_graphics.rs`,
+`--sound-graphics`): the general volume and the horns' as neon bars stepped by tenths with ‹ and ›
+(the general one scales the `--volume` the game started with, the horns' every horn heard), the
+music's greyed until there is music, and the graphics level, AUTO or one of four (see
+[Graphics quality](graphics.md)). Back closes the sub-menu first. On the first screen the
+LEADERBOARD button is greyed once the server has said nobody is on the ladder yet.
+
 **With keys and a gamepad**, it is the table of bindings (`client/src/bindings.rs`), in two
 columns since v0.1.70: fifteen actions, each with two keys and one gamepad button. Since v0.1.70
 they bear the names of Rocket Racing, which the game takes after openly, and the gamepad is laid

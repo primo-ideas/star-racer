@@ -58,6 +58,8 @@ pub struct Script {
     pub ranked: bool,
     /// Open the settings over the first screen, to look at them.
     pub settings: bool,
+    /// With the settings, open GRAPHICS & SOUND over them.
+    pub sound_graphics: bool,
     /// Open the garage, to look at it.
     pub garage: bool,
     /// Once connected, open the level editor.
@@ -350,6 +352,10 @@ pub fn read() -> Settings {
         #[arg(long, conflicts_with = "who")]
         settings: bool,
 
+        /// Open GRAPHICS & SOUND, over the settings.
+        #[arg(long, conflicts_with = "who")]
+        sound_graphics: bool,
+
         /// Open the garage, where the pod is chosen and painted.
         #[arg(long, conflicts_with_all = ["who", "settings"])]
         garage: bool,
@@ -459,7 +465,8 @@ pub fn read() -> Settings {
             create_dialog: args.create_dialog,
             quick_play: args.quick_play,
             ranked: args.ranked,
-            settings: args.settings,
+            settings: args.settings || args.sound_graphics,
+            sound_graphics: args.sound_graphics,
             garage: args.garage,
             editor: args.editor,
             editor_try: args.editor_try,
@@ -537,7 +544,8 @@ pub fn read() -> Settings {
             create_dialog: has("create_dialog"),
             quick_play: has("quick_play"),
             ranked: has("ranked"),
-            settings: has("settings"),
+            settings: has("settings") || has("sound_graphics"),
+            sound_graphics: has("sound_graphics"),
             garage: has("garage"),
             editor: has("editor"),
             editor_try: has("editor_try"),

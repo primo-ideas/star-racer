@@ -63,6 +63,8 @@ pub struct SoundPlugin {
 impl Plugin for SoundPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(GlobalVolume::new(Volume::Linear(self.volume)))
+            .insert_resource(BaseVolume(self.volume))
+            .add_systems(Update, follow_volume)
             .add_audio_source::<Tone>()
             .add_audio_source::<Recorded>()
             .add_audio_source::<Drone>()
@@ -560,7 +562,10 @@ fn play_horns(
     own: Res<crate::controls::OwnHonk>,
     sounds: Res<Sounds>,
     mut counted: Local<HashMap<CarId, u8>>,
+    preferences: Res<crate::preferences::StoredPreferences>,
 ) {
+    // The horns' own volume in the settings (since v1.0.0-rc4).
+    let horns = crate::preferences::AudioPreferences::share(preferences.get().audio.horns);
     let Some(membership) = &current.0 else {
         counted.clear();
         return;
@@ -572,7 +577,7 @@ fn play_horns(
     };
     let play = |commands: &mut Commands, car: CarId, volume: f32| {
         if let Some(sound) = sounds.horns.get(usize::from(horn_of(car))) {
-            sounds.play(commands, sound, volume);
+            sounds.play(commands, sound, volume * horns);
         }
     };
     if own.0 {
@@ -643,5 +648,23 @@ mod tests {
             assert!(samples.last().unwrap().abs() < 2e-3, "{tone:?}");
             assert!(peak > 0.08 && peak < 0.95, "{peak}: {tone:?}");
         }
+    }
+}
+
+/// The volume the game was started with (`--volume`), which the settings' general volume scales.
+#[derive(Resource)]
+struct BaseVolume(f32);
+
+/// The general volume of the settings, applied over the one the game was started with (since
+/// v1.0.0-rc4, the user's word: "des jauges pour le volume générale, musique (grisé car a venir),
+/// et klaxxon").
+fn follow_volume(
+    base: Res<BaseVolume>,
+    preferences: Res<crate::preferences::StoredPreferences>,
+    mut global: ResMut<GlobalVolume>,
+) {
+    let wanted = base.0 * crate::preferences::AudioPreferences::share(preferences.get().audio.master);
+    if (global.volume.to_linear() - wanted).abs() > 1e-4 {
+        *global = GlobalVolume::new(Volume::Linear(wanted));
     }
 }

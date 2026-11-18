@@ -69,6 +69,37 @@ pub struct Preferences {
     /// The server the player typed in the settings, as they typed it. None while they keep the
     /// default (see [`crate::settings::server_url`]).
     pub host: Option<String>,
+    /// How fine the game is drawn: fitted to the machine, or a level picked (since v1.0.0-rc4).
+    pub graphics: crate::quality::Setting,
+    /// How loud everything is, the music and the horns, from 0 to 10 (since v1.0.0-rc4).
+    pub audio: AudioPreferences,
+}
+
+/// The volumes the settings hold, each from 0 to 10.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(default)]
+pub struct AudioPreferences {
+    pub master: u8,
+    /// Kept for the music to come; nothing plays it yet.
+    pub music: u8,
+    pub horns: u8,
+}
+
+impl Default for AudioPreferences {
+    fn default() -> Self {
+        Self {
+            master: 8,
+            music: 7,
+            horns: 5,
+        }
+    }
+}
+
+impl AudioPreferences {
+    /// A volume as a share, from 0 to 1.
+    pub fn share(volume: u8) -> f32 {
+        f32::from(volume.min(10)) / 10.0
+    }
 }
 
 impl Default for Preferences {
@@ -79,9 +110,12 @@ impl Default for Preferences {
             lobby: LobbyPreferences::default(),
             controls: Bindings::default(),
             touch: TouchOptions::default(),
-            vibration: true,
+            // Off until asked for (since v1.0.0-rc4, the user's word "vibration off par défaut").
+            vibration: false,
             look: None,
             host: None,
+            graphics: crate::quality::Setting::Auto,
+            audio: AudioPreferences::default(),
         }
     }
 }
@@ -306,7 +340,7 @@ mod tests {
         let preferences: Preferences = ron::from_str("()").expect("an empty record reads");
         assert_eq!(preferences, Preferences::default());
         assert_eq!(preferences.lobby.laps, DEFAULT_LAPS);
-        assert!(preferences.vibration);
+        assert!(!preferences.vibration);
         assert_eq!(preferences.controls, Bindings::default());
     }
 

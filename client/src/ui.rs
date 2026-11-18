@@ -11,6 +11,7 @@ pub mod leaderboard;
 mod lobbies;
 mod login;
 pub mod navigation;
+mod sound_graphics;
 mod player_card;
 pub mod safe_area;
 mod settings;
