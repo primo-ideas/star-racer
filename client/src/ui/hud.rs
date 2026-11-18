@@ -20,7 +20,7 @@ use star_racer_sim::TICK_RATE;
 use star_racer_sim::car::ASTRAY_SECONDS;
 use star_racer_sim::race::{self, RaceStanding, StartGrade};
 
-use super::gauges::{Gauges, update_gauges};
+use super::gauges::{Drift, Gauges, update_gauges};
 use super::navigation::MenuInput;
 use super::safe_area::SafeInset;
 use super::theme::{self, Fonts};
@@ -891,7 +891,11 @@ fn update_hud(
         .get(&FrameTimeDiagnosticsPlugin::FPS)
         .and_then(|fps| fps.smoothed())
     {
-        model.text(Slot::FrameRate, format!("{fps:.0} fps"), theme::TEXT_FAINT);
+        model.text(
+            Slot::FrameRate,
+            format!("{}  ·  {fps:.0} fps", super::version_tag()),
+            theme::TEXT_FAINT,
+        );
     }
     if overlay.0 {
         model.shown.insert(Block::Latency);
@@ -1025,20 +1029,27 @@ fn build_model(
             let gauges = &mut model.gauges;
             gauges.shown = true;
             gauges.turbo = (car.turbo, car.turbo_boost > 0.0);
-            // The drift arc holds the charge while drifting, then the boost it paid out.
-            (gauges.drift, gauges.drift_active) = if car.is_drifting() {
-                ((snapshot.drift_gauge, theme::GREEN, "DRIFT"), true)
-            } else if car.boost > 0.0 {
-                ((snapshot.boost_gauge, theme::AMBER, "BOOST"), true)
-            } else {
-                ((0.0, theme::GREEN, "DRIFT"), false)
+            let tuning = membership.state.as_ref().map(|state| &state.tuning);
+            // The drift arc holds the charge itself while drifting, from nothing to the most a
+            // drift pays, with where it starts to pay; then the boost it paid out.
+            gauges.drift = match tuning {
+                Some(tuning) if car.is_drifting() => {
+                    let full = tuning.drift_min_charge
+                        + tuning.drift_max_boost / tuning.drift_boost_rate.max(1e-3);
+                    let boost = car.pending_boost(tuning);
+                    let drift = if boost >= tuning.drift_max_boost - 1e-3 {
+                        Drift::Full(boost)
+                    } else if boost > 0.0 {
+                        Drift::Ready(boost)
+                    } else {
+                        Drift::Charging
+                    };
+                    (drift, car.drift_charge / full, tuning.drift_min_charge / full)
+                }
+                _ if car.boost > 0.0 => (Drift::Boost(car.boost), snapshot.boost_gauge, 0.0),
+                _ => (Drift::Idle, 0.0, 0.0),
             };
-            if let Some(tuning) = membership
-                .state
-                .as_ref()
-                .map(|state| &state.tuning)
-                .filter(|tuning| tuning.thrust_seconds > 0.0)
-            {
+            if let Some(tuning) = tuning.filter(|tuning| tuning.thrust_seconds > 0.0) {
                 // Lit in the air, or while the tank fills after a flight.
                 let active = car.is_airborne() || car.thrust < tuning.thrust_seconds - 1e-3;
                 gauges.thrust = (car.thrust / tuning.thrust_seconds, active, car.thrusting);

@@ -148,7 +148,6 @@ The client module layout follows the path of the data:
 | `race` | Snapshot buffer, interpolation, car entities, `RaceView` (the cars and the followed one). |
 | `car_model` | What a car looks like: four pods, ten paints and eight neons, their hulls, lights, flames and the light under them. |
 | `weight` | The cars' bodies on their springs, and how the followed car is pushed, for the camera. |
-| `drift_meter` | The drift charge drawn on the road around the back of the player's car, as Rocket Racing draws it. |
 | `controls` | Gamepad, keyboard, touch or autopilot input (accelerate, drift, steer), sent on change and numbered. |
 | `latency` | Times the ping and every input to the server and to the screen (see [Latency](latency.md)). |
 | `prediction` | The player's own car, driven on a timeline ahead of the server and put right by its snapshots. |

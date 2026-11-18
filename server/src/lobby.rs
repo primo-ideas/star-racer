@@ -1588,16 +1588,22 @@ mod tests {
             .map(|player| player.car)
             .collect();
         assert_eq!(bots.len(), QUICK_PLAY_FILL - 1);
-        let started = member(&lobby, bots[0]).car.position;
         tick_until(&mut lobby, 150.0, |lobby| {
             autopilot_inputs_for(lobby, car);
             matches!(lobby.phase, Phase::Results { .. })
         });
-        assert!(member(&lobby, bots[0]).car.position.distance(started) > 50.0, "a bot drove");
         let LobbyPhase::Results { xp, results, .. } = lobby.state().phase else {
             unreachable!();
         };
         assert_eq!(results.len(), QUICK_PLAY_FILL);
+        // The bots drove: they finished the race, or some of them did within the 30 s left after
+        // the winner (where one stands at the end says nothing, a lap ending where it began).
+        assert!(
+            results
+                .iter()
+                .any(|result| bots.contains(&result.car) && result.time_ms.is_some()),
+            "no bot finished: {results:?}"
+        );
         assert!(xp.iter().all(|gain| gain.car == car), "{xp:?}");
         lobby.leave(car);
         assert!(lobby.members.is_empty(), "the bots left with the last player");

@@ -85,6 +85,9 @@ pub struct Car {
     pub climb: f32,
     /// Whether the jump button was down on the last tick, so a press is told apart from a hold.
     pub jump_button: bool,
+    /// Whether the thrust (Star Fly) was down on the last tick: a press of it alone on the road
+    /// lifts the car on the thruster (since v0.1.78).
+    pub thrust_button: bool,
     /// Seconds since the car left the road; 0 on it. The thruster lights only once the hop has
     /// had `thrust_delay` of it.
     pub airtime: f32,
@@ -376,6 +379,12 @@ pub struct CarTuning {
     /// How much more holding the button drags for every second it is held, in m/s² per second: a
     /// drift tightened for long brakes harder and harder, so the button has to be let go of.
     pub drift_button_drag_ramp: f32,
+    /// How much faster a drift charges while the button is held, from 1 (no faster): holding the
+    /// button is how a drift is made to pay (since v0.1.78).
+    pub drift_button_charge: f32,
+    /// The share of `drift_angle` the body swings out to while the button is held, from 0 to 1: a
+    /// held drift stays under control, less thrown across its travel (since v0.1.78).
+    pub drift_button_angle: f32,
     /// Seconds a press of the drift button is remembered for. A thumb often lands on the button a
     /// moment before the stick has left the center; without this, that press started nothing.
     pub drift_press_buffer: f32,
@@ -502,6 +511,8 @@ impl CarTuning {
             ("drift_swing_acceleration", self.drift_swing_acceleration),
             ("drift_swing_rate", self.drift_swing_rate),
             ("drift_button_tighten", self.drift_button_tighten),
+            ("drift_button_charge", self.drift_button_charge),
+            ("drift_button_angle", self.drift_button_angle),
             ("drift_radius_tight", self.drift_radius_tight),
             ("boost_top_speed", self.boost_top_speed),
             ("boost_acceleration", self.boost_acceleration),
@@ -566,6 +577,18 @@ impl CarTuning {
             if value > 1.0 {
                 return Err(format!("{name} must be at most 1, not {value}"));
             }
+        }
+        if self.drift_button_charge < 1.0 {
+            return Err(format!(
+                "drift_button_charge must be at least 1, not {}",
+                self.drift_button_charge
+            ));
+        }
+        if self.drift_button_angle > 1.0 {
+            return Err(format!(
+                "drift_button_angle must be at most 1, not {}",
+                self.drift_button_angle
+            ));
         }
         if self.drift_button_tighten > 1.0 {
             return Err(format!(
@@ -688,6 +711,7 @@ impl Car {
             drift_button: self.drift_button,
             turbo_button: self.turbo_button,
             jump_button: self.jump_button,
+            thrust_button: self.thrust_button,
             dash_button: self.dash_button,
             reset_button: self.reset_button,
             ..Self::default()
@@ -716,6 +740,7 @@ impl Car {
             drift_button: self.drift_button,
             turbo_button: self.turbo_button,
             jump_button: self.jump_button,
+            thrust_button: self.thrust_button,
             dash_button: self.dash_button,
             reset_button: true,
             ..Self::default()
@@ -815,6 +840,8 @@ impl Car {
     ) {
         let pressed = input.jump && !self.jump_button;
         self.jump_button = input.jump;
+        let thrust_pressed = input.thrust && !self.thrust_button;
+        self.thrust_button = input.thrust;
         self.thrusting = false;
         let on_road = self.altitude == 0.0;
         // The height this tick is measured from: a car that was on the road moved with it.
@@ -827,6 +854,12 @@ impl Car {
             if pressed {
                 // A press on the very tick the road runs out still jumps.
                 self.climb += tuning.jump_speed;
+            } else if thrust_pressed && self.thrust > 0.0 {
+                // Star Fly alone, pressed on the road: the thruster lights at once and lifts the
+                // car, with neither the hop nor the ignition's kick (since v0.1.78; before, it
+                // did nothing until a jump).
+                self.ignited = true;
+                self.airtime = tuning.thrust_delay;
             } else if road {
                 return;
             }
@@ -1071,7 +1104,13 @@ impl Car {
             } else {
                 // Tighter drifts build up faster: from half to one and a half times real time.
                 // Steering out of the drift charges at the slow end, never backwards.
-                let gained = dt * (0.5 + self.drift_stick().max(0.0));
+                // Holding the button makes it pay: it charges `drift_button_charge` times faster.
+                let held = if input.drift {
+                    tuning.drift_button_charge
+                } else {
+                    1.0
+                };
+                let gained = dt * (0.5 + self.drift_stick().max(0.0)) * held;
                 self.drift_charge += gained;
                 // Drifting is what fills the turbo.
                 self.turbo = (self.turbo + gained * tuning.turbo_fill).min(TURBO_CHARGES);
@@ -1095,6 +1134,11 @@ impl Car {
             };
             if side != 0 {
                 self.start_drift(side);
+                if input.drift {
+                    // Held from its first tick, so the body swings out to a held drift's angle
+                    // rather than past it and back.
+                    self.drift_held = f32::EPSILON;
+                }
                 if kicked {
                     // Thrown into the drift: it turns in at once, for as long as the stick is
                     // turned hard.
@@ -1170,14 +1214,24 @@ impl Car {
         // Eases in from the center, where a square root would swing the body on every twitch.
         let share = 1.0 - (1.0 - into) * (1.0 - into);
         // A drift to the left, side -1, swings the nose to the left: a positive angle.
-        -f32::from(self.drift) * tuning.drift_angle.to_radians() * share
+        -f32::from(self.drift) * self.drift_angle(tuning) * share
+    }
+
+    /// How far across its travel the body swings in this drift, in radians: `drift_angle`, or its
+    /// share `drift_button_angle` once the button has been held for a moment.
+    fn drift_angle(&self, tuning: &CarTuning) -> f32 {
+        // It sets in as the button stays held, over the time its tightening takes: a tap to start
+        // a drift pivots as fully as ever.
+        let held = (self.drift_held / DRIFT_BUTTON_TIGHTEN_TIME).min(1.0);
+        let share = 1.0 - (1.0 - tuning.drift_button_angle) * held;
+        tuning.drift_angle.to_radians() * share
     }
 
     /// How far the body is swung out into the drift, from 0 in line, or on the other side, to 1 at
-    /// the full `drift_angle`.
+    /// the full angle of this drift.
     fn swung(&self, tuning: &CarTuning) -> f32 {
         // A drift to the left, side -1, swings the body to the left: a positive angle.
-        (-self.body * f32::from(self.drift) / tuning.drift_angle.to_radians()).clamp(0.0, 1.0)
+        (-self.body * f32::from(self.drift) / self.drift_angle(tuning)).clamp(0.0, 1.0)
     }
 
     /// How fast the travel follows the nose in the air: faster in an Air Roll.
@@ -1460,15 +1514,29 @@ mod tests {
         assert!((car.thrust - tuning().thrust_seconds).abs() < 1e-3, "{}", car.thrust);
     }
 
-    /// The jump and the thrust are two inputs: the thrust alone on the road does nothing, and
-    /// held from the press it waits for the hop to have risen before it lights, with a kick that
-    /// is felt as a second push: the climb jumps up on the tick it lights.
+    /// The jump and the thrust are two inputs: the thrust alone on the road lifts the car without
+    /// a hop or a kick, and with the jump, held from the press, it waits for the hop to have
+    /// risen before it lights, with a kick that is felt as a second push: the climb jumps up on
+    /// the tick it lights.
     #[test]
     fn the_car_hops_then_the_thruster_lights() {
         let track = Track::build(&open_track()).unwrap();
         let mut car = at_top_speed(&track);
-        run(&mut car, ACCELERATE.with_thrust(true), 1.0, &track);
-        assert!(!car.is_airborne(), "the thrust alone lifted the car");
+        let mut first_climb = None;
+        for _ in 0..ticks(1.0) {
+            car.step(ACCELERATE.with_thrust(true), &tuning(), &track);
+            first_climb.get_or_insert(car.climb);
+            assert!(car.is_airborne() && car.thrusting, "the thrust alone did not lift the car");
+        }
+        assert!(car.altitude > 1.0, "the thrust alone rose only {} m", car.altitude);
+        // No kick: the climb grows from nothing rather than jumping on its first tick.
+        let first_climb = first_climb.unwrap();
+        assert!(first_climb < 1.0, "it lifted off at {first_climb} m/s");
+        // Held down through a landing, it does not lift the car again: it takes a new press.
+        let mut car = at_top_speed(&track);
+        run(&mut car, ACCELERATE.with_thrust(true), 6.0, &track);
+        run(&mut car, ACCELERATE.with_thrust(true), 2.0, &track);
+        assert!(!car.is_airborne(), "held through a landing, the thrust lifted the car again");
 
         let mut car = at_top_speed(&track);
         run(&mut car, ACCELERATE, 1.0, &track);
@@ -2901,7 +2969,21 @@ mod tests {
             near(&format!("tapped, path at {seconds} s"), p, path, 2.0);
         }
         near("tapped, path at 1.5 s", drift(3, 1.5).1, 110.0, 3.0);
-        near("held, path at 1 s", drift(usize::MAX, 1.0).1, 94.0, 3.0);
+        // Held, since v0.1.78: calmer than it was (94 degrees at 1 s), the body settling at 36
+        // degrees instead of 55, no speed lost, and charging 1.7 times faster than a tap.
+        near("held, path at 1 s", drift(usize::MAX, 1.0).1, 81.0, 3.0);
+        near("held, body at 1 s", drift(usize::MAX, 1.0).0, 36.0, 2.0);
+        let held_for = |hold: usize| {
+            let mut car = fast();
+            let speed = car.velocity.length();
+            for tick in 0..ticks(1.0) {
+                car.step(CarInput::new(true, 1.0).with_drift(tick < hold), &tuning, &track);
+            }
+            (car.velocity.length() - speed, car.drift_charge)
+        };
+        let ((held_lost, held_charge), (_, tapped_charge)) = (held_for(usize::MAX), held_for(3));
+        assert!(held_lost > -0.5, "held, the drift lost {held_lost} m/s in a second");
+        near("held, charge against a tap's", held_charge / tapped_charge, 1.67, 0.1);
         for (seconds, body, path) in [(0.5, 23.0, 23.0), (0.75, 50.0, 43.0)] {
             let (b, p) = drift(0, seconds);
             near(&format!("broken into, body at {seconds} s"), b, body, 2.0);
@@ -2923,16 +3005,18 @@ mod tests {
         let turned = wrap_angle(car.velocity.to_angle() - travel).to_degrees().abs();
         near("let go of, path", turned, 25.0, 2.0);
 
-        // Carried over through an S, the button held: the body 45 degrees past the line.
+        // Carried over through an S, the button held: the body 30 degrees past the line (45 until
+        // v0.1.77, when a held drift swung out to 55 degrees; it stops at 36 now).
         let mut car = fast();
         for _ in 0..ticks(1.0) {
             car.step(drifting(1.0), &tuning, &track);
         }
         let mut ticks_over = 0;
-        while car.body.to_degrees() <= 45.0 && ticks_over < 300 {
+        while car.body.to_degrees() <= 30.0 && ticks_over < 300 {
             car.step(drifting(-1.0), &tuning, &track);
             ticks_over += 1;
         }
-        near("carried over, seconds", ticks_over as f32 * TICK_SECONDS, 0.82, 0.04);
+        near("carried over, seconds", ticks_over as f32 * TICK_SECONDS, 0.6, 0.04);
     }
 }
+

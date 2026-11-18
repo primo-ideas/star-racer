@@ -10,7 +10,6 @@ mod car_model;
 mod city;
 mod controls;
 mod dice;
-mod drift_meter;
 mod geometry;
 mod latency;
 mod lobby;
@@ -115,7 +114,6 @@ fn main() {
         city::CityPlugin,
         race::RacePlugin,
         weight::WeightPlugin,
-        drift_meter::DriftMeterPlugin,
         controls::ControlsPlugin,
         latency::LatencyPlugin,
         camera::CameraPlugin,

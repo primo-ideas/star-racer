@@ -531,7 +531,7 @@ fn report_stalls(
 /// Lists every render pipeline as it is made, at debug level (`--log debug`). A pipeline is made the
 /// first time something drawn needs it; natively off the main thread, in a browser on it, where a
 /// new one in the middle of a race freezes the page while its shader compiles. This is how the
-/// first drift's was found (see `drift_meter.rs`): anything that shows up here once a lobby is
+/// first drift's was found (docs/web.md#shaders-compiled-mid-race): anything that shows up here once a lobby is
 /// under way is the next one to warm up beforehand.
 pub struct PipelineWatchPlugin;
 

@@ -149,9 +149,10 @@ corner by as far as its travel lags its nose; this one does not.
   keeps the drift alive when the body comes back into line, so a drift can be carried down a
   straight; and with the stick more than half way against the drift, it carries the drift over to
   the other side, charge and all, so an S is one drift, the body swinging twice its angle across
-  in about 1.2 s. And it costs speed: `drift_button_drag`
-  from the moment it is pressed, plus `drift_button_drag_ramp` for every second it stays held, so a
-  drift tightened for long brakes harder and harder.
+  in about 1.2 s. And since v0.1.78 it is how a drift is made to pay
+  (see [A held drift pays](#a-held-drift-pays)): it charges `drift_button_charge` (1.7) times
+  faster, the body swings out only to `drift_button_angle` (0.65) of its angle once held, and it
+  costs nothing but `drift_button_drag_ramp` (0.25 m/s² more for every second held).
 - **Charging.** The drift builds a charge: seconds of drift, counted from half to one and a half
   times real time as the stick goes from centered to fully into the drift. Steering out of the
   drift charges at the slow end, never backwards.
@@ -190,10 +191,10 @@ a drift exactly as it predicts the rest.
 
 The tuning stays on the server, so the snapshots carry two gauges the server works out for the HUD:
 the boost that ending the drift now would give, and the boost left, both as shares of
-`drift_max_boost`. The client draws the first twice: as the green DRIFT arc of the HUD, and
-as Rocket Racing does, an arc of green segments on the road around the back of the player's car,
-lit from the middle outward as the charge builds and gone when the car is not drifting. The arc
-follows the travel rather than the body, so it stays under the car and square to the camera.
+`drift_max_boost`. Since v0.1.78 the HUD's DRIFT arc reads the charge itself from the predicted
+car and the tuning, from nothing to the most a drift pays, with a notch where it starts to pay
+(see [Interface](ui.md#screens)); until then a second arc of green segments was drawn on the road
+around the back of the car, as Rocket Racing draws it, folded into the HUD's at the user's word.
 
 ### Turbo
 
@@ -531,7 +532,12 @@ pouvoir drift, maintenir le s'envoler en conservant la barre de drift pour la re
 **Two inputs.** `CarInput::jump`, pressed on the road, hops; `CarInput::thrust`, held in the air,
 fires the thruster. They are two actions to bind, on the same keys and button by default (Space,
 Q and A / cross; see [Interface](ui.md#settings)), so a press hops and a hold flies, and either
-can be moved apart from the other. The thrust alone on the road does nothing.
+can be moved apart from the other. The thrust alone on the road did nothing until v0.1.78; now a
+press of it alone lifts the car on the thruster at once, with neither the hop nor the ignition's
+kick (the user's word: "Activer le Star Fly seul doit faire monter/voler quand meme, juste il n'y
+a pas de jump/bump"). On a gamepad the two are apart by default (circle and cross), so this is
+what cross alone does. It takes a new press: held through a landing, the thrust does not lift the
+car again (`Car::thrust_button`).
 
 **Two stages.** The thruster lights only once the hop has had `thrust_delay` (0.2 s), which is
 the top of the hop with the shipped car: the car pops 0.9 m up, hangs there for an instant, then
@@ -682,6 +688,33 @@ over, 0.82 s, unchanged. The sharpest change of the rotation from one tick to th
 fell from 27 to 18 degrees per second. `the_shipped_drift_keeps_its_measured_feel` replays these
 on the shipped `car.ron`, the other tests running on an older car of their own
 (`test_support::tuning`).
+
+### A held drift pays
+
+In v0.1.78 (protocol 41), the user's word: "actuellement forcer le drift n'est pas utile, on a meme
+pas trop envie de l'utiliser tant il déporte vite sur le coté. Il doit moins faire déporter sur le
+coté, il faut que ce soit une mechanic centrale pour faire du boost/vitesse."
+
+Measured first, at full lock from top speed (58 m/s): held, the drift's path turned at 105 degrees
+a second against 75 for a tap, the body swung its full 55 degrees across, the car lost 2.6 m/s in
+two seconds, and the charge built no faster than a tap's. Holding the button threw the car round
+and slowed it for nothing.
+
+Now, held:
+
+- **It pays.** The charge builds `drift_button_charge` (1.7) times faster: 2.4 s of charge after a
+  second against 1.45 for a tap, so the most a drift pays, now `drift_max_boost` 1.7 s instead of
+  1.2, comes after about 1.5 s held.
+- **It stays under control.** The body swings out to `drift_button_angle` (0.65) of `drift_angle`,
+  36 degrees, the share coming in over the 0.4 s the button's tightening takes, so a tap still
+  pivots fully: held, the body pivots to 48 degrees and settles at 36 by 0.8 s. The curve tightens
+  a little (`drift_button_tighten` 0.9, 0.7 before): 83 degrees a second at full lock.
+- **It costs nothing.** `drift_button_drag` is 0 (1.5 before) and `drift_button_drag_ramp` 0.25
+  (0.5): 57.6 m/s after a second held, as a tap.
+
+The drift test (`the_shipped_drift_keeps_its_measured_feel`) holds the new figures: the held path
+at 81 degrees after a second, the body at 36, no speed lost, the charge 1.67 times a tap's, and an
+S carried over on the button in 0.6 s to 30 degrees past the line.
 
 ### Out of a drift, on a curve
 

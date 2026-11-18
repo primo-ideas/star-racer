@@ -204,7 +204,9 @@ camera looks and the road hides it: every pipeline of a race is made on entering
 the others, and none in the 40 seconds of racing that followed. Under the car, the first place
 tried, the arc was outside the camera's view, culled before anything was compiled for it.
 
-Not seen in a browser since: the fix was measured natively, by when the pipelines are made.
+Not seen in a browser since: the fix was measured natively, by when the pipelines are made. The
+arc itself is gone since v0.1.78, its charge read on the HUD's DRIFT arc instead; the HUD's glows
+are UI box shadows, whose pipeline the start lights make before the race.
 
 ## Size
 

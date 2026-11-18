@@ -79,6 +79,8 @@ pub fn tuning() -> CarTuning {
         drift_button_tighten: 0.7,
         drift_button_drag: 3.0,
         drift_button_drag_ramp: 2.0,
+        drift_button_charge: 1.0,
+        drift_button_angle: 1.0,
         drift_press_buffer: 0.15,
         drift_min_charge: 0.3,
         drift_boost_rate: 0.4,

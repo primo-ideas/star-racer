@@ -53,7 +53,66 @@ impl Plugin for UiPlugin {
             settings::SettingsPlugin,
             garage::GaragePlugin,
         ))
-        .add_systems(PreUpdate, scale_to_window);
+        .add_systems(PreUpdate, scale_to_window)
+        .add_systems(PostStartup, spawn_version_tag)
+        .add_systems(Update, show_version_tag);
+    }
+}
+
+/// The game's version as players read it: `v0.1.78`.
+pub fn version() -> String {
+    format!("v{}", env!("CARGO_PKG_VERSION"))
+}
+
+/// What the corner of every screen says the game is: an alpha, and which version.
+pub fn version_tag() -> String {
+    format!("STAR RACER · ALPHA {}", version())
+}
+
+/// The version, small in a corner of every screen but the race, where the HUD says it beside the
+/// frame rate (since v0.1.78).
+#[derive(Component)]
+struct VersionTag;
+
+fn spawn_version_tag(mut commands: Commands, fonts: Res<theme::Fonts>) {
+    commands.spawn((
+        VersionTag,
+        safe_area::SafeInset,
+        Pickable::IGNORE,
+        GlobalZIndex(50),
+        Node {
+            position_type: PositionType::Absolute,
+            width: percent(100),
+            height: percent(100),
+            ..default()
+        },
+        children![(
+            Text::new(version_tag()),
+            fonts.caption(11.0),
+            theme::CAPTION_SPACING,
+            TextColor(theme::TEXT_FAINT),
+            Pickable::IGNORE,
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(12),
+                bottom: px(8),
+                ..default()
+            },
+        )],
+    ));
+}
+
+fn show_version_tag(
+    screen: Res<State<crate::screen::Screen>>,
+    mut tags: Query<&mut Visibility, With<VersionTag>>,
+) {
+    let shown = if *screen.get() == crate::screen::Screen::Lobby {
+        Visibility::Hidden
+    } else {
+        Visibility::Inherited
+    };
+    for mut visibility in &mut tags {
+        visibility.set_if_neq(shown);
     }
 }
 

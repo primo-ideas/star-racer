@@ -1,13 +1,21 @@
-//! The three gauges of the car, drawn as arcs of one circle around it, near the middle of the
-//! screen where the eye already is: the drift charge (then the boost it gave) on the left, the
-//! turbo meter's charges underneath, the thruster's tank on the right.
+//! The car's gauges, drawn as arcs of one circle around it, near the middle of the screen where
+//! the eye already is: the drift on the left, the turbo meter underneath, the thruster's tank on
+//! the right.
+//!
+//! The drift arc is where a drift's charge is read (since v0.1.78, when the arc of segments drawn
+//! on the road under the car was folded into it, at the user's word "intègre y le chargement du
+//! drift"): it fills with the charge itself, dim until the charge pays a boost, past a notch
+//! where it starts to, bright with the boost on offer written beside it, white and pulsing once
+//! full; then amber while the boost it paid runs out.
 //!
 //! Bevy's UI has no arc, so each one is a row of short segments set end to end along the circle
-//! and turned with it: one neon line, lit from one end as it fills. The HUD writes a [`Gauges`]
-//! reading every frame; [`update_gauges`] colors the segments from it.
+//! and turned with it, over a darker, wider track that holds it out from a pale road. What is lit
+//! glows, and its leading end burns brighter. The HUD writes a [`Gauges`] reading every frame;
+//! [`update_gauges`] draws the arcs from it.
 
-use std::f32::consts::FRAC_PI_2;
+use std::f32::consts::{FRAC_PI_2, TAU};
 
+use bevy::color::Mix;
 use bevy::prelude::*;
 
 use super::theme::{self, Fonts};
@@ -25,13 +33,13 @@ pub enum Arc {
 const DRIFT_ARC: (f32, f32) = (128.0, 178.0);
 const THRUST_ARC: (f32, f32) = (52.0, 2.0);
 /// The turbo meter, under the car, from left to right, one stretch per charge.
-const TURBO_ARC: (f32, f32) = (106.0, 74.0);
+const TURBO_ARC: (f32, f32) = (118.0, 62.0);
 /// Between two charges of the turbo meter, in degrees.
-const TURBO_GAP: f32 = 2.5;
+const TURBO_GAP: f32 = 3.0;
 const TURBO_CHARGES: usize = star_racer_sim::car::TURBO_CHARGES as usize;
 /// Segments of the drift and thrust arcs, and of each charge of the turbo meter.
 const ARC_SEGMENTS: usize = 30;
-const CHARGE_SEGMENTS: usize = 8;
+const CHARGE_SEGMENTS: usize = 12;
 /// The share of each step along the arc a segment covers: all of it, so the segments meet and
 /// draw one line.
 const SEGMENT_SHARE: f32 = 1.0;
@@ -40,18 +48,38 @@ const SEGMENT_SHARE: f32 = 1.0;
 /// where the chase camera holds the car.
 const CENTER: (f32, f32) = (50.0, 58.0);
 
-/// An unlit segment.
-const UNLIT: Color = Color::srgba(0.02, 0.03, 0.07, 0.5);
+/// An unlit segment, and the track behind every arc.
+const UNLIT: Color = Color::srgba(0.08, 0.1, 0.16, 0.55);
+const TRACK: Color = Color::srgba(0.0, 0.0, 0.02, 0.5);
+/// The thruster's tank below this share of itself turns red.
+const THRUST_LOW: f32 = 0.25;
+/// How fast a full drift pulses, in pulses per second.
+const PULSE: f32 = 3.0;
+
+/// Where a drift stands, for its arc.
+#[derive(Clone, Copy, PartialEq, Debug, Default)]
+pub enum Drift {
+    /// No drift and no boost.
+    #[default]
+    Idle,
+    /// Charging, not yet enough to pay a boost.
+    Charging,
+    /// Charged enough: ending it now pays this many seconds of boost.
+    Ready(f32),
+    /// Charged as far as it goes.
+    Full(f32),
+    /// The boost it paid, running out: seconds left.
+    Boost(f32),
+}
 
 /// What the gauges read this frame, written by the HUD.
 #[derive(Resource, Default)]
 pub struct Gauges {
     /// Whether there is a car to read them from.
     pub shown: bool,
-    /// The drift arc: how full, its color and its name.
-    pub drift: (f32, Color, &'static str),
-    /// Whether the drift arc is lit at all (a drift, or the boost after one).
-    pub drift_active: bool,
+    /// The drift: where it stands, how full its arc is from 0 to 1, and where on the arc the
+    /// charge starts to pay a boost.
+    pub drift: (Drift, f32, f32),
     /// The turbo meter, in charges, and whether one is being fired.
     pub turbo: (f32, bool),
     /// The thruster's tank, from 0 to 1; whether the car is in the air or the tank filling; and
@@ -66,20 +94,28 @@ pub struct Segment {
     index: usize,
 }
 
-/// An arc's name, beside its far end.
+/// An arc's name and reading, beside its far end.
 #[derive(Component)]
 pub struct Label(Arc);
+
+/// The mark across the drift arc where its charge starts to pay a boost, with the radius and
+/// thickness of the ring it was built on.
+#[derive(Component)]
+pub struct Notch {
+    radius: f32,
+    thickness: f32,
+}
 
 /// The node holding every arc, shown while there is a car.
 #[derive(Component)]
 pub struct GaugeRing;
 
-/// Sizes on a desk and on a phone: the circle's radius, and a segment's thickness.
+/// Sizes on a desk and on a phone: the circle's radius, a segment's thickness, and the labels'.
 fn sizes(phone: bool) -> (f32, f32, f32) {
     if phone {
-        (108.0, 5.0, 10.5)
+        (108.0, 6.0, 10.5)
     } else {
-        (178.0, 7.0, 12.5)
+        (178.0, 10.0, 13.0)
     }
 }
 
@@ -121,6 +157,23 @@ fn segment_length(arc: Arc, radius: f32) -> f32 {
     (to - from).abs().to_radians() / count as f32 * radius * SEGMENT_SHARE
 }
 
+/// A node `length` long and `thickness` thick, its middle at `angle` degrees on a circle of
+/// `radius`, lying along the circle.
+fn on_circle(angle: f32, radius: f32, length: f32, thickness: f32) -> (Node, UiTransform) {
+    let at = Vec2::from_angle(angle.to_radians()) * radius;
+    (
+        Node {
+            position_type: PositionType::Absolute,
+            left: px(at.x - length / 2.0),
+            top: px(at.y - thickness / 2.0),
+            width: px(length),
+            height: px(thickness),
+            ..default()
+        },
+        UiTransform::from_rotation(Rot2::radians(angle.to_radians() + FRAC_PI_2)),
+    )
+}
+
 /// Spawns the ring of gauges under `root`, the HUD's full-screen node.
 pub fn spawn_gauges(root: &mut ChildSpawnerCommands, fonts: &Fonts, phone: bool) {
     let (radius, thickness, label_size) = sizes(phone);
@@ -140,31 +193,33 @@ pub fn spawn_gauges(root: &mut ChildSpawnerCommands, fonts: &Fonts, phone: bool)
     .with_children(|ring| {
         for arc in [Arc::Drift, Arc::Turbo, Arc::Thrust] {
             let length = segment_length(arc, radius);
-            for (index, angle) in segments(arc) {
-                let at = Vec2::from_angle(angle.to_radians()) * radius;
+            // The track first, so the arc is drawn over it.
+            for (_, angle) in segments(arc) {
                 ring.spawn((
-                    Segment { arc, index },
-                    Node {
-                        position_type: PositionType::Absolute,
-                        left: px(at.x - length / 2.0),
-                        top: px(at.y - thickness / 2.0),
-                        width: px(length),
-                        height: px(thickness),
-                        ..default()
-                    },
-                    // Along the circle: a segment lies across the radius through its middle.
-                    UiTransform::from_rotation(Rot2::radians(angle.to_radians() + FRAC_PI_2)),
-                    BackgroundColor(Color::NONE),
+                    on_circle(angle, radius, length + 0.5, thickness + 5.0),
+                    BackgroundColor(TRACK),
                 ));
             }
-            // The name, past the arc's far end, or under the turbo meter.
-            let (angle, out) = match arc {
-                Arc::Drift => (DRIFT_ARC.1 + 9.0, 0.0),
-                Arc::Thrust => (THRUST_ARC.1 - 9.0, 0.0),
-                Arc::Turbo => (90.0, label_size + 6.0),
+            for (index, angle) in segments(arc) {
+                ring.spawn((
+                    Segment { arc, index },
+                    on_circle(angle, radius, length, thickness),
+                    BackgroundColor(UNLIT),
+                    BoxShadow(Vec::new()),
+                ));
+            }
+            // The name and its reading, past the arc's far end, or under the turbo meter.
+            let (angle, out, width, justify) = match arc {
+                Arc::Drift => (DRIFT_ARC.1 + 6.0, 0.0, 150.0, Justify::Right),
+                Arc::Thrust => (THRUST_ARC.1 - 6.0, 0.0, 150.0, Justify::Left),
+                Arc::Turbo => (90.0, label_size + 20.0, 150.0, Justify::Center),
             };
             let at = Vec2::from_angle(angle.to_radians()) * (radius + out);
-            const WIDTH: f32 = 120.0;
+            let left = match justify {
+                Justify::Right => at.x - width,
+                Justify::Left => at.x,
+                _ => at.x - width / 2.0,
+            };
             ring.spawn((
                 Label(arc),
                 Text::default(),
@@ -172,16 +227,24 @@ pub fn spawn_gauges(root: &mut ChildSpawnerCommands, fonts: &Fonts, phone: bool)
                 theme::CAPTION_SPACING,
                 TextColor(theme::TEXT_FAINT),
                 theme::TEXT_SHADOW,
-                TextLayout::justify(Justify::Center),
+                TextLayout::justify(justify),
                 Node {
                     position_type: PositionType::Absolute,
-                    left: px(at.x - WIDTH / 2.0),
-                    top: px(at.y - label_size * 0.7),
-                    width: px(WIDTH),
+                    left: px(left),
+                    top: px(at.y - label_size * 1.6),
+                    width: px(width),
                     ..default()
                 },
             ));
         }
+        // Across the drift arc, where a boost starts: placed by the HUD's reading.
+        let (node, transform) = on_circle(DRIFT_ARC.0, radius, 2.5, thickness + 9.0);
+        ring.spawn((
+            Notch { radius, thickness },
+            node,
+            transform,
+            BackgroundColor(theme::TEXT.with_alpha(0.85)),
+        ));
     });
 }
 
@@ -191,22 +254,71 @@ fn lit(fill: f32, index: usize, count: usize) -> f32 {
     (fill.clamp(0.0, 1.0) * count as f32 - index as f32).clamp(0.0, 1.0)
 }
 
-/// A segment's color: `color` as far as it is lit, a dark track otherwise, which reads over the
-/// pale road as over the night.
-fn shade(color: Color, share: f32, strength: f32) -> Color {
+/// How a segment is drawn.
+#[derive(Clone, Copy, PartialEq, Debug)]
+struct Look {
+    color: Color,
+    glow: bool,
+}
+
+/// A segment `share` lit in `color`: unlit, dim, or, `bright`, glowing, its leading end (`head`)
+/// burning toward white.
+fn shade(color: Color, share: f32, bright: bool, head: bool) -> Look {
     if share <= 0.0 {
-        UNLIT
+        return Look {
+            color: UNLIT,
+            glow: false,
+        };
+    }
+    if !bright {
+        return Look {
+            color: color.with_alpha(0.25 + 0.3 * share),
+            glow: false,
+        };
+    }
+    let color = if head {
+        Color::from(Srgba::from(color).mix(&Srgba::WHITE, 0.55))
     } else {
-        color.with_alpha((0.4 + 0.6 * share) * strength)
+        color
+    };
+    Look {
+        color: color.with_alpha(0.45 + 0.55 * share),
+        glow: true,
     }
 }
 
-/// Colors the arcs and writes their names from the HUD's reading.
+/// Whether segment `index` of `count` is the last one lit by `fill`.
+fn is_head(fill: f32, index: usize, count: usize) -> bool {
+    lit(fill, index, count) > 0.0 && (index + 1 == count || lit(fill, index + 1, count) <= 0.0)
+}
+
+/// The drift arc's color, how bright it is, and its label, for a drift standing at `drift`.
+fn drift_look(drift: Drift, pulse: f32) -> (Color, bool, String, Color) {
+    match drift {
+        Drift::Idle => (theme::GREEN, false, "DRIFT".into(), theme::TEXT_FAINT),
+        Drift::Charging => (theme::GREEN, false, "DRIFT".into(), theme::GREEN),
+        Drift::Ready(boost) => (
+            theme::GREEN,
+            true,
+            format!("DRIFT  +{boost:.1}s"),
+            theme::GREEN,
+        ),
+        Drift::Full(boost) => {
+            let color = Color::from(Srgba::from(theme::GREEN).mix(&Srgba::WHITE, 0.6 * pulse));
+            (color, true, format!("MAX  +{boost:.1}s"), theme::TEXT)
+        }
+        Drift::Boost(left) => (theme::AMBER, true, format!("BOOST  {left:.1}s"), theme::AMBER),
+    }
+}
+
+/// Draws the arcs from the HUD's reading.
 pub fn update_gauges(
     gauges: Res<Gauges>,
-    mut rings: Query<&mut Node, With<GaugeRing>>,
-    mut segments: Query<(&Segment, &mut BackgroundColor)>,
+    time: Res<Time>,
+    mut rings: Query<&mut Node, (With<GaugeRing>, Without<Notch>)>,
+    mut segments: Query<(&Segment, &mut BackgroundColor, &mut BoxShadow), Without<Notch>>,
     mut labels: Query<(&Label, &mut Text, &mut TextColor)>,
+    mut notches: Query<(&Notch, &mut Node, &mut UiTransform, &mut Visibility)>,
 ) {
     let display = if gauges.shown {
         Display::Flex
@@ -221,82 +333,113 @@ pub fn update_gauges(
     if !gauges.shown {
         return;
     }
-    let (drift, drift_color, _) = gauges.drift;
+    // From 0 to 1 and back, for what pulses.
+    let pulse = 0.5 - 0.5 * (time.elapsed_secs() * PULSE * TAU).cos();
+    let (drift, drift_fill, threshold) = gauges.drift;
+    let (drift_color, drift_bright, drift_label, drift_label_color) = drift_look(drift, pulse);
     let (turbo, firing) = gauges.turbo;
     let (thrust, thrust_active, burning) = gauges.thrust;
-    for (segment, mut background) in &mut segments {
-        let color = match segment.arc {
+    let thrust_color = if burning {
+        Color::from(Srgba::from(theme::NEON).mix(&Srgba::WHITE, 0.45))
+    } else if thrust < THRUST_LOW && thrust_active {
+        theme::RED
+    } else {
+        theme::NEON
+    };
+
+    for (segment, mut background, mut shadow) in &mut segments {
+        let look = match segment.arc {
             Arc::Drift => {
-                let color = if gauges.drift_active {
-                    drift_color
-                } else {
-                    theme::GREEN
-                };
-                let share = if gauges.drift_active {
-                    lit(drift, segment.index, ARC_SEGMENTS)
-                } else {
-                    0.0
-                };
-                shade(color, share, 1.0)
+                // Charging, the arc fills in the dim and lights up past the notch.
+                let share = lit(drift_fill, segment.index, ARC_SEGMENTS);
+                let head = is_head(drift_fill, segment.index, ARC_SEGMENTS);
+                shade(drift_color, share, drift_bright, head && drift_bright)
             }
             Arc::Turbo => {
                 let charge = segment.index / CHARGE_SEGMENTS;
+                let index = segment.index % CHARGE_SEGMENTS;
                 let filled = (turbo - charge as f32).clamp(0.0, 1.0);
-                let share = lit(filled, segment.index % CHARGE_SEGMENTS, CHARGE_SEGMENTS);
-                // A whole charge, ready to fire, is lit; one still filling is dim.
-                let strength = if filled >= 1.0 { 1.0 } else { 0.5 };
-                let color = if firing && filled >= 1.0 {
+                let share = lit(filled, index, CHARGE_SEGMENTS);
+                // A whole charge, ready to fire, glows; one still filling is dim, its head
+                // marking how far it has come.
+                let ready = filled >= 1.0;
+                let color = if firing && ready {
                     theme::TEXT
                 } else {
                     theme::MAGENTA
                 };
-                shade(color, share, strength)
+                shade(color, share, ready, false)
             }
             Arc::Thrust => {
                 let share = lit(thrust, segment.index, ARC_SEGMENTS);
-                let color = if burning { theme::TEXT } else { theme::NEON };
+                let head = is_head(thrust, segment.index, ARC_SEGMENTS);
                 // A full tank on the road is there, but quiet.
-                shade(color, share, if thrust_active { 1.0 } else { 0.45 })
+                shade(thrust_color, share, thrust_active, head && burning)
             }
         };
-        background.set_if_neq(BackgroundColor(color));
+        background.set_if_neq(BackgroundColor(look.color));
+        let glow = if look.glow {
+            BoxShadow::new(look.color.with_alpha(0.7), px(0), px(0), px(2), px(12))
+        } else {
+            BoxShadow(Vec::new())
+        };
+        shadow.set_if_neq(glow);
     }
+
     for (label, mut text, mut color) in &mut labels {
         let (name, name_color) = match label.0 {
-            Arc::Drift => {
-                let (_, color, name) = gauges.drift;
-                let color = if gauges.drift_active {
-                    color
-                } else {
-                    theme::TEXT_FAINT
-                };
-                (name, color)
-            }
+            Arc::Drift => (drift_label.clone(), drift_label_color),
             Arc::Turbo => {
+                let ready = turbo.floor() as usize;
                 let color = if firing {
                     theme::TEXT
-                } else if turbo >= 1.0 {
+                } else if ready > 0 {
                     theme::MAGENTA
                 } else {
                     theme::TEXT_FAINT
                 };
-                ("TURBO", color)
+                let name = if ready > 0 {
+                    format!("TURBO  ×{ready}")
+                } else {
+                    "TURBO".to_owned()
+                };
+                (name, color)
             }
             Arc::Thrust => {
                 let color = if burning {
                     theme::TEXT
                 } else if thrust_active {
-                    theme::NEON
+                    thrust_color
                 } else {
                     theme::TEXT_FAINT
                 };
-                ("THRUST", color)
+                ("THRUST".to_owned(), color)
             }
         };
         if text.0 != name {
-            text.0 = name.to_owned();
+            text.0 = name;
         }
         color.set_if_neq(TextColor(name_color));
+    }
+
+    // The notch, where the charge starts to pay, shown while a drift charges.
+    for (notch, mut node, mut transform, mut visibility) in &mut notches {
+        let shown = matches!(drift, Drift::Charging | Drift::Ready(_) | Drift::Full(_));
+        visibility.set_if_neq(if shown {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        });
+        let angle = DRIFT_ARC.0 + (DRIFT_ARC.1 - DRIFT_ARC.0) * threshold.clamp(0.0, 1.0);
+        let (placed, turned) = on_circle(angle, notch.radius, 2.5, notch.thickness + 9.0);
+        if node.left != placed.left || node.top != placed.top {
+            node.left = placed.left;
+            node.top = placed.top;
+        }
+        // Thin along the arc and long across it.
+        if transform.rotation != turned.rotation {
+            transform.rotation = turned.rotation;
+        }
     }
 }
 
@@ -322,10 +465,10 @@ mod tests {
         );
         assert_eq!(turbo.len(), TURBO_CHARGES * CHARGE_SEGMENTS);
         // Drift on the left, the turbo underneath from left to right, thrust on the right.
-        assert!(drift.iter().all(|(_, angle)| *angle > 110.0));
-        assert!(turbo.iter().all(|(_, angle)| (70.0..110.0).contains(angle)));
+        assert!(drift.iter().all(|(_, angle)| *angle > 120.0));
+        assert!(turbo.iter().all(|(_, angle)| (60.0..120.0).contains(angle)));
         assert!(turbo.first().unwrap().1 > turbo.last().unwrap().1);
-        assert!(thrust.iter().all(|(_, angle)| *angle < 70.0));
+        assert!(thrust.iter().all(|(_, angle)| *angle < 60.0));
         // Segments are no longer than their step along the circle, so they never overlap.
         for arc in [Arc::Drift, Arc::Turbo, Arc::Thrust] {
             let radius = sizes(false).0;
@@ -342,5 +485,27 @@ mod tests {
         assert!((lit(0.25, 2, 10) - 0.5).abs() < 1e-5);
         assert_eq!(lit(0.25, 3, 10), 0.0);
         assert_eq!(lit(2.0, 9, 10), 1.0);
+        // The head is the last segment lit, however little.
+        assert!(is_head(0.25, 2, 10));
+        assert!(!is_head(0.25, 1, 10));
+        assert!(is_head(1.0, 9, 10));
+        assert!(!is_head(0.0, 0, 10));
+    }
+
+    #[test]
+    fn a_drift_glows_once_it_pays() {
+        assert!(!drift_look(Drift::Charging, 0.0).1);
+        assert!(drift_look(Drift::Ready(0.4), 0.0).1);
+        assert!(drift_look(Drift::Ready(0.4), 0.0).2.contains("+0.4s"));
+        assert!(drift_look(Drift::Full(1.7), 0.0).2.starts_with("MAX"));
+        assert_eq!(drift_look(Drift::Boost(1.0), 0.0).0, theme::AMBER);
+        // Unlit, dim and glowing are told apart.
+        assert_eq!(shade(theme::GREEN, 0.0, true, false).color, UNLIT);
+        assert!(!shade(theme::GREEN, 1.0, false, false).glow);
+        assert!(shade(theme::GREEN, 1.0, true, false).glow);
+        assert_ne!(
+            shade(theme::GREEN, 1.0, true, true).color,
+            shade(theme::GREEN, 1.0, true, false).color
+        );
     }
 }

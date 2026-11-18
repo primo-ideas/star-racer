@@ -489,10 +489,43 @@ fn spawn_login(
                     color: theme::NEON.with_alpha(0.8),
                 },
             ));
-            // The title alone over the card: since v0.1.68 no line under it, the screen made
-            // lighter at the user's word.
+            // Under the title, what this is: an alpha, and which version (since v0.1.78, the
+            // user's word "Indique clairement la version du jeu et \"alpha\" sur la page
+            // d'accueil").
             root.spawn(Node {
-                height: px(pick(14.0, 6.0)),
+                align_items: AlignItems::Center,
+                column_gap: px(10),
+                margin: UiRect::vertical(px(pick(4.0, 2.0))),
+                ..default()
+            })
+            .with_children(|badge| {
+                badge
+                    .spawn((
+                        Node {
+                            padding: UiRect::axes(px(pick(12.0, 9.0)), px(pick(3.0, 2.0))),
+                            border: px(1.5).all(),
+                            border_radius: BorderRadius::MAX,
+                            ..default()
+                        },
+                        BorderColor::all(theme::MAGENTA),
+                        BackgroundColor(theme::MAGENTA.with_alpha(0.14)),
+                    ))
+                    .with_child((
+                        Text::new("ALPHA"),
+                        fonts.caption(pick(15.0, 11.0)),
+                        theme::CAPTION_SPACING,
+                        TextColor(theme::MAGENTA),
+                    ));
+                badge.spawn((
+                    Text::new(super::version()),
+                    fonts.caption(pick(16.0, 12.0)),
+                    theme::CAPTION_SPACING,
+                    TextColor(theme::TEXT_DIM),
+                    theme::TEXT_SHADOW,
+                ));
+            });
+            root.spawn(Node {
+                height: px(pick(10.0, 4.0)),
                 ..default()
             });
         })

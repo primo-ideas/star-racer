@@ -76,16 +76,28 @@ ranked match. Each screen's entities despawn when it is left.
   after it, the lap and race time, the standings or the player list, the speed, three gauges as arcs
   of one circle around the car near the middle of the screen (`gauges.rs`, since v0.1.74, the
   user's word "regrouper barre de turbo, barre de drift et barre de thrust vers le centre de
-  l'écran, sous forme d'arc de cercle"): DRIFT on the left, filling green with the charge, then
-  amber as BOOST with the boost it paid; TURBO underneath, one stretch per charge, a full one
-  bright magenta and the one filling dim, white while one fires; THRUST on the right, the tank,
-  quiet while full on the road and lit in the air or filling. Bevy's UI having no arc, each is a
-  row of short segments laid end to end along the circle and turned with it. A checkpoint passed
+  l'écran, sous forme d'arc de cercle"): DRIFT on the left, which since v0.1.78 reads the charge itself:
+  dim while it charges, a white notch where it starts to pay, bright and glowing past it with the
+  boost on offer beside its name ("DRIFT +0.8s"), white and pulsing once full (MAX), then amber as
+  BOOST while the boost it paid runs out; TURBO underneath, one stretch per charge, a full one
+  glowing magenta and the one filling dim, white while one fires, the charges ready counted beside
+  its name; THRUST on the right, the tank, quiet while full on the road, lit in the air or
+  filling, red under a quarter. Bevy's UI having no arc, each is a row of short segments laid end
+  to end along the circle and turned with it, over a darker, wider track that holds it out from a
+  pale road; what is lit glows, its leading end brighter (since v0.1.78, the user's word
+  "Améliore largement le visuel des jauges et intègre y le chargement du drift"). A checkpoint passed
   is a quiet CHECKPOINT under the lap time, fading out, without its number (BACK ON TRACK the
-  same after a fall); the count before a car off its course is brought back stays large. And the drift charge as an arc of green segments on the road around the back
-  of the car (see [Simulation](simulation.md#drift)), the results between races, the other players' names above their cars (a bot's smaller), a
+  same after a fall); the count before a car off its course is brought back stays large. The arc of green segments on the road around the
+  back of the car that showed the charge until v0.1.78 is gone, folded into the DRIFT arc. The
+  results between races, the other players' names above their cars (a bot's smaller), a
   confirmation before leaving, and, on F3, the latency figures (see [Latency](latency.md)).
   Spectators see whom they watch and switch cars with left and right.
+
+**The version** (since v0.1.78, the user's word "Indique clairement la version du jeu et
+"alpha" sur la page d'accueil et en petit un peu partout"): under the title of the first screen, a
+magenta ALPHA badge and the version (`ui::version`, the client crate's); small in the bottom left
+corner of every other screen, "STAR RACER · ALPHA v0.1.78" (`ui::version_tag`); in a race, beside
+the frame rate.
 
 Generated nicknames (`nickname.rs`) are an adjective and a noun from the game's world ("Neon
 Falcon", "Drifting Hexagon"); a test checks every combination is a valid nickname.
