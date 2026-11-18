@@ -718,6 +718,8 @@ S carried over on the button in 0.6 s to 30 degrees past the line.
 
 ### Star Fly, at once and out of a fall
 
+(v0.1.80.)
+
 In v0.1.80 (protocol 42), the user's word: "si on se laisse tomber dans le vide, on ne peut plus
 utiliser le star fly" and "on sent comme un input lag dans le saut/thrust". Nothing in the
 network was late (input to screen stays about 33 ms); the waits were in the simulation:
@@ -733,6 +735,38 @@ network was late (input to screen stays about 33 ms); the waits were in the simu
 - **Star Fly pressed on its own in the air**, during a hop or a fall, lights at once. Only the
   thrust held together with the jump, from the jump's press, waits `thrust_delay`, so a tap of a
   key or button doing both still only hops; that wait is 0.15 s instead of 0.2.
+
+### Heavier, skating, less thrown aside
+
+In v1.0.0-rc1, the user's word: "Le Drift est bien mieux, mais 'allourdi' encore plus, fais encore
+plus 'patiner', et moins déporter vite sur le coté". The body still pivots its full 55 degrees across
+the travel, which is what skates, but slower: `drift_kick_swing` 130 (200), `drift_swing_acceleration`
+260 (400), `drift_swing_rate` 100 (140); and the path turns less, `drift_radius_tight` 52 (44).
+Tapped at full lock from top speed, the body is out 11, 26 and 48 degrees at 0.1, 0.25 and 0.5 s
+(18, 38, 55), the path turns 97 degrees in 1.5 s (110), held 70 in a second (81); the price: a drift
+ends 0.58 s after the stick straightens (0.47), and an S carried over on the button takes 0.85 s
+(0.6). `the_shipped_drift_keeps_its_measured_feel` holds the new figures.
+
+### The hop, higher and snappier
+
+In v1.0.0-rc1 ("Le jump doit mener un peu plus haut et etre plus vif"): `jump_speed` 14 (10) and
+`air_gravity` 70 (50), 1.4 m up in 0.2 s; `thrust_acceleration` 140 (100), so the thruster hovers
+as high as before. Every shipped circuit is still lapped in every style without a fall.
+
+### The Star Dash onto a wall
+
+In v1.0.0-rc1, the user's word: "Le dash doit plaquer completement la voiture vers la surface visée,
+sauf si c'est trop loin, dans ce cas ca fait juste un tonneau et un décallage léger [...] orienter
+la voiture pour que ses roues épousent parfaitement la surface quand la voiture la touche". A press
+with the stick to a side measures the wall on that side straight across from the car
+(`Car::wall_distance`); within `dash_reach` (16 m) the car is thrown at it at `dash_speed` (40 m/s)
+for the time that takes, at most `dash_time`, and lands on it rather than into it: the wall takes
+what the dash carried across and nothing of its speed along it, and the car stays pressed there
+for `dash_press` (0.6 s, `Car::pressed`). The client rolls the body a quarter turn over its edge on
+that side as it crosses, so its underside lies flat on the wall when it touches
+(`Car::press_share`, `weight.rs`), and back over the last 0.2 s. A wall farther off, or none
+(a breach, a gap, the air), makes it a barrel roll toward that side that moves the car over for
+`dash_nudge` (0.04 s, about 2 m). With the stick at rest, a barrel roll in place, as before.
 
 ### Out of a drift, on a curve
 

@@ -9,7 +9,8 @@
 //! full; then amber while the boost it paid runs out.
 //!
 //! Bevy's UI has no arc, so each one is a row of short segments set end to end along the circle
-//! and turned with it, over a darker, wider track that holds it out from a pale road. What is lit
+//! and turned with it: since v1.0.0-rc1 one thin line of neon in a light outline, the thruster's
+//! arc hidden while its tank is full and the car on the road. What is lit
 //! glows, and its leading end burns brighter. The HUD writes a [`Gauges`] reading every frame;
 //! [`update_gauges`] draws the arcs from it.
 
@@ -38,8 +39,8 @@ const TURBO_ARC: (f32, f32) = (118.0, 62.0);
 const TURBO_GAP: f32 = 3.0;
 const TURBO_CHARGES: usize = star_racer_sim::car::TURBO_CHARGES as usize;
 /// Segments of the drift and thrust arcs, and of each charge of the turbo meter.
-const ARC_SEGMENTS: usize = 30;
-const CHARGE_SEGMENTS: usize = 12;
+const ARC_SEGMENTS: usize = 48;
+const CHARGE_SEGMENTS: usize = 16;
 /// The share of each step along the arc a segment covers: all of it, so the segments meet and
 /// draw one line.
 const SEGMENT_SHARE: f32 = 1.0;
@@ -49,8 +50,12 @@ const SEGMENT_SHARE: f32 = 1.0;
 const CENTER: (f32, f32) = (50.0, 58.0);
 
 /// An unlit segment, and the track behind every arc.
-const UNLIT: Color = Color::srgba(0.08, 0.1, 0.16, 0.55);
-const TRACK: Color = Color::srgba(0.0, 0.0, 0.02, 0.5);
+const UNLIT: Color = Color::srgba(0.55, 0.65, 0.85, 0.10);
+/// The light outline every arc lies in (since v1.0.0-rc1, the user's word "Fais que les jauges ne
+/// soient qu'une ligne neon jolie avec une outline légère"; a dark band twice as thick before).
+const TRACK: Color = Color::srgba(0.75, 0.85, 1.0, 0.16);
+/// How much wider than the line its outline is, in pixels.
+const OUTLINE: f32 = 3.0;
 /// The thruster's tank below this share of itself turns red.
 const THRUST_LOW: f32 = 0.25;
 /// How fast a full drift pulses, in pulses per second.
@@ -106,6 +111,10 @@ pub struct Notch {
     thickness: f32,
 }
 
+/// Everything drawn for an arc: its outline, its line and its label, shown or hidden together.
+#[derive(Component)]
+pub struct Part(Arc);
+
 /// The node holding every arc, shown while there is a car.
 #[derive(Component)]
 pub struct GaugeRing;
@@ -113,9 +122,9 @@ pub struct GaugeRing;
 /// Sizes on a desk and on a phone: the circle's radius, a segment's thickness, and the labels'.
 fn sizes(phone: bool) -> (f32, f32, f32) {
     if phone {
-        (108.0, 6.0, 10.5)
+        (108.0, 3.0, 10.5)
     } else {
-        (178.0, 10.0, 13.0)
+        (178.0, 4.0, 13.0)
     }
 }
 
@@ -196,12 +205,14 @@ pub fn spawn_gauges(root: &mut ChildSpawnerCommands, fonts: &Fonts, phone: bool)
             // The track first, so the arc is drawn over it.
             for (_, angle) in segments(arc) {
                 ring.spawn((
-                    on_circle(angle, radius, length + 0.5, thickness + 5.0),
+                    on_circle(angle, radius, length + 1.5, thickness + OUTLINE),
                     BackgroundColor(TRACK),
+                    Part(arc),
                 ));
             }
             for (index, angle) in segments(arc) {
                 ring.spawn((
+                    Part(arc),
                     Segment { arc, index },
                     on_circle(angle, radius, length, thickness),
                     BackgroundColor(UNLIT),
@@ -221,6 +232,7 @@ pub fn spawn_gauges(root: &mut ChildSpawnerCommands, fonts: &Fonts, phone: bool)
                 _ => at.x - width / 2.0,
             };
             ring.spawn((
+                Part(arc),
                 Label(arc),
                 Text::default(),
                 fonts.caption(label_size),
@@ -272,7 +284,7 @@ fn shade(color: Color, share: f32, bright: bool, head: bool) -> Look {
     }
     if !bright {
         return Look {
-            color: color.with_alpha(0.25 + 0.3 * share),
+            color: color.with_alpha(0.3 + 0.35 * share),
             glow: false,
         };
     }
@@ -319,7 +331,19 @@ pub fn update_gauges(
     mut segments: Query<(&Segment, &mut BackgroundColor, &mut BoxShadow), Without<Notch>>,
     mut labels: Query<(&Label, &mut Text, &mut TextColor)>,
     mut notches: Query<(&Notch, &mut Node, &mut UiTransform, &mut Visibility)>,
+    mut parts: Query<(&Part, &mut Visibility), Without<Notch>>,
 ) {
+    // The thruster's arc shows only while its tank is not full or the car flies (since
+    // v1.0.0-rc1, the user's word "La barre de thrust doit n'apparaitre que quand elle n'est pas à
+    // 100%").
+    for (part, mut visibility) in &mut parts {
+        let shown = part.0 != Arc::Thrust || gauges.thrust.1;
+        visibility.set_if_neq(if shown {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        });
+    }
     let display = if gauges.shown {
         Display::Flex
     } else {
@@ -379,7 +403,7 @@ pub fn update_gauges(
         };
         background.set_if_neq(BackgroundColor(look.color));
         let glow = if look.glow {
-            BoxShadow::new(look.color.with_alpha(0.7), px(0), px(0), px(2), px(12))
+            BoxShadow::new(look.color.with_alpha(0.8), px(0), px(0), px(1), px(9))
         } else {
             BoxShadow(Vec::new())
         };

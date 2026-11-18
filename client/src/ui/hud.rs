@@ -338,7 +338,7 @@ fn spawn_hud(
                     position_type: PositionType::Absolute,
                     left: px(0),
                     right: px(0),
-                    top: px(pick(100.0, 66.0)),
+                    top: px(pick(86.0, 62.0)),
                     flex_direction: FlexDirection::Column,
                     align_items: AlignItems::Center,
                     ..default()
@@ -348,7 +348,7 @@ fn spawn_hud(
                 intro.spawn((
                     Slot::IntroTrack,
                     Text::default(),
-                    fonts.display(pick(72.0, 34.0)),
+                    fonts.display(pick(54.0, 28.0)),
                     TextColor(theme::NEON),
                 ));
                 intro.spawn((

@@ -65,6 +65,9 @@ pub struct Script {
     /// With the autopilot, also press the jump every `JUMP_EVERY` seconds and hold it this long:
     /// a twentieth of a second hops, two seconds fly on the thruster.
     pub jump: Option<f32>,
+    /// With the autopilot, also press the Star Dash every `JUMP_EVERY` seconds, halfway between
+    /// the jumps, with the stick to this side (1 right, -1 left, 0 at rest).
+    pub dash: Option<f32>,
     /// Leave the lobby this many times, each `round_seconds` after entering it, and press QUICK
     /// PLAY again on the first screen, as a player would: for long unattended runs and films.
     pub rounds: u32,
@@ -386,6 +389,11 @@ pub fn read() -> Settings {
         #[arg(long)]
         jump: Option<f32>,
 
+        /// With the autopilot, also Star Dash every four seconds, halfway between the jumps, the
+        /// stick to this side: 1 right, -1 left, 0 at rest (a barrel roll).
+        #[arg(long, allow_hyphen_values = true)]
+        dash: Option<f32>,
+
         /// How loud the game is, from 0 (silent) to 1.
         #[arg(long, default_value_t = DEFAULT_VOLUME)]
         volume: f32,
@@ -443,6 +451,7 @@ pub fn read() -> Settings {
             garage: args.garage,
             autopilot: autopilot_style(args.autopilot, args.autopilot_drift),
             jump: args.jump,
+            dash: args.dash,
             rounds: args.rounds,
             round_seconds: args.round_seconds,
             rounds_left: 0,
@@ -518,6 +527,7 @@ pub fn read() -> Settings {
             garage: has("garage"),
             autopilot: autopilot_style(has("autopilot"), has("autopilot_drift")),
             jump: get("jump").and_then(|value| value.parse().ok()),
+            dash: get("dash").and_then(|value| value.parse().ok()),
             rounds: 0,
             round_seconds: 30.0,
             rounds_left: 0,

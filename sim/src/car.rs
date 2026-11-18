@@ -115,6 +115,12 @@ pub struct Car {
     /// Seconds left of a Star Dash throwing the car sideways, and the side: -1 left, 1 right.
     pub dash: f32,
     pub dash_side: i8,
+    /// How long the Star Dash under way takes in all, in seconds, the time it needs to reach the
+    /// wall: what is left of it says how far over the car is drawn rolling onto it.
+    pub dash_length: f32,
+    /// Seconds left of the car pressed flat against the wall on `dash_side`, its wheels on it,
+    /// after a Star Dash reached it (since v1.0.0-rc1).
+    pub pressed: f32,
     /// Seconds before another Star Dash or barrel roll can be made.
     pub dash_wait: f32,
     /// Whether the dash button was down on the last tick, so a press is told apart from a hold.
@@ -148,6 +154,8 @@ pub const FALL_BELOW: f32 = 15.0;
 pub const ASTRAY_SECONDS: f32 = 2.4;
 /// How far to a side the stick must be for a Star Dash to throw the car that way rather than roll it.
 const DASH_STICK: f32 = 0.3;
+/// Seconds over which a car pressed against a wall rolls back onto its wheels.
+const PRESS_RELEASE: f32 = 0.2;
 
 /// How high the walls stand over the road, in meters. They hold a car only as high as they
 /// are: nothing invisible stands on top of them, and a car that flies over one has left the road.
@@ -448,8 +456,15 @@ pub struct CarTuning {
     /// The Star Dash (since v0.1.70): how fast it throws the car sideways at the wall, in m/s, for
     /// how long, in seconds, and how long before another dash or roll, in seconds.
     pub dash_speed: f32,
+    /// Since v1.0.0-rc1 the dash goes only to a wall no farther than `dash_reach` (m), taking the
+    /// time it needs at `dash_speed`, at most `dash_time`, and lands the car on it softly, pressed
+    /// flat against it for `dash_press` (s). A wall farther off, or none, makes it a barrel roll
+    /// that moves the car over by `dash_speed` for `dash_nudge` (s).
     pub dash_time: f32,
     pub dash_wait: f32,
+    pub dash_reach: f32,
+    pub dash_press: f32,
+    pub dash_nudge: f32,
     /// How long a barrel roll takes, in seconds: a Star Dash with the stick at rest.
     pub roll_time: f32,
     /// The Air Roll (since v0.1.70): how much of what the stick asks on the road the nose turns, how
@@ -549,6 +564,9 @@ impl CarTuning {
             ("dash_speed", self.dash_speed),
             ("dash_time", self.dash_time),
             ("dash_wait", self.dash_wait),
+            ("dash_reach", self.dash_reach),
+            ("dash_press", self.dash_press),
+            ("dash_nudge", self.dash_nudge),
             ("roll_time", self.roll_time),
             ("air_roll_steering", self.air_roll_steering),
             ("air_roll_grip", self.air_roll_grip),
@@ -747,12 +765,15 @@ impl Car {
         };
     }
 
-    /// A press of the dash button, once the last dash or roll has had `dash_wait`: with the stick
-    /// to a side, `dash_time` of being thrown at the wall on that side; with the stick at rest, a
+    /// A press of the dash button, once the last dash or roll has had `dash_wait`. With the stick
+    /// to a side and the wall on that side within `dash_reach`, the car is thrown at it for the
+    /// time it takes to get there, and lands on it pressed flat; with the wall farther off, or
+    /// none, a barrel roll to that side that moves the car over a little; with the stick at rest, a
     /// barrel roll.
-    fn start_dash(&mut self, input: CarInput, tuning: &CarTuning, dt: f32) {
+    fn start_dash(&mut self, input: CarInput, tuning: &CarTuning, track: &Track, dt: f32) {
         self.dash = (self.dash - dt).max(0.0);
         self.roll = (self.roll - dt).max(0.0);
+        self.pressed = (self.pressed - dt).max(0.0);
         self.dash_wait = (self.dash_wait - dt).max(0.0);
         let pressed = input.dash && !self.dash_button;
         self.dash_button = input.dash;
@@ -760,14 +781,56 @@ impl Car {
             return;
         }
         self.dash_wait = tuning.dash_wait;
+        self.pressed = 0.0;
         let steer = input.steer();
-        if steer.abs() >= DASH_STICK {
-            self.dash = tuning.dash_time;
-            self.dash_side = if steer > 0.0 { 1 } else { -1 };
-        } else {
+        if steer.abs() < DASH_STICK {
             self.roll = tuning.roll_time;
             self.roll_side = if self.yaw_rate > 0.0 { -1 } else { 1 };
+            return;
         }
+        let side: i8 = if steer > 0.0 { 1 } else { -1 };
+        self.dash_side = side;
+        let reach = self
+            .wall_distance(side, tuning, track)
+            .filter(|distance| *distance <= tuning.dash_reach);
+        let time = match reach {
+            Some(distance) if tuning.dash_speed > 0.0 => {
+                (distance / tuning.dash_speed + 2.0 * dt).min(tuning.dash_time)
+            }
+            _ => {
+                // Too far: a roll toward that side, and a nudge.
+                self.roll = tuning.roll_time;
+                self.roll_side = side;
+                tuning.dash_nudge
+            }
+        };
+        self.dash = time;
+        self.dash_length = time;
+    }
+
+    /// How far the car is from the wall on its `side` (1 right, -1 left), straight across from
+    /// it, to where it would touch it; `None` where no wall stands, beyond a breach, in a gap or
+    /// in the air.
+    fn wall_distance(&self, side: i8, tuning: &CarTuning, track: &Track) -> Option<f32> {
+        if self.is_airborne() {
+            return None;
+        }
+        let here = track.project(self.position);
+        if !track.within_walls(&here) || track.in_gap(here.distance) {
+            return None;
+        }
+        let across = -self.forward().perp() * f32::from(side);
+        let left = track.point_at(here.distance).direction.perp();
+        let toward_left = across.dot(left);
+        if toward_left.abs() < 0.2 {
+            return None;
+        }
+        let limit = track.half_width_at(here.distance) - tuning.collision_radius;
+        let wall = limit * toward_left.signum();
+        if track.breached(here.distance, wall + toward_left.signum() * tuning.collision_radius) {
+            return None;
+        }
+        Some(((wall - here.lateral) / toward_left).max(0.0))
     }
 
     /// While a dash lasts, the car's sideways speed toward its side is kept up to `dash_speed`:
@@ -782,6 +845,20 @@ impl Car {
         if toward < tuning.dash_speed {
             self.velocity += right * side * (tuning.dash_speed - toward);
         }
+    }
+
+    /// How far over a car is rolled onto the wall a Star Dash took it to, from 0 to 1, and to
+    /// which side: rolling as it goes across, flat against it while pressed, and back off it over
+    /// the last fifth of a second.
+    pub fn press_share(&self) -> (f32, f32) {
+        let side = f32::from(self.dash_side);
+        if self.pressed > 0.0 {
+            return ((self.pressed / PRESS_RELEASE).min(1.0), side);
+        }
+        if self.dash > 0.0 && self.roll <= 0.0 && self.dash_length > 0.0 {
+            return ((1.0 - self.dash / self.dash_length).clamp(0.0, 1.0), side);
+        }
+        (0.0, 0.0)
     }
 
     /// How far round a barrel roll is, from 0 to 1, and its side, for drawing it.
@@ -925,7 +1002,7 @@ impl Car {
             return;
         }
         self.reset_button = resetting;
-        self.start_dash(input, tuning, dt);
+        self.start_dash(input, tuning, track, dt);
         let before = track.project(self.position);
         let was_inside = track.within_walls(&before);
         let height_before = track.height_at(&before);
@@ -1400,6 +1477,18 @@ impl Car {
         self.position -= outward * overlap;
 
         let into_wall = self.velocity.dot(outward);
+        if self.dash > 0.0 || self.pressed > 0.0 {
+            // A Star Dash lands the car on the wall rather than into it: what it carried across is
+            // taken, nothing more, and it stays pressed there, its speed along the wall kept.
+            if into_wall > 0.0 {
+                self.velocity -= outward * into_wall;
+            }
+            if self.dash > 0.0 {
+                self.dash = 0.0;
+                self.pressed = tuning.dash_press;
+            }
+            return None;
+        }
         if into_wall > 0.0 {
             let impact = into_wall * (1.0 + tuning.wall_bounce);
             self.velocity -= outward * impact;
@@ -2120,25 +2209,50 @@ mod tests {
         CarInput::new(true, steer).with_drift(true)
     }
 
-    /// A Star Dash with the stick to a side throws the car that way across the road, fast, and the
-    /// next one waits; with the stick at rest it rolls the car over without moving it sideways.
+    /// A Star Dash with the stick toward a wall within reach throws the car at it, lands it there
+    /// pressed flat without the cost of a hit, and the next one waits; toward a wall out of
+    /// reach it rolls the car to that side and moves it over a little; with the stick at rest it
+    /// rolls the car over without moving it sideways.
     #[test]
-    fn a_star_dash_throws_the_car_at_a_wall_and_at_rest_rolls_it() {
+    fn a_star_dash_presses_the_car_on_a_wall_and_out_of_reach_rolls_it() {
         let track = Track::build(&open_track()).unwrap();
         let tuning = tuning();
+        // Ten meters from the right wall of the open track's straight.
+        let mut car = at_top_speed(&track);
+        let wall = track.half_width() - tuning.collision_radius;
+        car.position.y = -(wall - 10.0);
+        let speed = car.velocity.x;
+        car.step(CarInput::new(true, 1.0).with_dash(true), &tuning, &track);
+        assert!(car.dash > 0.0 && car.roll == 0.0);
+        let mut rolled = 0.0_f32;
+        for _ in 0..ticks(0.5) {
+            car.step(ACCELERATE.with_dash(true), &tuning, &track);
+            rolled = rolled.max(car.press_share().0);
+            if car.pressed > 0.0 {
+                break;
+            }
+        }
+        assert!(car.pressed > 0.0, "never reached the wall");
+        assert!((car.position.y + wall).abs() < 0.3, "at {} m", car.position.y);
+        // Thrown across at dash_speed, the car is over its top speed for a moment, which the
+        // overspeed drag bleeds a little; the wall itself takes nothing.
+        assert!(car.velocity.x > speed - 2.5, "the landing cost {} m/s", speed - car.velocity.x);
+        assert!(rolled > 0.8 && car.press_share() == (1.0, 1.0), "rolled {rolled}");
+        // Held, the button does not dash again, and a new press waits.
+        assert!(car.dash_wait > 0.0);
+        run(&mut car, ACCELERATE, tuning.dash_press, &track);
+        assert_eq!(car.press_share().0, 0.0, "still pressed");
+
+        // From the middle of a road 300 m wide, the wall is out of reach: a roll and a nudge.
         let mut car = at_top_speed(&track);
         let start = car.position;
         let right = -car.forward().perp();
         car.step(CarInput::new(true, 1.0).with_dash(true), &tuning, &track);
-        assert!(car.dash > 0.0 && car.roll == 0.0);
-        for _ in 0..ticks(0.2) {
-            car.step(ACCELERATE.with_dash(true), &tuning, &track);
-        }
+        assert!(car.roll > 0.0 && car.roll_side == 1);
+        run(&mut car, ACCELERATE, tuning.roll_time, &track);
         let across = (car.position - start).dot(right);
-        assert!(across > 4.0, "thrown {across} m right");
-        assert!(car.velocity.dot(right) > 20.0, "{:?}", car.velocity);
-        // Held, the button does not dash again, and a new press waits.
-        assert!(car.dash_wait > 0.0);
+        assert!((0.5..4.5).contains(&across), "moved over {across} m");
+        assert_eq!(car.pressed, 0.0);
 
         let mut car = at_top_speed(&track);
         let start = car.position;
@@ -3014,7 +3128,7 @@ mod tests {
         let near = |what: &str, value: f32, expected: f32, margin: f32| {
             assert!(
                 (value - expected).abs() <= margin,
-                "{what}: {value:.1} where v0.1.55 had {expected}"
+                "{what}: {value:.1} where v1.0.0-rc1 had {expected}"
             );
         };
         // Body angle and how far the travel has turned, in degrees, after `seconds`, the button
@@ -3028,16 +3142,16 @@ mod tests {
             let turned = wrap_angle(car.velocity.to_angle() - start).to_degrees().abs();
             (car.body.abs().to_degrees(), turned)
         };
-        for (seconds, body, path) in [(0.1, 18.0, 5.0), (0.25, 38.0, 16.0), (0.5, 55.0, 35.0)] {
+        for (seconds, body, path) in [(0.1, 11.4, 4.4), (0.25, 26.4, 15.2), (0.5, 48.2, 32.9)] {
             let (b, p) = drift(3, seconds);
             near(&format!("tapped, body at {seconds} s"), b, body, 2.0);
             near(&format!("tapped, path at {seconds} s"), p, path, 2.0);
         }
-        near("tapped, path at 1.5 s", drift(3, 1.5).1, 110.0, 3.0);
+        near("tapped, path at 1.5 s", drift(3, 1.5).1, 96.7, 3.0);
         // Held, since v0.1.78: calmer than it was (94 degrees at 1 s), the body settling at 36
         // degrees instead of 55, no speed lost, and charging 1.7 times faster than a tap.
-        near("held, path at 1 s", drift(usize::MAX, 1.0).1, 81.0, 3.0);
-        near("held, body at 1 s", drift(usize::MAX, 1.0).0, 36.0, 2.0);
+        near("held, path at 1 s", drift(usize::MAX, 1.0).1, 70.4, 3.0);
+        near("held, body at 1 s", drift(usize::MAX, 1.0).0, 35.2, 2.0);
         let held_for = |hold: usize| {
             let mut car = fast();
             let speed = car.velocity.length();
@@ -3049,7 +3163,7 @@ mod tests {
         let ((held_lost, held_charge), (_, tapped_charge)) = (held_for(usize::MAX), held_for(3));
         assert!(held_lost > -0.5, "held, the drift lost {held_lost} m/s in a second");
         near("held, charge against a tap's", held_charge / tapped_charge, 1.67, 0.1);
-        for (seconds, body, path) in [(0.5, 23.0, 23.0), (0.75, 50.0, 43.0)] {
+        for (seconds, body, path) in [(0.5, 20.2, 22.9), (0.75, 43.0, 41.4)] {
             let (b, p) = drift(0, seconds);
             near(&format!("broken into, body at {seconds} s"), b, body, 2.0);
             near(&format!("broken into, path at {seconds} s"), p, path, 2.0);
@@ -3066,9 +3180,9 @@ mod tests {
             car.step(CarInput::new(true, 0.0), &tuning, &track);
             ticks_out += 1;
         }
-        near("let go of, seconds", ticks_out as f32 * TICK_SECONDS, 0.47, 0.04);
+        near("let go of, seconds", ticks_out as f32 * TICK_SECONDS, 0.58, 0.04);
         let turned = wrap_angle(car.velocity.to_angle() - travel).to_degrees().abs();
-        near("let go of, path", turned, 25.0, 2.0);
+        near("let go of, path", turned, 21.5, 2.0);
 
         // Carried over through an S, the button held: the body 30 degrees past the line (45 until
         // v0.1.77, when a held drift swung out to 55 degrees; it stops at 36 now).
@@ -3081,7 +3195,7 @@ mod tests {
             car.step(drifting(-1.0), &tuning, &track);
             ticks_over += 1;
         }
-        near("carried over, seconds", ticks_over as f32 * TICK_SECONDS, 0.6, 0.04);
+        near("carried over, seconds", ticks_over as f32 * TICK_SECONDS, 0.85, 0.04);
     }
 }
 

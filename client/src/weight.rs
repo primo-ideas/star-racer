@@ -210,6 +210,11 @@ impl Oscillator {
 /// body.
 const ROLL_AXIS_HEIGHT: f32 = 0.6;
 
+/// The edge a car pressed onto a wall rolls over: low on its side, about where its hull's
+/// widest point meets the road, so the underside comes to lie against the wall.
+const PRESS_EDGE_HEIGHT: f32 = 0.2;
+const PRESS_EDGE_OUT: f32 = 1.1;
+
 /// Sways every car's body with how it is pushed, and tells the camera how its car is.
 pub(crate) fn sway(
     time: Res<Time>,
@@ -266,6 +271,19 @@ pub(crate) fn sway(
                     * Transform::from_rotation(roll)
                     * Transform::from_translation(-axis);
             }
+        }
+        // Pressed onto a wall by a Star Dash: rolled a quarter turn over its edge on that side,
+        // so its underside, where its wheels would be, lies flat against the wall (since
+        // v1.0.0-rc1). The body's `+z` is the car's right.
+        let (pressed, side) = car.press_share();
+        if pressed > 0.0 {
+            let eased = pressed * pressed * (3.0 - 2.0 * pressed);
+            let edge = Vec3::new(0.0, PRESS_EDGE_HEIGHT, side * PRESS_EDGE_OUT);
+            let roll = Quat::from_rotation_x(-side * std::f32::consts::FRAC_PI_2 * eased);
+            body = Transform::from_translation(edge)
+                * Transform::from_rotation(roll)
+                * Transform::from_translation(-edge)
+                * body;
         }
         for child in children.iter() {
             if let Ok(mut transform) = bodies.get_mut(child) {

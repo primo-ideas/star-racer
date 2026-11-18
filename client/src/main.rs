@@ -3,6 +3,7 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 mod bindings;
+mod burst;
 mod camera;
 #[cfg(not(target_arch = "wasm32"))]
 mod capture;
@@ -126,6 +127,7 @@ fn main() {
     .add_plugins((
         reconnect::ReconnectPlugin,
         trail::TrailPlugin,
+        burst::BurstPlugin,
         spectator::SpectatorPlugin,
         ui::safe_area::SafeAreaPlugin {
             fixed: settings.safe_area,

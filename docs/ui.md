@@ -50,7 +50,9 @@ ranked match. Each screen's entities despawn when it is left.
   user's word "les choix de couleur se feront par une palette": every color of the row at once,
   sixteen paints and twelve neons, the chosen one ringed, picked with a click or stepped along
   with left and right; since v0.1.71 each palette shows the chosen color's name over tiles eight to a
-  row, the chosen tile ringed in white, glowing in its own color and a little larger. What is not won
+  row, the chosen tile ringed in white, glowing in its own color and a little larger; since
+  v1.0.0-rc1 a tile lights up under the mouse and is picked on the press itself, its row taking the
+  focus (the user's word "Dans le garage, on doit pouvoir selectionner les couleurs à la souris"). What is not won
   yet (see [Rewards](rewards.md)) is shown and previewed, its
   name dim and `LOCKED · LEVEL 8` under it; the player's level stands small in the card's corner.
   DONE, Escape or B keeps what is chosen of what is unlocked, tells the server if connected
@@ -71,7 +73,7 @@ ranked match. Each screen's entities despawn when it is left.
 - **Lobby** (`hud.rs`, over the 3D race): the circuit's name large in neon at the top left, the
   lobby's name and its laps under it (since v0.1.74), the circuit's name again, larger, over the start
   lights with its laps and length while the grid lines up, fading out in the last 0.6 s before the
-  start (since v0.1.80, `INTRO_OUT_SECONDS`), the phase ("waiting for players", the
+  start (since v0.1.80, `INTRO_OUT_SECONDS`; smaller and higher since v1.0.0-rc1), the phase ("waiting for players", the
   lap), the four start lights over the grid (a row of circles on a dark pill, lighting up one a
   second: three amber that pop as they light, then the start itself, green, blazing larger with a
   ring bursting out of it, each with its own sound, see [Sound](sound.md)), the start grade (S to E) for three seconds
@@ -83,11 +85,13 @@ ranked match. Each screen's entities despawn when it is left.
   boost on offer beside its name ("DRIFT +0.8s"), white and pulsing once full (MAX), then amber as
   BOOST while the boost it paid runs out; TURBO underneath, one stretch per charge, a full one
   glowing magenta and the one filling dim, white while one fires, the charges ready counted beside
-  its name; THRUST on the right, the tank, quiet while full on the road, lit in the air or
-  filling, red under a quarter. Bevy's UI having no arc, each is a row of short segments laid end
-  to end along the circle and turned with it, over a darker, wider track that holds it out from a
-  pale road; what is lit glows, its leading end brighter (since v0.1.78, the user's word
-  "Améliore largement le visuel des jauges et intègre y le chargement du drift"). A checkpoint passed
+  its name; THRUST on the right, the tank, lit in the air or filling, red under a quarter, and since
+  v1.0.0-rc1 not drawn at all while full on the road. Bevy's UI having no arc, each is a row of short segments laid end
+  to end along the circle and turned with it; what is lit glows, its leading end brighter (since v0.1.78, the user's word
+  "Améliore largement le visuel des jauges et intègre y le chargement du drift"). Since v1.0.0-rc1
+  each is one thin line of neon (4 pixels, 3 on a phone) in a light outline, at the user's word
+  "Fais que les jauges ne soient qu'une ligne neon jolie avec une outline légère"; a darker track
+  twice as thick held them before. A checkpoint passed
   is a quiet CHECKPOINT under the lap time, fading out, without its number (BACK ON TRACK the
   same after a fall); the count before a car off its course is brought back stays large. The arc of green segments on the road around the
   back of the car that showed the charge until v0.1.78 is gone, folded into the DRIFT arc. The

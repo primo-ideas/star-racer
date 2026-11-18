@@ -68,7 +68,10 @@
     // the car across too far for the user in v0.1.31, then 42 (v0.1.32 and v0.1.33) still carried
     // it across too fast, and 36 (v0.1.35 to v0.1.54) was barely seen to pivot.
     // Since v0.1.55, the car is seen pivoting on its axis (docs/simulation.md#a-pivot-not-a-sharper-turn):
-    // 55 degrees across again, swung at up to 140 degrees per second (36 and 45 in v0.1.54).
+    // 55 degrees across again, swung at up to 140 degrees per second (36 and 45 in v0.1.54); since
+    // v1.0.0-rc1 at up to 100, gathering at 260 (400 before) and thrown at 130 (200), at the
+    // user's word "alourdis encore plus, fais encore plus patiner, et moins déporter vite sur le
+    // coté": tapped, the body is 11 degrees out at 0.1 s, 26 at 0.25 s and 48 at 0.5 s (18, 38, 55).
     drift_angle: 55.0,
     // How the body swings there and back: it comes off the travel on the very tick the drift
     // starts, slowly, its swing gathering speed at this many degrees per second per second, up to
@@ -79,15 +82,15 @@
     // the line, 0.77 s with no limit. The knee of v0.1.37 to v0.1.56 (drift_swing_knee,
     // drift_swing_knee_rate) went in v0.1.57: at 55 degrees and 400 the body never swung fast
     // enough past it for it to change anything.
-    drift_swing_acceleration: 400.0,
-    drift_swing_rate: 140.0,
+    drift_swing_acceleration: 260.0,
+    drift_swing_rate: 100.0,
     // Radius of the curve the car drifts on with the stick fully to one side and the body swung
     // fully out, in meters: the curve tightens from the gripping car's to this one as the body
     // swings out. The stick is signed: centered runs straight and against the drift turns the
     // other way. The car goes where the stick says; it does not run wide. 26 until v0.1.36.
     // Since v0.1.55, 44: the path turns at 75 degrees per second at top speed where 30 turned it at
-    // 111, the user finding it turned too fast.
-    drift_radius_tight: 44.0,
+    // 111, the user finding it turned too fast. Since v1.0.0-rc1, 52: about 65 degrees per second.
+    drift_radius_tight: 52.0,
     // Holding the drift button multiplies the drift radius by this: it tightens the turn beyond
     // what the stick alone gives. Held with the stick well against the drift, it carries the drift
     // over to the other side, charge and all, through an S.
@@ -142,8 +145,9 @@
 
     // The jump, as in Rocket Racing (docs/simulation.md#the-jump, #hop-then-thrust). A press of
     // the jump lifts the car off the road at jump_speed (m/s); air_gravity (m/s²) brings it back,
-    // stronger than the road's gravity so a hop is short: at 10 and 50, 1 m up and 0.4 s in the
-    // air. The thrust held in the air, once the hop has had thrust_delay (s, near the top of the hop; held with
+    // stronger than the road's gravity so a hop is short and snappy: at 14 and 70 (10 and 50
+    // until v1.0.0-rc1), 1.4 m up in 0.2 s and 0.4 s in the air; thrust_acceleration rose with the
+    // gravity, 140 from 100, to hover as high as before. The thrust held in the air, once the hop has had thrust_delay (s, near the top of the hop; held with
     // the jump from its press only: Star Fly pressed on its own, on the road or in the air, lights at once),
     // lights the thruster with a kick, the climb brought up to thrust_kick (m/s), then pushes at
     // thrust_acceleration (m/s²), less and less toward thrust_ceiling (m), thrust_damping (per
@@ -151,10 +155,10 @@
     // v0.1.69, 5 m before), for as long as the tank holds: thrust_seconds, filled again on the road at
     // thrust_recharge seconds per second. A full tank flies 4.2 s, about 240 m at top speed. In the air the car feels no slope
     // and touches no pad, and a drift is held until it lands.
-    jump_speed: 10.0,
-    air_gravity: 50.0,
+    jump_speed: 14.0,
+    air_gravity: 70.0,
     thrust_delay: 0.15,
-    thrust_acceleration: 100.0,
+    thrust_acceleration: 140.0,
     thrust_ceiling: 20.0,
     thrust_seconds: 3.5,
     thrust_recharge: 1.4,
@@ -170,10 +174,16 @@
     air_steering: 0.9,
 
     // The Star Dash (since v0.1.70): a press with the stick to a side throws the car at the wall on
-    // that side at dash_speed (m/s) for dash_time (s); with the stick at rest it does a barrel roll
-    // of roll_time (s), drawn only. Another waits dash_wait (s).
-    dash_speed: 30.0,
-    dash_time: 0.3,
+    // that side at dash_speed (m/s), for at most dash_time (s); with the stick at rest it does a
+    // barrel roll of roll_time (s), drawn only. Another waits dash_wait (s). Since v1.0.0-rc1 only
+    // a wall within dash_reach (m) is dashed to: the car lands on it without the cost of a hit and
+    // stays pressed flat against it, drawn with its wheels on it, for dash_press (s); a wall farther
+    // off makes it a barrel roll toward it that moves the car over for dash_nudge (s).
+    dash_speed: 40.0,
+    dash_time: 0.5,
+    dash_reach: 16.0,
+    dash_press: 0.6,
+    dash_nudge: 0.04,
     dash_wait: 0.8,
     roll_time: 0.6,
 
@@ -205,7 +215,7 @@
     // avoir une rotation de la voiture sur son axe beaucoup plus claire": thrown, the body pivots
     // on its own axis, swung out at drift_kick_swing degrees per second and braking onto its
     // angle.
-    drift_kick_swing: 200.0,
+    drift_kick_swing: 130.0,
 
     // Walls. The bounce is the share of the impact speed that comes back, from 0 to 1. The impact
     // friction is the speed along the wall a hit takes, per m/s it takes into it: a graze costs

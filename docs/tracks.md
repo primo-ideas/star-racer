@@ -22,7 +22,9 @@ outside: the road leaves its line to the right, winds round a tight banked loop 
 the line it left, a little further on. Between them it runs fast: slaloms of 70 to 120 m radii,
 a quarter turn of 140 m, straights with a gap to jump.
 
-- **The launch**: out of the line, over the hop, 14 m missing 150 m after it.
+- **The launch**: out of the line and down the straight; until v1.0.0-rc1 over a hop, 14 m
+  missing 150 m after the line, taken out at the user's word ("enlève le trou au début de
+  Odyssey").
 - **The weave**: a long, fast slalom, dropping 12 m.
 - **The keyhole**: the first loop, 440 m of it, the lowest part of the lap.
 - **The long left**: a wide banked quarter turn, climbing.

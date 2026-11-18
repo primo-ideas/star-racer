@@ -125,7 +125,19 @@ fn send_input(
                     .is_some_and(|hold| time.elapsed_secs() % crate::settings::JUMP_EVERY < hold);
                 // `--jump` presses on top of the jumps the autopilot makes over gaps.
                 let input = autopilot::drive_in_style_as(style, &personality, &car, &track.0);
-                input.with_jump(input.jump || held).with_thrust(input.thrust || held)
+                let input = input.with_jump(input.jump || held).with_thrust(input.thrust || held);
+                // `--dash`: a press halfway between the jumps, the stick to its side for it.
+                let every = crate::settings::JUMP_EVERY;
+                match script.dash {
+                    Some(side) if (time.elapsed_secs() + every / 2.0) % every < 0.1 => {
+                        CarInput::new(input.accelerate, side)
+                            .with_drift(input.drift)
+                            .with_jump(input.jump)
+                            .with_thrust(input.thrust)
+                            .with_dash(true)
+                    }
+                    _ => input,
+                }
             }
             _ => CarInput::default(),
         }

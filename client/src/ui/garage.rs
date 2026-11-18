@@ -48,11 +48,13 @@ impl Plugin for GaragePlugin {
         app.add_systems(OnEnter(Screen::Login), open_scripted)
             .add_systems(OnEnter(Screen::Garage), spawn_garage)
             .add_observer(pick_swatch)
+            .add_observer(press_swatch)
             .add_systems(
                 Update,
                 (
                     show_choices,
                     show_swatches,
+                    hover_swatches,
                     show_level,
                     show_preview,
                     play_horn,
@@ -294,6 +296,7 @@ fn spawn_garage(
                                             color,
                                         },
                                         Button,
+                                        bevy::picking::hover::Hovered::default(),
                                         Node {
                                             width: px(pick(26.0, 20.0)),
                                             height: px(pick(26.0, 20.0)),
@@ -414,16 +417,55 @@ fn open_scripted(mut script: ResMut<Script>, mut next: ResMut<NextState<Screen>>
     }
 }
 
-/// A click on a color of a palette picks it.
+/// A color of a palette activated from the keyboard or a gamepad, its row focused, picks it.
 fn pick_swatch(
     activate: On<Activate>,
     swatches: Query<&Swatch>,
     mut steppers: Query<&mut Stepper>,
 ) {
-    if let Ok(swatch) = swatches.get(activate.entity)
-        && let Ok(mut stepper) = steppers.get_mut(swatch.row)
-    {
-        stepper.value = swatch.value;
+    pick(activate.entity, &swatches, &mut steppers);
+}
+
+/// A click of the mouse, or a tap, on a color picks it, on the press itself and whatever else the
+/// press does (since v1.0.0-rc1, the user's word "Dans le garage, on doit pouvoir selectionner les
+/// couleurs à la souris"), and gives its row the focus, so the keyboard carries on from there.
+fn press_swatch(
+    press: On<Pointer<Press>>,
+    swatches: Query<&Swatch>,
+    mut steppers: Query<&mut Stepper>,
+    mut focus: ResMut<InputFocus>,
+) {
+    if let Some(row) = pick(press.entity, &swatches, &mut steppers) {
+        focus.set(row, FocusCause::Pressed);
+    }
+}
+
+fn pick(entity: Entity, swatches: &Query<&Swatch>, steppers: &mut Query<&mut Stepper>) -> Option<Entity> {
+    let swatch = swatches.get(entity).ok()?;
+    let mut stepper = steppers.get_mut(swatch.row).ok()?;
+    stepper.value = swatch.value;
+    Some(swatch.row)
+}
+
+/// The color under the mouse lights up, so it reads as something to click.
+fn hover_swatches(
+    hovered: Query<(&Swatch, &bevy::picking::hover::Hovered)>,
+    mut nodes: Query<&mut BackgroundColor, With<Swatch>>,
+    swatch_entities: Query<Entity, With<Swatch>>,
+) {
+    for entity in &swatch_entities {
+        let (Ok((swatch, hover)), Ok(mut background)) = (hovered.get(entity), nodes.get_mut(entity))
+        else {
+            continue;
+        };
+        let wanted = if hover.get() {
+            swatch.color.lighter(0.12)
+        } else {
+            swatch.color
+        };
+        if background.0 != wanted {
+            background.0 = wanted;
+        }
     }
 }
 

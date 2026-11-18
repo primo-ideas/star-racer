@@ -128,10 +128,9 @@
     narrows: [
         (at: 2652.9, length: 60.0, width: 18.0, blend: 30.0),
     ],
-    // Where the road is missing (docs/tracks.md#gaps): a hop clears the first and the last, the
-    // leap and the rift are the thruster's.
+    // Where the road is missing (docs/tracks.md#gaps): a hop clears the last, the leap and the
+    // rift are the thruster's. The hop after the line went in v1.0.0-rc1, at the user's word.
     gaps: [
-        (at: 150.0, length: 14.0),
         (at: 1475.0, length: 110.0),
         (at: 3088.2, length: 170.0),
         (at: 3639.9, length: 16.0),
