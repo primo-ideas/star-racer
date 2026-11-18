@@ -15,6 +15,7 @@
 //! guest's). The draft is kept beside the player's other choices, so it survives a restart; LOAD
 //! takes any circuit the server has as a new draft.
 
+mod labels;
 mod map;
 pub mod model;
 mod panel;
@@ -45,7 +46,7 @@ pub struct EditorPlugin;
 
 impl Plugin for EditorPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(OnEnter(Screen::Editor), (open, panel::spawn).chain())
+        app.add_systems(OnEnter(Screen::Editor), (open, panel::spawn, labels::spawn).chain())
             .add_systems(OnExit(Screen::Editor), close)
             // The circuit tried is nobody's to pick in the lobby creation dialog.
             .add_systems(OnEnter(Screen::Login), forget_try)
@@ -59,9 +60,11 @@ impl Plugin for EditorPlugin {
                     panel::size_buttons,
                     map::rebuild,
                     map::steer_camera,
-                    map::click,
+                    map::pointer,
                     map::draw_overlay,
+                    labels::place,
                     leave_on_back,
+                    shortcuts,
                     scripted_try,
                 )
                     .chain()
@@ -86,6 +89,8 @@ pub struct Editor {
     pub closing_radius: f32,
     pub tab: Tab,
     pub selected: Option<Item>,
+    /// The part the mouse is over, lit on the map.
+    pub hovered: Option<Item>,
     /// Meters along the lap where the last click on the map fell: where what is added goes.
     pub cursor: Option<f32>,
     /// What the editor last has to say, and whether it is bad news.
@@ -100,7 +105,15 @@ pub struct Editor {
     pub overlay_dirty: bool,
     /// The camera should frame the whole circuit again.
     pub reframe: bool,
+    /// The drafts before this one, newest last, and those undone, for redo (since v1.0.0-rc5).
+    history: Vec<TrackDescription>,
+    future: Vec<TrackDescription>,
+    /// The draft as it stood after the last change, what an undo goes back past.
+    last: TrackDescription,
 }
+
+/// How many drafts back an undo can go.
+const HISTORY: usize = 100;
 
 /// A draft closed into a circuit that builds.
 pub struct Built {
@@ -113,10 +126,14 @@ pub struct Built {
 impl Editor {
     fn new(draft: TrackDescription, closing_radius: f32) -> Self {
         let mut editor = Self {
+            last: draft.clone(),
+            history: Vec::new(),
+            future: Vec::new(),
             draft,
             closing_radius,
             tab: Tab::Road,
             selected: None,
+            hovered: None,
             cursor: None,
             message: None,
             load_choice: 0,
@@ -150,6 +167,50 @@ impl Editor {
 
     /// Everything changed: the draft is built again, and both the panel and the map redrawn.
     pub fn changed(&mut self) {
+        // What it was before is kept for an undo, and what was undone is forgotten.
+        if self.draft != self.last {
+            let before = std::mem::replace(&mut self.last, self.draft.clone());
+            self.history.push(before);
+            if self.history.len() > HISTORY {
+                self.history.remove(0);
+            }
+            self.future.clear();
+        }
+        self.build();
+        self.panel_dirty = true;
+        self.scene_dirty = true;
+        self.overlay_dirty = true;
+    }
+
+    /// Goes back to the draft before the last change, if there is one.
+    pub fn undo(&mut self) {
+        if let Some(before) = self.history.pop() {
+            self.future.push(std::mem::replace(&mut self.draft, before));
+            self.after_undo("Undone.");
+        }
+    }
+
+    /// Takes the last change undone again.
+    pub fn redo(&mut self) {
+        if let Some(after) = self.future.pop() {
+            self.history.push(std::mem::replace(&mut self.draft, after));
+            self.after_undo("Redone.");
+        }
+    }
+
+    pub fn can_undo(&self) -> bool {
+        !self.history.is_empty()
+    }
+
+    pub fn can_redo(&self) -> bool {
+        !self.future.is_empty()
+    }
+
+    fn after_undo(&mut self, said: &str) {
+        self.last = self.draft.clone();
+        // A part selected may be gone: nothing is.
+        self.selected = None;
+        self.message = Some((said.to_owned(), false));
         self.build();
         self.panel_dirty = true;
         self.scene_dirty = true;
@@ -310,5 +371,64 @@ fn scripted_try(
     if script.editor_try && editor.built.is_ok() {
         script.editor_try = false;
         try_draft(&mut editor, &network, &mut tracks, &mut images, &mut after);
+    }
+}
+
+/// Ctrl+Z undoes, Ctrl+Y or Ctrl+Shift+Z redoes, Delete removes the part selected (since
+/// v1.0.0-rc5); not while the name is being typed, where those keys edit the text.
+fn shortcuts(
+    keys: Res<ButtonInput<KeyCode>>,
+    focus: Res<bevy::input_focus::InputFocus>,
+    fields: Query<(), With<bevy::text::EditableText>>,
+    mut editor: ResMut<Editor>,
+) {
+    if focus.get().is_some_and(|focused| fields.contains(focused)) {
+        return;
+    }
+    let control = keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]);
+    let shift = keys.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
+    if control && keys.just_pressed(KeyCode::KeyZ) {
+        if shift {
+            editor.redo();
+        } else {
+            editor.undo();
+        }
+    } else if control && keys.just_pressed(KeyCode::KeyY) {
+        editor.redo();
+    } else if keys.just_pressed(KeyCode::Delete)
+        && let Some(item) = editor.selected
+        && item != model::Item::Road
+    {
+        editor.selected = None;
+        model::remove(&mut editor.draft, item);
+        editor.changed();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A change can be undone and redone, and a new change forgets what was undone.
+    #[test]
+    fn changes_are_undone_and_redone() {
+        let mut editor = Editor::new(model::starter(), CLOSING_RADIUS);
+        let start = editor.draft.clone();
+        assert!(!editor.can_undo());
+        model::add(&mut editor.draft, model::New::Straight, 0.0, None);
+        editor.changed();
+        let one = editor.draft.clone();
+        assert!(editor.can_undo());
+        editor.undo();
+        assert_eq!(editor.draft, start);
+        assert!(editor.can_redo());
+        editor.redo();
+        assert_eq!(editor.draft, one);
+        editor.undo();
+        editor.draft.width += 2.0;
+        editor.changed();
+        assert!(!editor.can_redo(), "a new change forgets what was undone");
+        editor.undo();
+        assert_eq!(editor.draft, start);
     }
 }

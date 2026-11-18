@@ -202,64 +202,108 @@ fn bounds(track: &Track) -> (Vec2, Vec2) {
     )
 }
 
-/// A left click on the map puts the cursor on the road there, and picks the part of the open tab
-/// nearest it: the segment under it on the road tab.
-pub fn click(
+/// Where the mouse is over the road, as a place along the lap, or `None` off the map or the road.
+fn under_mouse(
+    editor: &Editor,
+    windows: &Query<&Window, With<PrimaryWindow>>,
+    cameras: &Query<(&Camera, &GlobalTransform), With<MainCamera>>,
+    touchscreen: Touchscreen,
+) -> Option<f32> {
+    let cursor = windows.single().ok().and_then(Window::cursor_position)?;
+    if cursor.x <= panel::width(touchscreen) {
+        return None;
+    }
+    let (camera, transform) = cameras.single().ok()?;
+    let track = &editor.built.as_ref().ok()?.track;
+    let ray = camera.viewport_to_world(transform, cursor).ok()?;
+    // Where the ray meets the road: first the ground at sea level, then the height of the road
+    // nearest that, twice more, which is close enough for a road that climbs gently.
+    let mut height = 0.0;
+    let mut hit = None;
+    for _ in 0..3 {
+        let distance = ray.intersect_plane(Vec3::Y * height, InfinitePlane3d::new(Vec3::Y))?;
+        let point = ray.get_point(distance);
+        let projection = track.project(Vec2::new(point.x, -point.z));
+        height = track.height_at(&projection);
+        hit = Some(projection);
+    }
+    let projection = hit?;
+    (projection.lateral.abs() <= track.half_width_at(projection.distance) + 60.0)
+        .then_some(projection.distance)
+}
+
+/// What the mouse is doing on the map: the part under it, and the one being dragged.
+#[derive(Default)]
+pub(super) struct Pointer {
+    dragging: Option<Item>,
+    moved: bool,
+}
+
+/// The mouse on the map (since v1.0.0-rc5, the user's word "Améliore l'éditeur, c'est pas
+/// intuitif du tout"): the part of the open tab nearest it is lit as it passes; a left click puts
+/// the cursor on the road and selects that part; held on a part placed along the lap, it drags it
+/// along the road, and letting go builds the circuit again.
+pub(super) fn pointer(
     mut editor: ResMut<Editor>,
     windows: Query<&Window, With<PrimaryWindow>>,
     buttons: Res<ButtonInput<MouseButton>>,
     cameras: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
     touchscreen: Res<Touchscreen>,
+    mut state: Local<Pointer>,
 ) {
+    let at = under_mouse(&editor, &windows, &cameras, *touchscreen);
+    // Let go: the part dragged is where it was dropped, and the circuit is built with it there.
+    if state.dragging.is_some() && !buttons.pressed(MouseButton::Left) {
+        state.dragging = None;
+        if std::mem::take(&mut state.moved) {
+            editor.changed();
+        }
+        return;
+    }
+    if let (Some(item), Some(at)) = (state.dragging, at) {
+        let along = model::fields(&editor.draft, item)
+            .iter()
+            .position(|field| field.label == "ALONG");
+        if let Some(field) = along
+            && model::at(&editor.draft, item).is_some_and(|now| (now - at).abs() > 0.5)
+        {
+            let item = model::set(&mut editor.draft, item, field, at.round());
+            editor.selected = Some(item);
+            state.dragging = Some(item);
+            state.moved = true;
+            editor.cursor = Some(at);
+            editor.overlay_dirty = true;
+            editor.panel_dirty = true;
+        }
+        return;
+    }
+    let hovered = at.and_then(|at| nearest(&editor, at, false));
+    if hovered != editor.hovered {
+        editor.hovered = hovered;
+        editor.overlay_dirty = true;
+    }
     if !buttons.just_pressed(MouseButton::Left) {
         return;
     }
-    let Some(cursor) = windows.single().ok().and_then(Window::cursor_position) else {
+    let Some(at) = at else {
         return;
     };
-    if cursor.x <= panel::width(*touchscreen) {
-        return;
-    }
-    let Ok((camera, transform)) = cameras.single() else {
-        return;
-    };
-    let Ok(built) = &editor.built else {
-        return;
-    };
-    let track = built.track.clone();
-    let Ok(ray) = camera.viewport_to_world(transform, cursor) else {
-        return;
-    };
-    // Where the ray meets the road: first the ground at sea level, then the height of the road
-    // nearest that, once more, which is close enough for a road that climbs gently.
-    let mut height = 0.0;
-    let mut hit = None;
-    for _ in 0..3 {
-        let Some(distance) = ray.intersect_plane(Vec3::Y * height, InfinitePlane3d::new(Vec3::Y))
-        else {
-            return;
-        };
-        let point = ray.get_point(distance);
-        let plane = Vec2::new(point.x, -point.z);
-        let projection = track.project(plane);
-        height = track.height_at(&projection);
-        hit = Some(projection);
-    }
-    let Some(projection) = hit else {
-        return;
-    };
-    if projection.lateral.abs() > track.half_width_at(projection.distance) + 60.0 {
-        return;
-    }
-    let at = projection.distance;
     editor.cursor = Some(at);
-    editor.selected = nearest(&editor, at);
+    editor.selected = nearest(&editor, at, true);
+    // Pressed on a part placed along the lap: it follows the mouse until let go.
+    if let Some(item) = editor.selected
+        && model::at(&editor.draft, item).is_some_and(|place| (place - at).abs() < 30.0)
+    {
+        state.dragging = Some(item);
+    }
     editor.panel_dirty = true;
     editor.overlay_dirty = true;
 }
 
 /// The part of the open tab nearest `at` meters along the lap.
-fn nearest(editor: &Editor, at: f32) -> Option<Item> {
+fn nearest(editor: &Editor, at: f32, keep: bool) -> Option<Item> {
+    // When nothing is near, a click keeps the selection; the mouse passing lights nothing.
+    let fallback = if keep { editor.selected } else { None };
     if editor.tab == Tab::Road {
         let count = editor.draft.segments.len();
         return (0..count)
@@ -268,7 +312,7 @@ fn nearest(editor: &Editor, at: f32) -> Option<Item> {
                 (start..end).contains(&at)
             })
             .map(Item::Segment)
-            .or(editor.selected);
+            .or(fallback);
     }
     model::items(&editor.draft, editor.tab)
         .into_iter()
@@ -276,7 +320,7 @@ fn nearest(editor: &Editor, at: f32) -> Option<Item> {
         .filter(|(_, off)| *off < 80.0)
         .min_by(|a, b| a.1.total_cmp(&b.1))
         .map(|(item, _)| item)
-        .or(editor.selected)
+        .or(fallback)
 }
 
 /// Draws over the circuit the part selected (a segment's whole stretch, or a bar across the road
@@ -328,6 +372,20 @@ pub(super) fn draw_overlay(
         let count = editor.draft.segments.len();
         let (_, end) = editor.segment_span(count.saturating_sub(1));
         stretch(&mut geometry, end, lap, 2.0, Color::srgb(0.5, 0.55, 1.0));
+    }
+    // What the mouse is over, quieter than what is selected.
+    let hover = Color::srgb(0.45, 0.5, 0.6);
+    match editor.hovered.filter(|hovered| Some(*hovered) != editor.selected) {
+        Some(Item::Segment(index)) => {
+            let (from, to) = editor.segment_span(index);
+            stretch(&mut geometry, from, to, 4.0, hover);
+        }
+        Some(item) => {
+            if let Some(at) = model::at(&editor.draft, item) {
+                across(&mut geometry, at, hover);
+            }
+        }
+        None => {}
     }
     match editor.selected {
         Some(Item::Segment(index)) => {

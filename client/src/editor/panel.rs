@@ -7,6 +7,7 @@ use bevy::input_focus::InputFocus;
 use bevy::picking::events::{Pointer, Scroll};
 use bevy::prelude::*;
 use bevy::text::EditableText;
+use bevy::ui::InteractionDisabled;
 use bevy::ui_widgets::Activate;
 use star_racer_protocol::{MAX_LOBBY_NAME_CHARS, TRY_TRACK};
 
@@ -60,6 +61,10 @@ enum Action {
     LoadStep(i32),
     /// Steps the radius of the editor's closing turns.
     Closing(i32),
+    Undo,
+    Redo,
+    /// Turns the selected turn the other way.
+    Flip,
 }
 
 /// The list of parts, which scrolls.
@@ -176,6 +181,13 @@ pub(super) fn refresh(
                     row.spawn((TabButton(tab), small_button(&fonts, kind, tab.name(), size(13.0, 11.0))));
                 }
             });
+
+        // What the tab is for, in a line.
+        panel.spawn((
+            Text::new(tab_help(editor.tab)),
+            fonts.text(size(13.0, 11.0), 400),
+            TextColor(theme::TEXT_DIM),
+        ));
 
         // What can be added to it, at the cursor.
         panel
@@ -305,10 +317,25 @@ pub(super) fn refresh(
                     });
             }
             if item != Item::Road {
-                panel.spawn((
-                    Action::Delete,
-                    small_button(&fonts, ButtonKind::Quiet, "DELETE", size(12.0, 10.0)),
-                ));
+                let turn = matches!(item, Item::Segment(index)
+                    if matches!(editor.draft.segments.get(index), Some(star_racer_sim::track::Segment::Turn { .. })));
+                panel
+                    .spawn(Node {
+                        column_gap: px(6),
+                        ..default()
+                    })
+                    .with_children(|row| {
+                        if turn {
+                            row.spawn((
+                                Action::Flip,
+                                small_button(&fonts, ButtonKind::Quiet, "FLIP", size(12.0, 10.0)),
+                            ));
+                        }
+                        row.spawn((
+                            Action::Delete,
+                            small_button(&fonts, ButtonKind::Quiet, "DELETE", size(12.0, 10.0)),
+                        ));
+                    });
             } else {
                 // The road as a whole also has the editor's own closing turns.
                 panel
@@ -431,6 +458,16 @@ pub(super) fn refresh(
                     Action::Publish,
                     small_button(&fonts, ButtonKind::Secondary, "PUBLISH", size(15.0, 12.0)),
                 ));
+                for (action, label, can) in [
+                    (Action::Undo, "UNDO", editor.can_undo()),
+                    (Action::Redo, "REDO", editor.can_redo()),
+                ] {
+                    let mut button =
+                        row.spawn((action, small_button(&fonts, ButtonKind::Quiet, label, size(13.0, 11.0))));
+                    if !can {
+                        button.insert(InteractionDisabled);
+                    }
+                }
                 row.spawn((
                     Action::New,
                     small_button(&fonts, ButtonKind::Quiet, "NEW", size(13.0, 11.0)),
@@ -567,6 +604,17 @@ fn on_action(
                 (editor.load_choice as i32 + step).rem_euclid(count as i32) as usize;
             editor.panel_dirty = true;
         }
+        Action::Undo => editor.undo(),
+        Action::Redo => editor.redo(),
+        Action::Flip => {
+            if let Some(Item::Segment(index)) = editor.selected
+                && let Some(star_racer_sim::track::Segment::Turn { angle, .. }) =
+                    editor.draft.segments.get_mut(index)
+            {
+                *angle = -*angle;
+                editor.changed();
+            }
+        }
         Action::Closing(step) => {
             editor.closing_radius = (editor.closing_radius + 5.0 * step as f32).clamp(20.0, 500.0);
             editor.changed();
@@ -607,5 +655,28 @@ pub(super) fn size_buttons(mut buttons: Query<(&SmallButton, &mut Node), Added<S
         node.align_items = AlignItems::Center;
         node.width = Val::Auto;
         node.min_width = Val::Auto;
+    }
+}
+
+/// What each tab is for, said under the tabs (since v1.0.0-rc5, the user's word: "Améliore
+/// l'éditeur, c'est pas intuitif du tout").
+fn tab_help(tab: Tab) -> &'static str {
+    match tab {
+        Tab::Road => {
+            "The road from the start line, segment by segment. ADD puts a segment after the one \
+             selected; the editor closes the road back to the line by itself (the pale line)."
+        }
+        Tab::Relief => {
+            "Heights the road climbs and dives through. Click the road where it should be high \
+             or low, then ADD a HEIGHT."
+        }
+        Tab::Game => {
+            "What is raced: gaps to jump, missing walls, narrow stretches, speed pads and \
+             checkpoints. Click the road, then ADD."
+        }
+        Tab::Scenery => {
+            "What stands beside the road. Click the road, then ADD; SIDE and OFF THE WALL \
+             place it."
+        }
     }
 }

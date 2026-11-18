@@ -1,6 +1,6 @@
 [package]
 name = "star-racer-sim"
-version = "1.0.0-rc4"
+version = "1.0.0-rc5"
 edition = "2024"
 license = "Unlicense"
 

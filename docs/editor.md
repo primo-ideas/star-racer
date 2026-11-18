@@ -71,9 +71,22 @@ road as laid is drawn in red and the status says why.
   so it is there again on the next run; NEW starts again from a straight, a banked half turn and a
   straight; LOAD takes any of the server's circuits as a new draft, all its segments kept.
 
+## Made easier to use
+
+In v1.0.0-rc5, at the user's word "Améliore l'éditeur, c'est pas intuitif du tout":
+
+- **Said on screen.** A line at the bottom of the map says what the mouse and the keys do, and a
+  line under the tabs what the open tab is for (`tab_help`).
+- **The mouse.** The part of the open tab nearest the mouse is lit grey as it passes; a click
+  selects it, white; held on a part placed along the lap, it slides the part along the road, the
+  circuit built again when it is let go (`map::pointer`).
+- **Numbers on the road.** Each segment's number stands over the middle of its stretch, as the
+  list numbers it, blue for the one selected (`labels.rs`).
+- **Undo.** UNDO and REDO, Ctrl+Z and Ctrl+Y (or Ctrl+Shift+Z), a hundred drafts back; NEW and
+  LOAD are undone too. Delete removes the part selected. FLIP turns a turn the other way.
+
 ## Not done
 
-- No undo; NEW and LOAD replace the draft without asking.
-- Nothing is dragged on the map: parts are placed at the cursor and moved with their numbers.
+- Segments are not dragged: a turn's angle and a straight's length are stepped with their numbers.
 - Not on a phone.
 - A published circuit cannot be taken down from the game: its file is removed on the machine.
