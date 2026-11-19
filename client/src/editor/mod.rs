@@ -374,8 +374,8 @@ fn scripted_try(
     }
 }
 
-/// Ctrl+Z undoes, Ctrl+Y or Ctrl+Shift+Z redoes, Delete removes the part selected (since
-/// v1.0.0-rc5); not while the name is being typed, where those keys edit the text.
+/// Ctrl+Z undoes, Ctrl+Y or Ctrl+Shift+Z redoes, Ctrl+D duplicates the part at the cursor and
+/// Delete removes it; not while the name is being typed, where those keys edit the text.
 fn shortcuts(
     keys: Res<ButtonInput<KeyCode>>,
     focus: Res<bevy::input_focus::InputFocus>,
@@ -395,6 +395,8 @@ fn shortcuts(
         }
     } else if control && keys.just_pressed(KeyCode::KeyY) {
         editor.redo();
+    } else if control && keys.just_pressed(KeyCode::KeyD) {
+        panel::duplicate(&mut editor);
     } else if keys.just_pressed(KeyCode::Delete)
         && let Some(item) = editor.selected
         && item != model::Item::Road

@@ -68,7 +68,13 @@ impl New {
         match tab {
             Tab::Road => vec![New::Straight, New::Left, New::Right],
             Tab::Relief => vec![New::Height],
-            Tab::Game => vec![New::Gap, New::Breach, New::Narrows, New::Pad, New::Checkpoint],
+            Tab::Game => vec![
+                New::Gap,
+                New::Breach,
+                New::Narrows,
+                New::Pad,
+                New::Checkpoint,
+            ],
             Tab::Scenery => PropKind::ALL.iter().map(|kind| New::Prop(*kind)).collect(),
         }
     }
@@ -243,7 +249,10 @@ fn slots<'a>(description: &'a mut TrackDescription, item: Item) -> Vec<(Field, S
         }
         Item::Segment(index) => match description.segments.get_mut(index) {
             Some(Segment::Straight { length }) => {
-                vec![(meters("LENGTH", *length, 10.0, 1.0, 5000.0), Slot::Float(length))]
+                vec![(
+                    meters("LENGTH", *length, 10.0, 1.0, 5000.0),
+                    Slot::Float(length),
+                )]
             }
             Some(Segment::Turn {
                 angle,
@@ -287,7 +296,10 @@ fn slots<'a>(description: &'a mut TrackDescription, item: Item) -> Vec<(Field, S
         Item::Height(index) => match description.elevation.get_mut(index) {
             Some(Elevation { at, height }) => vec![
                 (along(*at), Slot::Float(at)),
-                (meters("HEIGHT", *height, 1.0, -200.0, 400.0), Slot::Float(height)),
+                (
+                    meters("HEIGHT", *height, 1.0, -200.0, 400.0),
+                    Slot::Float(height),
+                ),
             ],
             None => Vec::new(),
         },
@@ -299,7 +311,10 @@ fn slots<'a>(description: &'a mut TrackDescription, item: Item) -> Vec<(Field, S
                 blend,
             }) => vec![
                 (along(*at), Slot::Float(at)),
-                (meters("LENGTH", *length, 5.0, 1.0, 2000.0), Slot::Float(length)),
+                (
+                    meters("LENGTH", *length, 5.0, 1.0, 2000.0),
+                    Slot::Float(length),
+                ),
                 (meters("WIDTH", *width, 1.0, 4.0, 80.0), Slot::Float(width)),
                 (meters("BLEND", *blend, 2.0, 0.0, 200.0), Slot::Float(blend)),
             ],
@@ -308,14 +323,20 @@ fn slots<'a>(description: &'a mut TrackDescription, item: Item) -> Vec<(Field, S
         Item::Gap(index) => match description.gaps.get_mut(index) {
             Some(Gap { at, length }) => vec![
                 (along(*at), Slot::Float(at)),
-                (meters("LENGTH", *length, 2.0, 4.0, 200.0), Slot::Float(length)),
+                (
+                    meters("LENGTH", *length, 2.0, 4.0, 200.0),
+                    Slot::Float(length),
+                ),
             ],
             None => Vec::new(),
         },
         Item::Breach(index) => match description.breaches.get_mut(index) {
             Some(Breach { at, length, side }) => vec![
                 (along(*at), Slot::Float(at)),
-                (meters("LENGTH", *length, 5.0, 4.0, 2000.0), Slot::Float(length)),
+                (
+                    meters("LENGTH", *length, 5.0, 4.0, 2000.0),
+                    Slot::Float(length),
+                ),
                 (side_field(*side), Slot::Side(side)),
             ],
             None => Vec::new(),
@@ -332,7 +353,10 @@ fn slots<'a>(description: &'a mut TrackDescription, item: Item) -> Vec<(Field, S
                     meters("ACROSS", *lateral, 1.0, -half_width, half_width),
                     Slot::Float(lateral),
                 ),
-                (meters("LENGTH", *length, 2.0, 2.0, 60.0), Slot::Float(length)),
+                (
+                    meters("LENGTH", *length, 2.0, 2.0, 60.0),
+                    Slot::Float(length),
+                ),
                 (meters("WIDTH", *width, 1.0, 1.0, 40.0), Slot::Float(width)),
             ],
             None => Vec::new(),
@@ -383,7 +407,10 @@ fn prop_slots(prop: &mut Prop) -> Vec<(Field, Slot<'_>)> {
             depth,
         } => vec![
             (along(*at), Slot::Float(at)),
-            (meters("CLEARANCE", *clearance, 1.0, 4.0, 400.0), Slot::Float(clearance)),
+            (
+                meters("CLEARANCE", *clearance, 1.0, 4.0, 400.0),
+                Slot::Float(clearance),
+            ),
             (size("DEPTH", *depth), Slot::Float(depth)),
         ],
         Prop::Pylon {
@@ -499,7 +526,10 @@ fn prop_slots(prop: &mut Prop) -> Vec<(Field, Slot<'_>)> {
         } => vec![
             (along(*at), Slot::Float(at)),
             (size("LENGTH", *length), Slot::Float(length)),
-            (meters("CLEARANCE", *clearance, 1.0, 7.0, 100.0), Slot::Float(clearance)),
+            (
+                meters("CLEARANCE", *clearance, 1.0, 7.0, 100.0),
+                Slot::Float(clearance),
+            ),
         ],
     }
 }
@@ -525,12 +555,16 @@ pub fn set(description: &mut TrackDescription, item: Item, field: usize, value: 
         match slot {
             Slot::Float(stored) => {
                 // A turn never turns by nothing: stepping through zero goes to the other side.
-                **stored = if bounds.unit == Unit::Degrees && bounds.label == "ANGLE" && value == 0.0
-                {
-                    if **stored > 0.0 { -bounds.step } else { bounds.step }
-                } else {
-                    value
-                };
+                **stored =
+                    if bounds.unit == Unit::Degrees && bounds.label == "ANGLE" && value == 0.0 {
+                        if **stored > 0.0 {
+                            -bounds.step
+                        } else {
+                            bounds.step
+                        }
+                    } else {
+                        value
+                    };
             }
             Slot::Byte(stored) => **stored = value.round() as u8,
             Slot::Side(stored) => **stored = if value > 0.0 { Side::Left } else { Side::Right },
@@ -544,9 +578,7 @@ fn keep_in_order(description: &mut TrackDescription, item: Item) -> Item {
     match item {
         Item::Height(index) => {
             let moved = description.elevation[index];
-            description
-                .elevation
-                .sort_by(|a, b| a.at.total_cmp(&b.at));
+            description.elevation.sort_by(|a, b| a.at.total_cmp(&b.at));
             let at = description
                 .elevation
                 .iter()
@@ -639,6 +671,56 @@ pub fn add(description: &mut TrackDescription, new: New, at: f32, after: Option<
     keep_in_order(description, item)
 }
 
+/// Copies `item`. A road segment follows the one copied; every other part is put at `at`, keeping
+/// all its other numbers (its dimensions, side, and so on). The new part is returned, including
+/// its new index when the list has to stay in order.
+pub fn duplicate(description: &mut TrackDescription, item: Item, at: f32) -> Option<Item> {
+    let copied = match item {
+        Item::Road => return None,
+        Item::Segment(index) => {
+            let segment = *description.segments.get(index)?;
+            let index = index.saturating_add(1).min(description.segments.len());
+            description.segments.insert(index, segment);
+            return Some(Item::Segment(index));
+        }
+        Item::Height(index) => {
+            description
+                .elevation
+                .push(*description.elevation.get(index)?);
+            Item::Height(description.elevation.len() - 1)
+        }
+        Item::Narrows(index) => {
+            description.narrows.push(*description.narrows.get(index)?);
+            Item::Narrows(description.narrows.len() - 1)
+        }
+        Item::Gap(index) => {
+            description.gaps.push(*description.gaps.get(index)?);
+            Item::Gap(description.gaps.len() - 1)
+        }
+        Item::Breach(index) => {
+            description.breaches.push(*description.breaches.get(index)?);
+            Item::Breach(description.breaches.len() - 1)
+        }
+        Item::Pad(index) => {
+            description.pads.push(*description.pads.get(index)?);
+            Item::Pad(description.pads.len() - 1)
+        }
+        Item::Checkpoint(index) => {
+            description
+                .checkpoints
+                .push(*description.checkpoints.get(index)?);
+            Item::Checkpoint(description.checkpoints.len() - 1)
+        }
+        Item::Prop(index) => {
+            description.scenery.push(*description.scenery.get(index)?);
+            Item::Prop(description.scenery.len() - 1)
+        }
+    };
+    // ALONG is every item's first field. Going through `set` applies its normal bounds and keeps
+    // the two ordered lists (heights and checkpoints) ordered.
+    Some(set(description, copied, 0, at.max(0.0)))
+}
+
 /// Removes `item`. The road as a whole, and its last segment, stay.
 pub fn remove(description: &mut TrackDescription, item: Item) {
     match item {
@@ -702,7 +784,9 @@ pub fn describe(description: &TrackDescription, item: Item) -> String {
     match item {
         Item::Road => format!("ROAD  ·  {:.0} m wide", description.width),
         Item::Segment(index) => match description.segments.get(index) {
-            Some(Segment::Straight { length }) => format!("{}. STRAIGHT  ·  {length:.0} m", index + 1),
+            Some(Segment::Straight { length }) => {
+                format!("{}. STRAIGHT  ·  {length:.0} m", index + 1)
+            }
             Some(Segment::Turn {
                 angle,
                 radius,
@@ -721,19 +805,40 @@ pub fn describe(description: &TrackDescription, item: Item) -> String {
             ),
             None => String::new(),
         },
-        Item::Height(index) => description.elevation.get(index).map_or(String::new(), |height| {
-            format!("HEIGHT {:.0} m  ·  {}", height.height, along(height.at))
-        }),
-        Item::Narrows(index) => description.narrows.get(index).map_or(String::new(), |narrows| {
-            format!("NARROWS {:.0} m wide  ·  {}", narrows.width, along(narrows.at))
-        }),
+        Item::Height(index) => description
+            .elevation
+            .get(index)
+            .map_or(String::new(), |height| {
+                format!("HEIGHT {:.0} m  ·  {}", height.height, along(height.at))
+            }),
+        Item::Narrows(index) => description
+            .narrows
+            .get(index)
+            .map_or(String::new(), |narrows| {
+                format!(
+                    "NARROWS {:.0} m wide  ·  {}",
+                    narrows.width,
+                    along(narrows.at)
+                )
+            }),
         Item::Gap(index) => description.gaps.get(index).map_or(String::new(), |gap| {
             format!("GAP {:.0} m  ·  {}", gap.length, along(gap.at))
         }),
-        Item::Breach(index) => description.breaches.get(index).map_or(String::new(), |breach| {
-            let side = if breach.side == Side::Left { "LEFT" } else { "RIGHT" };
-            format!("BREACH {side} {:.0} m  ·  {}", breach.length, along(breach.at))
-        }),
+        Item::Breach(index) => description
+            .breaches
+            .get(index)
+            .map_or(String::new(), |breach| {
+                let side = if breach.side == Side::Left {
+                    "LEFT"
+                } else {
+                    "RIGHT"
+                };
+                format!(
+                    "BREACH {side} {:.0} m  ·  {}",
+                    breach.length,
+                    along(breach.at)
+                )
+            }),
         Item::Pad(index) => description
             .pads
             .get(index)
@@ -742,14 +847,21 @@ pub fn describe(description: &TrackDescription, item: Item) -> String {
             .checkpoints
             .get(index)
             .map_or(String::new(), |at| format!("CHECKPOINT  ·  {}", along(*at))),
-        Item::Prop(index) => description.scenery.get(index).map_or(String::new(), |prop| {
-            let side = match prop.side() {
-                Some(Side::Left) => " LEFT",
-                Some(Side::Right) => " RIGHT",
-                None => "",
-            };
-            format!("{}{side}  ·  {}", PropKind::of(prop).name(), along(prop.at()))
-        }),
+        Item::Prop(index) => description
+            .scenery
+            .get(index)
+            .map_or(String::new(), |prop| {
+                let side = match prop.side() {
+                    Some(Side::Left) => " LEFT",
+                    Some(Side::Right) => " RIGHT",
+                    None => "",
+                };
+                format!(
+                    "{}{side}  ·  {}",
+                    PropKind::of(prop).name(),
+                    along(prop.at())
+                )
+            }),
     }
 }
 
@@ -789,10 +901,15 @@ mod tests {
         let mut description = starter();
         for kind in PropKind::ALL {
             let item = add(&mut description, New::Prop(kind), 50.0, None);
-            assert_eq!(PropKind::of(&description.scenery[match item {
-                Item::Prop(index) => index,
-                _ => unreachable!(),
-            }]), kind);
+            assert_eq!(
+                PropKind::of(
+                    &description.scenery[match item {
+                        Item::Prop(index) => index,
+                        _ => unreachable!(),
+                    }]
+                ),
+                kind
+            );
             assert!(!fields(&description, item).is_empty());
         }
         for prop in &description.scenery {
@@ -809,7 +926,9 @@ mod tests {
         set(&mut description, item, 0, 0.0);
         assert!(matches!(description.segments[1], Segment::Turn { angle, .. } if angle == -5.0));
         set(&mut description, item, 3, 400.0);
-        assert!(matches!(description.segments[1], Segment::Turn { banking, .. } if banking == 60.0));
+        assert!(
+            matches!(description.segments[1], Segment::Turn { banking, .. } if banking == 60.0)
+        );
 
         let first = add(&mut description, New::Height, 100.0, None);
         let second = add(&mut description, New::Height, 300.0, None);
@@ -827,5 +946,27 @@ mod tests {
         }
         remove(&mut description, Item::Segment(0));
         assert_eq!(description.segments.len(), 1);
+    }
+
+    /// A copied segment follows its source; a copied trackside part keeps its tuning but moves to
+    /// the cursor, including when its list needs to be reordered.
+    #[test]
+    fn duplication_reuses_a_part_at_the_cursor() {
+        let mut description = starter();
+        let source = add(&mut description, New::Gap, 100.0, None);
+        set(&mut description, source, 1, 55.0);
+        let copy = duplicate(&mut description, source, 40.0);
+        assert_eq!(copy, Some(Item::Gap(1)));
+        assert_eq!(description.gaps[1].at, 40.0);
+        assert_eq!(description.gaps[1].length, 55.0);
+
+        let copied_segment = duplicate(&mut description, Item::Segment(0), 0.0);
+        assert_eq!(copied_segment, Some(Item::Segment(1)));
+        assert_eq!(description.segments[0], description.segments[1]);
+
+        add(&mut description, New::Checkpoint, 100.0, None);
+        let copied_checkpoint = duplicate(&mut description, Item::Checkpoint(0), 20.0);
+        assert_eq!(copied_checkpoint, Some(Item::Checkpoint(0)));
+        assert_eq!(description.checkpoints, vec![20.0, 100.0]);
     }
 }

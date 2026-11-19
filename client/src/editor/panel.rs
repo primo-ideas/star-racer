@@ -52,6 +52,7 @@ struct FieldButton {
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
 enum Action {
     Delete,
+    Duplicate,
     New,
     Try,
     Publish,
@@ -332,6 +333,10 @@ pub(super) fn refresh(
                             ));
                         }
                         row.spawn((
+                            Action::Duplicate,
+                            small_button(&fonts, ButtonKind::Quiet, "DUPLICATE", size(12.0, 10.0)),
+                        ));
+                        row.spawn((
                             Action::Delete,
                             small_button(&fonts, ButtonKind::Quiet, "DELETE", size(12.0, 10.0)),
                         ));
@@ -577,6 +582,7 @@ fn on_action(
                 editor.changed();
             }
         }
+        Action::Duplicate => duplicate(&mut editor),
         Action::New => {
             editor.draft = model::starter();
             editor.selected = None;
@@ -619,6 +625,25 @@ fn on_action(
             editor.closing_radius = (editor.closing_radius + 5.0 * step as f32).clamp(20.0, 500.0);
             editor.changed();
         }
+    }
+}
+
+/// Copies the selected part. The cursor deliberately decides where an object along the lap goes:
+/// click an empty stretch of road, then duplicate the selected object there.
+pub(super) fn duplicate(editor: &mut Editor) {
+    let Some(item) = editor.selected else {
+        return;
+    };
+    let at = editor
+        .cursor
+        .unwrap_or_else(|| model::at(&editor.draft, item).unwrap_or(0.0));
+    if let Some(copy) = model::duplicate(&mut editor.draft, item, at) {
+        editor.selected = Some(copy);
+        if let Some(at) = model::at(&editor.draft, copy) {
+            editor.cursor = Some(at);
+        }
+        editor.say("Duplicated.", false);
+        editor.changed();
     }
 }
 

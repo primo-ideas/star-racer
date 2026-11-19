@@ -5287,7 +5287,7 @@ dependencies = [
 
 [[package]]
 name = "star-racer-client"
-version = "1.0.0-rc5"
+version = "1.0.0-rc6"
 dependencies = [
  "anyhow",
  "bevy",
@@ -5309,14 +5309,14 @@ dependencies = [
 
 [[package]]
 name = "star-racer-logger"
-version = "1.0.0-rc5"
+version = "1.0.0-rc6"
 dependencies = [
  "tracing-subscriber",
 ]
 
 [[package]]
 name = "star-racer-protocol"
-version = "1.0.0-rc5"
+version = "1.0.0-rc6"
 dependencies = [
  "bitcode",
  "ed25519-dalek",
@@ -5328,7 +5328,7 @@ dependencies = [
 
 [[package]]
 name = "star-racer-server"
-version = "1.0.0-rc5"
+version = "1.0.0-rc6"
 dependencies = [
  "anyhow",
  "argon2",
@@ -5347,7 +5347,7 @@ dependencies = [
 
 [[package]]
 name = "star-racer-sim"
-version = "1.0.0-rc5"
+version = "1.0.0-rc6"
 dependencies = [
  "bitcode",
  "glam",

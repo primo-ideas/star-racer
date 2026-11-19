@@ -85,6 +85,11 @@ In v1.0.0-rc5, at the user's word "Améliore l'éditeur, c'est pas intuitif du t
 - **Undo.** UNDO and REDO, Ctrl+Z and Ctrl+Y (or Ctrl+Shift+Z), a hundred drafts back; NEW and
   LOAD are undone too. Delete removes the part selected. FLIP turns a turn the other way.
 
+- **Reuse.** DUPLICATE (Ctrl+D) copies the selected piece. A copied road segment is inserted just
+  after its source; any part placed along the lap is copied at the magenta cursor, retaining every
+  other setting. Click an empty place on the road to put that cursor before duplicating: this makes
+  a row of pads, props or checkpoints without resetting all their numbers.
+
 ## Not done
 
 - Segments are not dragged: a turn's angle and a straight's length are stepped with their numbers.
